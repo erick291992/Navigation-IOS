@@ -63,12 +63,14 @@ final class NavigationManager: ObservableObject {
             logModalStack()
         }
     }
-
-
-    func dismissTo<Content: View>(_ target: Content.Type) {
-        print("📜 Full History:")
+    
+    func dismissTo<Content: View>(
+        _ target: Content.Type,
+        triggerIntermediateDismissals: Bool = true
+    ) {
+        print("📜 Full Navigation History:")
         for item in fullNavigationHistory {
-            print("• \(item.viewTypeName)")
+            print("• \(item.viewTypeName) [\(item.type.rawValue)]")
         }
 
         let targetName = String(describing: target)
@@ -80,30 +82,67 @@ final class NavigationManager: ObservableObject {
             return
         }
 
+        print("🎯 Attempting to dismiss to: \(targetName)")
         let targetItem = fullNavigationHistory[targetIndex]
 
         if targetItem.type == .sheet {
-            // ✅ It's a modal: trim modalStack and call onDismiss for popped modals in reverse order
+            // ✅ It's a modal: trim modalStack and optionally call onDismiss
             guard let modalIndex = modalStack.lastIndex(where: { $0.id == targetItem.id }) else {
                 print("❌ Matching modalContext not found for \(targetName)")
                 return
             }
 
-            let poppedContexts = modalStack.suffix(from: modalIndex + 1).reversed()
-            poppedContexts.forEach { $0.onDismiss?() }
+            let poppedContexts = modalStack.suffix(from: modalIndex + 1)
+
+            if triggerIntermediateDismissals {
+                print("🔥 Triggering ALL popped modal onDismiss handlers (in reverse):")
+                for context in poppedContexts.reversed() {
+                    print("   • onDismiss → \(context.id.uuidString.prefix(4))")
+                    context.onDismiss?()
+                }
+            } else {
+                // 🔥 Only trigger onDismiss for the sheet we're landing on (if it's being popped)
+                if let last = modalStack.last, last.id != modalStack[modalIndex].id {
+                    print("🔥 Triggering onDismiss for modal we're landing on: \(modalStack[modalIndex].id.uuidString.prefix(4))")
+                    modalStack[modalIndex].onDismiss?()
+                }
+            }
 
             modalStack = Array(modalStack.prefix(modalIndex + 1))
         } else {
-            // ✅ Non-modal: pop all modals and call all their dismiss handlers in reverse
-            modalStack.reversed().forEach { $0.onDismiss?() }
+            // 🧹 Dismissing to a push root — all modals go
+            if triggerIntermediateDismissals {
+                print("🔥 Triggering ALL modal onDismiss handlers (in reverse):")
+                for context in modalStack.reversed() {
+                    print("   • onDismiss → \(context.id.uuidString.prefix(4))")
+                    context.onDismiss?()
+                }
+            } else {
+                if modalStack.count >= 2 {
+                    let secondToLast = modalStack[modalStack.count - 2]
+                    print("🔥 Triggering onDismiss for modal we're landing on: \(secondToLast.id.uuidString.prefix(4))")
+                    secondToLast.onDismiss?()
+                } else {
+                    print("⚠️ Only one modal; triggering its onDismiss")
+                    modalStack.last?.onDismiss?()
+                }
+            }
+
             modalStack.removeAll()
+            print("✅ Cleared modalStack")
         }
 
-        // ✅ Always trim the full navigation history
         fullNavigationHistory = Array(fullNavigationHistory.prefix(targetIndex + 1))
-        print("🔙 Dismissed to \(targetName)")
+        print("📜 Trimmed fullNavigationHistory to:")
+        for item in fullNavigationHistory {
+            print("• \(item.viewTypeName) [\(item.type.rawValue)]")
+        }
+
         logModalStack()
     }
+
+
+
 
 
 
