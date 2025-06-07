@@ -8,28 +8,42 @@
 import SwiftUI
 
 struct ViewB: View {
+    @EnvironmentObject var navigationManager: NavigationManager
+
     var body: some View {
         VStack(spacing: 20) {
-            Text("🅱️ ViewB (Pushed)")
-                .font(.title2)
+            Text("🅱️ ViewB")
+                .font(.largeTitle)
 
-            Button("Present SheetC") {
-//                NavigationManager.shared.presentSheet { ViewC() }
+            Button("Present ViewC") {
+                navigationManager.presentSheet {
+                    ViewC()
+                }
+            }
+
+            Button("Dismiss Sheet") {
+                navigationManager.dismissSheet()
             }
         }
-        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.green.opacity(0.2))
+        .onAppear {
+            print("👀 ViewB appeared")
+        }
     }
 }
 
 
-final class ViewBViewModel: ObservableObject {
-    private let navigationManager = NavigationManager()
 
-    func goToC() {
-        navigationManager.push(view: { ViewC() })
-    }
 
-    func presentD() {
-        navigationManager.presentSheet(view: { ViewD() })
-    }
-}
+//final class ViewBViewModel: ObservableObject {
+//    private let navigationManager = NavigationManager()
+//
+//    func goToC() {
+//        navigationManager.push(view: { ViewC() })
+//    }
+//
+//    func presentD() {
+//        navigationManager.presentSheet(view: { ViewD() })
+//    }
+//}

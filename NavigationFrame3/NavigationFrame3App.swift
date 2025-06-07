@@ -8,10 +8,13 @@
 import SwiftUI
 
 @main
-struct NavigationFrame3App: App {
+struct MyApp: App {
+//    @StateObject private var navManager = NavigationManager()
+
     var body: some Scene {
         WindowGroup {
-            NavigationCoordinator(rootView: ContentView())
+            ContentView()
+//                .environmentObject(navManager) // ✅ Shared across all NavigationCoordinators
         }
     }
 }

@@ -4,48 +4,37 @@
 //
 //  Created by Erick Manrique on 5/16/25.
 //
-
 import SwiftUI
-
 struct ViewC: View {
-    
-    @EnvironmentObject private var navigationManager: NavigationManager
+    @EnvironmentObject var navigationManager: NavigationManager
+    private let id = UUID()
+
+    init() {
+        print("🔧 ViewC init with ID: \(id)")
+    }
 
     var body: some View {
-        VStack(spacing: 20) {
-            Text("🆑 ViewC (Presented Sheet)")
+        logBodyRender()
+        return VStack(spacing: 20) {
+            Text("🌊 ViewC (Presented from B)")
                 .font(.title2)
 
-            Button("Push ViewD Inside SheetC") {
-                Navigation.push { ViewD() }
-            }
-
-            Button("Dismiss To ViewB") {
-                Navigation.dismissTo(ViewB.self)
-            }
-
-            Button("Dismiss To ContentView") {
-                Navigation.dismissTo(ContentView.self)
+            Button("Present ViewD") {
+                navigationManager.presentSheet {
+                    ViewD()
+                }
             }
         }
         .padding()
-    }
-}
-
-
-final class ViewCViewModel: ObservableObject {
-    private let navigationManager = NavigationManager()
-
-    func goToD() {
-        navigationManager.push(view: { ViewD() })
+        .onAppear {
+            print("👀 ViewC appeared")
+        }
+        .onDisappear {
+            print("🚪 ViewC disappeared")
+        }
     }
 
-    func popOrDismiss() {
-        navigationManager.popOrDismiss()
+    private func logBodyRender() {
+        print("💡 ViewC body re-evaluated for ID: \(id)")
     }
-    
-    func presentD() {
-        navigationManager.presentSheet(view: { ViewD() })
-    }
-
 }

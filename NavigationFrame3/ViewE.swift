@@ -10,29 +10,16 @@ import SwiftUI
 struct ViewE: View {
     var body: some View {
         VStack(spacing: 20) {
-            Text("🅴 ViewE (SheetE)")
+            Text("🟣 ViewE (Sheet)")
+                .font(.largeTitle)
 
-            Button("Dismiss To ViewB") {
-                Navigation.dismissTo(ViewB.self)
-            }
-            
-            Button("Push ViewF Inside SheetF") {
-                Navigation.push { ViewF() }
+            Button("Dismiss") {
+                NavigationManagerRegistry.shared.manager(for: "tab2")?.dismissSheet()
             }
         }
         .padding()
-    }
-}
-
-struct ViewF: View {
-    var body: some View {
-        VStack(spacing: 20) {
-            Text("🅴 ViewF (SheetF)")
-
-            Button("Dismiss To ViewC") {
-                Navigation.dismissTo(ViewC.self)
-            }
+        .onAppear {
+            print("👀 ViewE appeared")
         }
-        .padding()
     }
 }

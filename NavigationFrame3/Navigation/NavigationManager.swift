@@ -7,182 +7,112 @@
 import SwiftUI
 
 final class NavigationManager: ObservableObject {
-    static let shared = NavigationManager()
-    var rootViewTypeName: String?
-
-    @Published var pushPath: [NavigationItem] = []
     @Published var modalStack: [ModalContext] = []
     @Published var fullNavigationHistory: [NavigationItem] = []
     
-
-    struct ModalContext: Identifiable, Hashable {
-        let id = UUID()
-        var root: NavigationItem
-        var pushPath: [NavigationItem] = []
-        var type: NavigationItem.NavigationType
-
-        static func == (lhs: ModalContext, rhs: ModalContext) -> Bool {
-            lhs.id == rhs.id
-        }
-
-        func hash(into hasher: inout Hasher) {
-            hasher.combine(id)
-        }
+    var topSheet: ModalContext? {
+        modalStack.last
     }
 
-    // MARK: - Current Push Stack Binding
-    private var currentPushBinding: Binding<[NavigationItem]> {
-        if modalStack.isEmpty {
-            return Binding(
-                get: { self.pushPath },
-                set: { self.pushPath = $0 }
-            )
-        } else {
-            let lastIndex = modalStack.count - 1
-            return Binding(
-                get: { self.modalStack[lastIndex].pushPath },
-                set: { newValue in
-                    var modal = self.modalStack[lastIndex]
-                    modal.pushPath = newValue
-                    self.modalStack[lastIndex] = modal // <- 🔥 this triggers SwiftUI
+    var topSheetBinding: Binding<ModalContext?> {
+        Binding(
+            get: { self.topSheet },
+            set: { newValue in
+                if newValue == nil {
+                    self.dismissSheet()
                 }
-            )
-        }
-    }
-
-
-
-    // MARK: - API
-    func push<Content: View>(view: @escaping () -> Content) {
-        let typeName = String(describing: Content.self)
-        let item = NavigationItem(
-            viewFactory: { AnyView(view()) },
-            type: .push,
-            viewTypeName: typeName
-        )
-        currentPushBinding.wrappedValue.append(item)
-        fullNavigationHistory.append(item)
-        logStacks("📦 PUSH \(typeName)")
-    }
-
-
-    func presentSheet<Content: View>(view: @escaping () -> Content) {
-        let container = NavigationContainerView { view() }
-        let typeName = String(describing: Content.self)
-        let rootItem = NavigationItem(
-            viewFactory: { AnyView(container) },
-            type: .sheet,
-            viewTypeName: typeName
-        )
-        let modal = ModalContext(root: rootItem, type: .sheet)
-        modalStack.append(modal)
-        fullNavigationHistory.append(rootItem)
-        logStacks("🪟 SHEET \(typeName)")
-    }
-
-
-    func presentFullscreen<Content: View>(view: @escaping () -> Content) {
-        let typeName = String(describing: Content.self)
-        let container = NavigationContainerView {
-            view()
-        }
-        let rootItem = NavigationItem(viewFactory: { AnyView(container) }, type: .fullscreen, viewTypeName: typeName)
-        let modal = ModalContext(root: rootItem, type: .fullscreen)
-        modalStack.append(modal)
-        fullNavigationHistory.append(rootItem)
-        logStacks("🧊 FULLSCREEN \(rootItem.typeName)")
-    }
-
-    func pop() {
-        if modalStack.isEmpty {
-            if !pushPath.isEmpty {
-                pushPath.removeLast()
-                logStacks("🔙 POP")
             }
-        } else if !modalStack.last!.pushPath.isEmpty {
-            modalStack[modalStack.count - 1].pushPath.removeLast()
-            logStacks("🔙 POP (modal)")
+        )
+    }
+
+//    func presentSheet<Content: View>(@ViewBuilder view: @escaping () -> Content) {
+//        let context = ModalContext(rootView: AnyView(view()))
+//        modalStack.append(context)
+//        print("🎯 Presented sheet \(context.id)")
+//        logModalStack()
+//    }
+    
+    func presentSheet<Content: View>(@ViewBuilder view: @escaping () -> Content) {
+        let context = ModalContext(rootView: AnyView(view()))
+        modalStack.append(context)
+        fullNavigationHistory.append(
+            NavigationItem(
+                id: context.id,
+                viewTypeName: String(describing: Content.self),
+                type: .sheet
+            )
+        )
+        print("🎯 Presented sheet \(context.id) of type \(Content.self)")
+        logModalStack()
+    }
+
+
+
+    func dismissSheet() {
+        if let removed = modalStack.popLast() {
+            print("❎ Dismissed sheet \(removed.id)")
+            logModalStack()
         }
     }
 
-    func popTo(index: Int) {
-        currentPushBinding.wrappedValue = Array(currentPushBinding.wrappedValue.prefix(index + 1))
-        logStacks("⏪ POP TO INDEX \(index)")
-    }
-
-    func dismissTopModal() {
-        if !modalStack.isEmpty {
-            modalStack.removeLast()
-            logStacks("❎ DISMISS TOP MODAL")
+    func dismissTo<Content: View>(_ target: Content.Type) {
+        print("📜 Full History:")
+        for item in fullNavigationHistory {
+            print("• \(item.typeName)")
         }
-    }
 
-    func dismissAllModals() {
-        modalStack.removeAll()
-        logStacks("🧹 DISMISS ALL MODALS")
-    }
+        let targetName = String(describing: target)
 
-    func popOrDismiss() {
-        if modalStack.last?.pushPath.isEmpty == false {
-            pop()
-        } else if !modalStack.isEmpty {
-            dismissTopModal()
-        } else {
-            pop()
+        guard let targetIndex = fullNavigationHistory.lastIndex(where: {
+            $0.viewTypeName == targetName
+        }) else {
+            print("❌ Could not find \(targetName) in full history")
+            return
         }
-    }
 
-    func dismissTo<Content: View>(_ viewType: Content.Type) {
-        let target = String(describing: viewType)
+        let targetItem = fullNavigationHistory[targetIndex]
 
-        // 1. Search modal pushPaths
-        for (i, modal) in modalStack.enumerated().reversed() {
-            if let index = modal.pushPath.lastIndex(where: { $0.viewTypeName == target }) {
-                modalStack = Array(modalStack.prefix(i + 1))
-                modalStack[modalStack.count - 1].pushPath = Array(modalStack.last!.pushPath.prefix(index + 1))
-                logStacks("🎯 DISMISS TO \(target) (modal pushPath)")
+        if targetItem.type == .sheet {
+            // It's a modal, trim modalStack using its UUID
+            guard let modalIndex = modalStack.lastIndex(where: { $0.id == targetItem.id }) else {
+                print("❌ Matching modalContext not found for \(targetName)")
                 return
             }
+
+            modalStack = Array(modalStack.prefix(modalIndex + 1))
+        } else {
+            // Not a modal, just clear all modals
+            modalStack.removeAll()
         }
 
-        // 2. Search modal root items
-        if let index = modalStack.lastIndex(where: { $0.root.viewTypeName == target }) {
-            modalStack = Array(modalStack.prefix(index + 1))
-            modalStack[index].pushPath = []
-            logStacks("🎯 DISMISS TO \(target) (modal root)")
-            return
-        }
+        // Trim the full history
+        fullNavigationHistory = Array(fullNavigationHistory.prefix(targetIndex + 1))
 
-        // 3. Search root pushPath
-        if let index = pushPath.lastIndex(where: { $0.viewTypeName == target }) {
-            dismissAllModals()
-            pushPath = Array(pushPath.prefix(index + 1))
-            logStacks("🎯 DISMISS TO \(target) (root pushPath)")
-            return
-        }
-
-        // 4. Handle root root view (ContentView)
-        if let rootType = rootViewTypeName, target == rootType {
-            dismissAllModals()
-            pushPath.removeAll()
-            logStacks("🎯 DISMISS TO ROOT VIEW (\(target))")
-        }
-
+        print("🔙 Dismissed to \(targetName)")
+        logModalStack()
     }
 
 
 
-    // MARK: - Debug Logs
-    private func logStacks(_ label: String) {
-        print("""
-        === \(label) ===
-        🧱 Root Stack: \(pushPath.map(\.typeName))
-        🪟 Modal Stack:
-        \(modalStack.map {
-            "• \($0.type.rawValue.uppercased()) root: \($0.root.typeName), pushPath: \($0.pushPath.map(\.typeName))"
-        }.joined(separator: "\n"))
-        📜 Full History: \(fullNavigationHistory.map(\.typeName))
-        ====================
-        """)
+    
+//    func dismissTo(_ viewTypeName: String) -> Bool {
+//        if let index = modalStack.lastIndex(where: { $0.rootView.typeName == viewTypeName }) {
+//            modalStack = Array(modalStack.prefix(index + 1))
+//            logModalStack()
+//            return true
+//        }
+//        return false
+//    }
+
+    func reset() {
+        modalStack.removeAll()
+        print("🧼 NavigationManager sheet stack reset")
+    }
+
+    private func logModalStack() {
+        print("🧱 Modal Stack:")
+        for context in modalStack {
+            print("• \(context.id)")
+        }
     }
 }

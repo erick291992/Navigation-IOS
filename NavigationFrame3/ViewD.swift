@@ -4,44 +4,41 @@
 //
 //  Created by Erick Manrique on 5/16/25.
 //
-
 import SwiftUI
 
 struct ViewD: View {
+    @EnvironmentObject var navigationManager: NavigationManager
+
     var body: some View {
         VStack(spacing: 20) {
-            Text("🆔 ViewD (Pushed inside SheetC)")
+            Text("🧱 ViewD (Presented from C)")
                 .font(.title2)
 
-            Button("Dismiss To ViewB") {
-                Navigation.dismissTo(ViewB.self)
-            }
-            
-            Button("Dismiss To ViewC") {
-                Navigation.dismissTo(ViewC.self)
+            Button("Dismiss to ViewC") {
+                navigationManager.dismissSheet()
             }
 
-            Button("Dismiss To ContentView") {
-                Navigation.dismissTo(ContentView.self)
+            Button("Dismiss to ViewB") {
+                navigationManager.dismissTo(ViewB.self)
             }
             
-            Button("Present SheetE") {
-                Navigation.push { ViewE() }
+            Button("📦 Present ViewE on Tab 2") {
+                routeToViewE()
             }
         }
         .padding()
+        .onAppear {
+            print("👀 ViewD appeared")
+        }
     }
-}
 
-
-final class ViewDViewModel: ObservableObject {
-    private let navigationManager = NavigationManager()
-
-    func popOrDismiss() {
-        navigationManager.popOrDismiss()
-    }
-    
-    func dismissTopSheet() {
-        navigationManager.dismissTopModal()
+    private func routeToViewE() {
+        if let manager = NavigationManagerRegistry.shared.manager(for: "tab2") {
+            manager.presentSheet {
+                ViewE()
+            }
+        } else {
+            print("❌ NavigationManager for tab2 not ready yet")
+        }
     }
 }
