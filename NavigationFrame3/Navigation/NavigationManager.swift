@@ -66,7 +66,7 @@ final class NavigationManager: ObservableObject {
     
     func dismissTo<Content: View>(
         _ target: Content.Type,
-        triggerIntermediateDismissals: Bool = true
+        triggerIntermediateDismissals: Bool = false
     ) {
         print("📜 Full Navigation History:")
         for item in fullNavigationHistory {
@@ -86,7 +86,6 @@ final class NavigationManager: ObservableObject {
         let targetItem = fullNavigationHistory[targetIndex]
 
         if targetItem.type == .sheet {
-            // ✅ It's a modal: trim modalStack and optionally call onDismiss
             guard let modalIndex = modalStack.lastIndex(where: { $0.id == targetItem.id }) else {
                 print("❌ Matching modalContext not found for \(targetName)")
                 return
@@ -100,32 +99,25 @@ final class NavigationManager: ObservableObject {
                     print("   • onDismiss → \(context.id.uuidString.prefix(4))")
                     context.onDismiss?()
                 }
-            } else {
-                // 🔥 Only trigger onDismiss for the sheet we're landing on (if it's being popped)
-                if let last = modalStack.last, last.id != modalStack[modalIndex].id {
-                    print("🔥 Triggering onDismiss for modal we're landing on: \(modalStack[modalIndex].id.uuidString.prefix(4))")
-                    modalStack[modalIndex].onDismiss?()
-                }
+            } else if let last = poppedContexts.dropLast().last {
+                print("🔥 Triggering onDismiss for modal we're landing on: \(last.id.uuidString.prefix(4))")
+                last.onDismiss?()
             }
 
             modalStack = Array(modalStack.prefix(modalIndex + 1))
         } else {
             // 🧹 Dismissing to a push root — all modals go
+            let poppedContexts = modalStack
+
             if triggerIntermediateDismissals {
                 print("🔥 Triggering ALL modal onDismiss handlers (in reverse):")
-                for context in modalStack.reversed() {
+                for context in poppedContexts.reversed() {
                     print("   • onDismiss → \(context.id.uuidString.prefix(4))")
                     context.onDismiss?()
                 }
-            } else {
-                if modalStack.count >= 2 {
-                    let secondToLast = modalStack[modalStack.count - 2]
-                    print("🔥 Triggering onDismiss for modal we're landing on: \(secondToLast.id.uuidString.prefix(4))")
-                    secondToLast.onDismiss?()
-                } else {
-                    print("⚠️ Only one modal; triggering its onDismiss")
-                    modalStack.last?.onDismiss?()
-                }
+            } else if let first = modalStack.first {
+                print("🔥 Triggering onDismiss for modal directly above push root: \(first.id.uuidString.prefix(4))")
+                first.onDismiss?()
             }
 
             modalStack.removeAll()
@@ -140,9 +132,6 @@ final class NavigationManager: ObservableObject {
 
         logModalStack()
     }
-
-
-
 
 
 

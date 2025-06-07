@@ -25,6 +25,19 @@ struct ViewD: View {
             Button("📦 Present ViewE on Tab 2") {
                 routeToViewE()
             }
+            
+            Button("Present ViewE") {
+//                navigationManager.presentSheet {
+//                    ViewD()
+//                }
+                navigationManager.presentSheet {
+                    ViewE()
+                } onDismiss: {
+                    print("🔥 ViewE was dismissed")
+                }
+
+
+            }
         }
         .padding()
         .onAppear {
