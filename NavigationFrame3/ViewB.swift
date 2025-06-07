@@ -18,7 +18,10 @@ struct ViewB: View {
             Button("Present ViewC") {
                 navigationManager.presentSheet {
                     ViewC()
+                } onDismiss: {
+                    print("🔥 ViewC was dismissed")
                 }
+
             }
 
             Button("Dismiss Sheet") {

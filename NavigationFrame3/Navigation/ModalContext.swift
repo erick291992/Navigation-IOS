@@ -9,7 +9,12 @@ import SwiftUI
 
 struct ModalContext: Identifiable, Equatable {
     let id = UUID()
-    let rootView: AnyView
+    let makeView: () -> AnyView
+    let onDismiss: (() -> Void)?
+
+    var rootView: AnyView {
+        makeView()
+    }
 
     static func == (lhs: ModalContext, rhs: ModalContext) -> Bool {
         lhs.id == rhs.id

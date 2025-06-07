@@ -20,9 +20,16 @@ struct ViewC: View {
                 .font(.title2)
 
             Button("Present ViewD") {
+//                navigationManager.presentSheet {
+//                    ViewD()
+//                }
                 navigationManager.presentSheet {
                     ViewD()
+                } onDismiss: {
+                    print("🔥 ViewD was dismissed")
                 }
+
+
             }
         }
         .padding()

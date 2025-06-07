@@ -32,9 +32,17 @@ final class NavigationManager: ObservableObject {
 //        logModalStack()
 //    }
     
-    func presentSheet<Content: View>(@ViewBuilder view: @escaping () -> Content) {
-        let context = ModalContext(rootView: AnyView(view()))
+    func presentSheet<Content: View>(
+        @ViewBuilder view: @escaping () -> Content,
+        onDismiss: (() -> Void)? = nil
+    ) {
+        let context = ModalContext(
+            makeView: { AnyView(view()) },
+            onDismiss: onDismiss
+        )
+
         modalStack.append(context)
+
         fullNavigationHistory.append(
             NavigationItem(
                 id: context.id,
@@ -42,23 +50,25 @@ final class NavigationManager: ObservableObject {
                 type: .sheet
             )
         )
+
         print("🎯 Presented sheet \(context.id) of type \(Content.self)")
         logModalStack()
     }
 
 
-
     func dismissSheet() {
         if let removed = modalStack.popLast() {
             print("❎ Dismissed sheet \(removed.id)")
+            removed.onDismiss?() // ✅ Run the handler
             logModalStack()
         }
     }
 
+
     func dismissTo<Content: View>(_ target: Content.Type) {
         print("📜 Full History:")
         for item in fullNavigationHistory {
-            print("• \(item.typeName)")
+            print("• \(item.viewTypeName)")
         }
 
         let targetName = String(describing: target)
@@ -73,24 +83,29 @@ final class NavigationManager: ObservableObject {
         let targetItem = fullNavigationHistory[targetIndex]
 
         if targetItem.type == .sheet {
-            // It's a modal, trim modalStack using its UUID
+            // ✅ It's a modal: trim modalStack and call onDismiss for popped modals in reverse order
             guard let modalIndex = modalStack.lastIndex(where: { $0.id == targetItem.id }) else {
                 print("❌ Matching modalContext not found for \(targetName)")
                 return
             }
 
+            let poppedContexts = modalStack.suffix(from: modalIndex + 1).reversed()
+            poppedContexts.forEach { $0.onDismiss?() }
+
             modalStack = Array(modalStack.prefix(modalIndex + 1))
         } else {
-            // Not a modal, just clear all modals
+            // ✅ Non-modal: pop all modals and call all their dismiss handlers in reverse
+            modalStack.reversed().forEach { $0.onDismiss?() }
             modalStack.removeAll()
         }
 
-        // Trim the full history
+        // ✅ Always trim the full navigation history
         fullNavigationHistory = Array(fullNavigationHistory.prefix(targetIndex + 1))
-
         print("🔙 Dismissed to \(targetName)")
         logModalStack()
     }
+
+
 
 
 
