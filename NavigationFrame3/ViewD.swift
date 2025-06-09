@@ -14,8 +14,12 @@ struct ViewD: View {
             Text("🧱 ViewD (Presented from C)")
                 .font(.title2)
 
-            Button("Dismiss to ViewC") {
+            Button("Dismiss sheet") {
                 navigationManager.dismissSheet()
+            }
+            
+            Button("Dismiss to ViewC") {
+                navigationManager.dismissTo(ViewC.self)
             }
 
             Button("Dismiss to ViewB") {

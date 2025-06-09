@@ -23,6 +23,12 @@ struct ViewB: View {
                 }
 
             }
+            Button("Push ViewC") {
+                navigationManager.push {
+                    ViewC()
+                }
+
+            }
 
             Button("Dismiss Sheet") {
                 navigationManager.dismissSheet()

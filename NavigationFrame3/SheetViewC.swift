@@ -31,6 +31,12 @@ struct ViewC: View {
 
 
             }
+            Button("Push ViewD") {
+                navigationManager.push {
+                    ViewD()
+                }
+
+            }
         }
         .padding()
         .onAppear {

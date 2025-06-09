@@ -26,12 +26,22 @@ struct NavigationCoordinator<Root: View>: View {
     }
 
     var body: some View {
-        rootView
-            .environmentObject(navigationManager)
-            .sheet(item: topSheetBinding) { context in
-                context.rootView
-                    .environmentObject(navigationManager)
-            }
+        NavigationStack(path: $navigationManager.rootPushPath) {
+            rootView
+                .environmentObject(navigationManager)
+                .navigationDestination(for: PushContext.self) { context in
+                    context.makeView()
+                        .environmentObject(navigationManager)
+                }
+        }
+        .environmentObject(navigationManager)
+        .sheet(item: topSheetBinding) { context in
+            SheetNavigationContainer(
+                context: context,
+                navigationManager: navigationManager
+            )
+//            .environmentObject(navigationManager)
+        }
     }
 
     /// A computed binding that allows SwiftUI to track the top-most sheet.
