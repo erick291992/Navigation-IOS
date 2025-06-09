@@ -26,8 +26,9 @@ struct ViewB: View {
             Button("Push ViewC") {
                 navigationManager.push {
                     ViewC()
+                } onDismiss: {
+                    print("🔥 Pushed ViewC was dismissed")
                 }
-
             }
 
             Button("Dismiss Sheet") {

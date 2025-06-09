@@ -10,6 +10,7 @@ struct PushContext: Identifiable, Hashable {
     let id = UUID()
     let makeView: () -> AnyView
     let viewTypeName: String
+    let onDismiss: (() -> Void)?
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)

@@ -34,8 +34,9 @@ struct ViewC: View {
             Button("Push ViewD") {
                 navigationManager.push {
                     ViewD()
+                } onDismiss: {
+                    print("🔥 Pushed ViewD was dismissed")
                 }
-
             }
         }
         .padding()

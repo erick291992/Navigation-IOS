@@ -39,12 +39,14 @@ final class NavigationManager: ObservableObject {
 //    }
     
     func push<Content: View>(
-        @ViewBuilder view: @escaping () -> Content
+        @ViewBuilder view: @escaping () -> Content,
+        onDismiss: (() -> Void)? = nil
     ) {
         let contextID = modalStack.last?.id
         let context = PushContext(
             makeView: { AnyView(view()) },
-            viewTypeName: String(describing: Content.self)
+            viewTypeName: String(describing: Content.self),
+            onDismiss: onDismiss
         )
 
         if let modalID = contextID {
@@ -158,17 +160,46 @@ final class NavigationManager: ObservableObject {
             let isInRoot = true // right now always root since we're dismissing to root context
             if isInRoot {
                 if let pushIndex = rootPushPath.firstIndex(where: { $0.viewTypeName == targetItem.viewTypeName }) {
+                    let oldPath = rootPushPath
                     rootPushPath = Array(rootPushPath.prefix(through: pushIndex))
+                    
+                    let removed = oldPath.suffix(from: pushIndex + 1)
+
+                    if triggerIntermediateDismissals {
+                        print("🔥 Triggering ALL push onDismiss handlers (in reverse):")
+                        for context in removed.reversed() {
+                            print("   • onDismiss → \(context.id.uuidString.prefix(4))")
+                            context.onDismiss?()
+                        }
+                    } else if let last = removed.dropLast().last {
+                        print("🔥 Triggering push onDismiss for view we're landing on: \(last.id.uuidString.prefix(4))")
+                        last.onDismiss?()
+                    }
+                    
                     print("🧼 Trimmed rootPushPath to remove views above \(targetItem.viewTypeName)")
                 } else if fullNavigationHistory.first?.viewTypeName == targetItem.viewTypeName {
                     // We're dismissing to the push *root*, e.g., ViewB
+                    let popped = rootPushPath
+
+                    if triggerIntermediateDismissals {
+                        print("🔥 Triggering ALL push onDismiss handlers (in reverse):")
+                        for context in popped.reversed() {
+                            print("   • onDismiss → \(context.id.uuidString.prefix(4))")
+                            context.onDismiss?()
+                        }
+                    } else if let last = popped.dropLast().last {
+                        print("🔥 Triggering push onDismiss for view we're landing on: \(last.id.uuidString.prefix(4))")
+                        last.onDismiss?()
+                    }
+
                     rootPushPath = []
                     print("🧼 Cleared rootPushPath back to push root: \(targetItem.viewTypeName)")
+
                 } else {
                     print("⚠️ Could not find push context for \(targetItem.viewTypeName)")
                 }
-
             }
+            
         }
 
 
