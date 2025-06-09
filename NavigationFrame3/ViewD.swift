@@ -31,13 +31,19 @@ struct ViewD: View {
             }
             
             Button("Present ViewE") {
-//                navigationManager.presentSheet {
-//                    ViewD()
-//                }
                 navigationManager.presentSheet {
                     ViewE()
                 } onDismiss: {
                     print("🔥 ViewE was dismissed")
+                }
+
+
+            }
+            Button("Push ViewE") {
+                navigationManager.push {
+                    ViewE()
+                } onDismiss: {
+                    print("🔥 Pushed ViewE was dismissed")
                 }
 
 

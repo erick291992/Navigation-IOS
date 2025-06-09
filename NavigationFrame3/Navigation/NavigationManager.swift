@@ -138,6 +138,17 @@ final class NavigationManager: ObservableObject {
             }
 
             modalStack = Array(modalStack.prefix(modalIndex + 1))
+            let modalID = targetItem.id
+            if let pushStack = modalPushPaths[modalID] {
+                let removed = pushStack.reversed() // all pushed views in this sheet
+                for context in removed {
+                    print("🔥 Triggering modal push onDismiss → \(context.id.uuidString.prefix(4))")
+                    context.onDismiss?()
+                }
+                modalPushPaths[modalID] = [] // completely reset it
+                print("🧼 Cleared modal push path for modal \(modalID.uuidString.prefix(4))")
+            }
+
         } else {
             // 🧹 Dismissing to a push root — all modals go
             let poppedContexts = modalStack
