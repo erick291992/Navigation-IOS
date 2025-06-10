@@ -49,10 +49,14 @@ final class NavigationManager: ObservableObject {
             onDismiss: onDismiss
         )
 
-        // ✅ Fix: Only append if the modal ID is still tracked in modalPushPaths
-        if let modalID = contextID, modalPushPaths.keys.contains(modalID) {
-            modalPushPaths[modalID, default: []].append(context)
-            print("📦 Pushed view of type \(context.viewTypeName) [context: modal \(modalID.uuidString.prefix(4))]")
+        if let modalID = contextID {
+            if modalPushPaths.keys.contains(modalID) {
+                modalPushPaths[modalID, default: []].append(context)
+                print("📦 Pushed view of type \(context.viewTypeName) [context: modal \(modalID.uuidString.prefix(4))]")
+            } else {
+                print("⚠️ Tried to push into modal \(modalID.uuidString.prefix(4)), but it's no longer active. Falling back to root.")
+                rootPushPath.append(context)
+            }
         } else {
             rootPushPath.append(context)
             print("📦 Pushed view of type \(context.viewTypeName) [context: root]")
@@ -62,6 +66,7 @@ final class NavigationManager: ObservableObject {
             NavigationItem(id: context.id, viewTypeName: context.viewTypeName, type: .push)
         )
     }
+
 
 
 
