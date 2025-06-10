@@ -49,18 +49,20 @@ final class NavigationManager: ObservableObject {
             onDismiss: onDismiss
         )
 
-        if let modalID = contextID {
+        // ✅ Fix: Only append if the modal ID is still tracked in modalPushPaths
+        if let modalID = contextID, modalPushPaths.keys.contains(modalID) {
             modalPushPaths[modalID, default: []].append(context)
+            print("📦 Pushed view of type \(context.viewTypeName) [context: modal \(modalID.uuidString.prefix(4))]")
         } else {
             rootPushPath.append(context)
+            print("📦 Pushed view of type \(context.viewTypeName) [context: root]")
         }
 
         fullNavigationHistory.append(
             NavigationItem(id: context.id, viewTypeName: context.viewTypeName, type: .push)
         )
-
-        print("📦 Pushed view of type \(context.viewTypeName) [context: \(contextID?.uuidString.prefix(4) ?? "root")]")
     }
+
 
 
 
@@ -75,6 +77,7 @@ final class NavigationManager: ObservableObject {
         )
 
         modalStack.append(context)
+        modalPushPaths[context.id] = [] // ✅ ✅ ✅ THIS IS MISSING!
 
         fullNavigationHistory.append(
             NavigationItem(
@@ -89,13 +92,19 @@ final class NavigationManager: ObservableObject {
     }
 
 
+
     func dismissSheet() {
         if let removed = modalStack.popLast() {
             print("❎ Dismissed sheet \(removed.id)")
             removed.onDismiss?() // ✅ Run the handler
+
+            // 🧼 Cleanup push path for this modal
+            modalPushPaths[removed.id] = nil
+
             logModalStack()
         }
     }
+
     
     func dismissTo<Content: View>(
         _ target: Content.Type,
@@ -138,6 +147,14 @@ final class NavigationManager: ObservableObject {
             }
 
             modalStack = Array(modalStack.prefix(modalIndex + 1))
+            let removedModals = modalStack.suffix(from: modalIndex + 1)
+            modalStack = Array(modalStack.prefix(modalIndex + 1))
+
+            // 🧼 Clean up orphaned modal push paths
+            for context in removedModals {
+                modalPushPaths[context.id] = nil
+            }
+
             let modalID = targetItem.id
             if let pushStack = modalPushPaths[modalID] {
                 let removed = pushStack.reversed() // all pushed views in this sheet
@@ -165,6 +182,7 @@ final class NavigationManager: ObservableObject {
             }
             
             modalStack.removeAll()
+            modalPushPaths.removeAll()
             print("✅ Cleared modalStack")
             
             // ✅ Trim the push stack (root or modal)
@@ -233,8 +251,10 @@ final class NavigationManager: ObservableObject {
 
     func reset() {
         modalStack.removeAll()
+        modalPushPaths.removeAll()
         print("🧼 NavigationManager sheet stack reset")
     }
+
 
     private func logModalStack() {
         print("🧱 Modal Stack:")
