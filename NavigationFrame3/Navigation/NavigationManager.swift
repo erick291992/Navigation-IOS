@@ -50,11 +50,11 @@ final class NavigationManager: ObservableObject {
         )
 
         if let modalID = contextID {
-            if modalPushPaths.keys.contains(modalID) {
+            if modalStack.contains(where: { $0.id == modalID }) {
                 modalPushPaths[modalID, default: []].append(context)
                 print("📦 Pushed view of type \(context.viewTypeName) [context: modal \(modalID.uuidString.prefix(4))]")
             } else {
-                print("⚠️ Tried to push into modal \(modalID.uuidString.prefix(4)), but it's no longer active. Falling back to root.")
+                print("⚠️ Tried to push into modal \(modalID.uuidString.prefix(4)), but it's no longer mounted. Falling back to root.")
                 rootPushPath.append(context)
             }
         } else {
@@ -71,18 +71,34 @@ final class NavigationManager: ObservableObject {
 
 
 
+
     
     func presentSheet<Content: View>(
         @ViewBuilder view: @escaping () -> Content,
         onDismiss: (() -> Void)? = nil
     ) {
+        // 🛡️ Guard #1: Detect if trying to present from a modal that was just dismissed
+        if let modalID = modalStack.last?.id,
+           !modalStack.contains(where: { $0.id == modalID }) {
+            print("⚠️ Attempted to present a sheet from a dismissed modal (\(modalID.uuidString.prefix(4))). Ignoring.")
+            return
+        }
+
+        // 🛡️ Guard #2: Check for desync between modalStack and modalPushPaths
+        if modalStack.isEmpty == false,
+           let lastModalID = modalStack.last?.id,
+           modalPushPaths[lastModalID] == nil {
+            print("⚠️ Modal stack exists but modalPushPath missing — likely stale. Preventing sheet presentation.")
+            return
+        }
+
         let context = ModalContext(
             makeView: { AnyView(view()) },
             onDismiss: onDismiss
         )
 
         modalStack.append(context)
-        modalPushPaths[context.id] = [] // ✅ ✅ ✅ THIS IS MISSING!
+        modalPushPaths[context.id] = []
 
         fullNavigationHistory.append(
             NavigationItem(
@@ -98,16 +114,17 @@ final class NavigationManager: ObservableObject {
 
 
 
+
     func dismissSheet() {
-        if let removed = modalStack.popLast() {
-            print("❎ Dismissed sheet \(removed.id)")
-            removed.onDismiss?() // ✅ Run the handler
+        guard let removed = modalStack.popLast() else { return }
+        
+        print("❎ Dismissed sheet \(removed.id)")
+        removed.onDismiss?()
 
-            // 🧼 Cleanup push path for this modal
-            modalPushPaths[removed.id] = nil
+        // 🧼 Defensive cleanup
+        modalPushPaths.removeValue(forKey: removed.id)
 
-            logModalStack()
-        }
+        logModalStack()
     }
 
     
@@ -186,8 +203,13 @@ final class NavigationManager: ObservableObject {
                 first.onDismiss?()
             }
             
+            let removedModals = modalStack
             modalStack.removeAll()
-            modalPushPaths.removeAll()
+
+            for modal in removedModals {
+                print("🧼 Removing modal push path for dismissed modal \(modal.id.uuidString.prefix(4))")
+                modalPushPaths.removeValue(forKey: modal.id)
+            }
             print("✅ Cleared modalStack")
             
             // ✅ Trim the push stack (root or modal)
@@ -238,6 +260,19 @@ final class NavigationManager: ObservableObject {
 
 
         logModalStack()
+        // 🧼 Prune fullNavigationHistory to only include currently active views
+        let activeModalIDs = Set(modalStack.map(\.id))
+        let activeModalPushIDs = modalPushPaths.values.flatMap { $0.map(\.id) }
+        let activePushIDs = rootPushPath.map(\.id)
+
+        let activeIDs: Set<UUID> = Set(activeModalIDs + activeModalPushIDs + activePushIDs)
+
+        let oldCount = fullNavigationHistory.count
+        fullNavigationHistory = fullNavigationHistory.filter { activeIDs.contains($0.id) }
+        let newCount = fullNavigationHistory.count
+
+        print("🧹 Pruned fullNavigationHistory from \(oldCount) → \(newCount)")
+
     }
 
 
