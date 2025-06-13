@@ -39,6 +39,13 @@ final class NavigationManager: ObservableObject {
             }
         )
     }
+    
+    enum SheetPresentationStyle {
+        case stack         // ➕ Add to top of stack (default)
+        case replaceLast   // 🔁 Remove top sheet, then present new one
+        case replaceAll    // 🔄 Remove all sheets, then present new one
+    }
+
 
     func push<Content: View>(
         @ViewBuilder view: @escaping () -> Content,
@@ -70,16 +77,44 @@ final class NavigationManager: ObservableObject {
     }
 
     func presentSheet<Content: View>(
+        style: SheetPresentationStyle = .stack,
         @ViewBuilder view: @escaping () -> Content,
         onDismiss: (() -> Void)? = nil
     ) {
+        switch style {
+        case .replaceLast:
+            if let removed = modalStack.popLast() {
+                print("🔥 Replacing last modal: \(removed.id.uuidString.prefix(4))")
+                removed.onDismiss?()
+                modalPushPaths[removed.id] = nil
+            }
+
+        case .replaceAll:
+            for context in modalStack.reversed() {
+                print("🔥 Replacing all → dismissing modal: \(context.id.uuidString.prefix(4))")
+                context.onDismiss?()
+                modalPushPaths[context.id] = nil
+            }
+            modalStack.removeAll()
+
+        case .stack:
+            break // Default: allow stacking
+        }
+
         let context = ModalContext(
             makeView: { AnyView(view()) },
             onDismiss: onDismiss
         )
 
+        // ✅ Only initialize if not already present
+        if modalPushPaths[context.id] == nil {
+            print("🆕 Initializing push path for modal \(context.id.uuidString.prefix(4))")
+            modalPushPaths[context.id] = []
+        } else {
+            print("♻️ Reusing existing push path for modal \(context.id.uuidString.prefix(4))")
+        }
+
         modalStack.append(context)
-        modalPushPaths[context.id] = [] // ✅ Init empty push path
 
         fullNavigationHistory.append(
             NavigationItem(
@@ -93,14 +128,35 @@ final class NavigationManager: ObservableObject {
         logModalStack()
     }
 
+
+
+
     func dismissSheet() {
-        if let removed = modalStack.popLast() {
-            print("❎ Dismissed sheet \(removed.id)")
-            removed.onDismiss?()
-            modalPushPaths[removed.id] = nil
-            logModalStack()
+        guard let removed = modalStack.popLast() else { return }
+
+        let removedID = removed.id
+        print("❎ Dismissed sheet \(removedID)")
+
+        // ✅ Trigger onDismiss for all pushed views in the dismissed sheet
+        if let removedStack = modalPushPaths[removedID] {
+            for context in removedStack.reversed() {
+                print("🔥 Modal push onDismiss → \(context.viewTypeName)")
+                context.onDismiss?()
+            }
         }
+
+        // ✅ Remove push path only for the dismissed modal
+        modalPushPaths[removedID] = nil
+
+        // ✅ Trigger modal-level onDismiss last
+        removed.onDismiss?()
+
+        // 🧱 Re-log modal stack for visibility
+        logModalStack()
     }
+
+
+
 
     func dismissTo<Content: View>(
         _ target: Content.Type,
@@ -212,10 +268,11 @@ final class NavigationManager: ObservableObject {
 
     /// ✅ Use this everywhere instead of direct modalPushPaths[...] = ...
     func modifyModalPushPath(for modalID: UUID, mutate: (inout [PushContext]) -> Void) {
-        var path = modalPushPaths[modalID, default: []]
-        mutate(&path)
-        updateModalPushPath(for: modalID, newValue: path)
+        var path = modalPushPaths[modalID, default: []]   // current value
+        mutate(&path)                                     // caller changes it
+        updateModalPushPath(for: modalID, newValue: path) // diff-check & publish
     }
+
 
     func reset() {
         modalStack.removeAll()

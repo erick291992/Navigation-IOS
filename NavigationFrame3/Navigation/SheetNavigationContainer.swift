@@ -10,6 +10,8 @@ struct SheetNavigationContainer: View {
     let context: ModalContext
     @ObservedObject var navigationManager: NavigationManager
 
+    @State private var currentID: UUID?
+
     var body: some View {
         let modalID = context.id
 
@@ -20,6 +22,12 @@ struct SheetNavigationContainer: View {
                     pushContext.makeView()
                         .environmentObject(navigationManager)
                 }
+        }
+        .id(currentID) // ✅ Only changes when sheet changes
+        .onAppear {
+            if currentID != context.id {
+                currentID = context.id
+            }
         }
     }
 

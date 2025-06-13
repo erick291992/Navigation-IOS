@@ -24,6 +24,26 @@ struct ViewE: View {
             Button("Dismiss") {
                 NavigationManagerRegistry.shared.manager(for: "tab2")?.dismissSheet()
             }
+            
+            Button("Present ViewF") {
+//                navigationManager.presentSheet {
+//                    ViewD()
+//                }
+                navigationManager.presentSheet {
+                    ViewF()
+                } onDismiss: {
+                    print("🔥 ViewF was dismissed")
+                }
+
+
+            }
+            Button("Push ViewF") {
+                navigationManager.push {
+                    ViewF()
+                } onDismiss: {
+                    print("🔥 Pushed ViewF was dismissed")
+                }
+            }
         }
         .padding()
         .onAppear {
