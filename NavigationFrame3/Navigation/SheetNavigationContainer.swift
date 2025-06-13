@@ -26,7 +26,9 @@ struct SheetNavigationContainer: View {
     private func pushPathBinding(for id: UUID) -> Binding<[PushContext]> {
         Binding(
             get: { navigationManager.modalPushPaths[id] ?? [] },
-            set: { navigationManager.modalPushPaths[id] = $0 }
+            set: { newValue in
+                navigationManager.modifyModalPushPath(for: id) { $0 = newValue }
+            }
         )
     }
 }

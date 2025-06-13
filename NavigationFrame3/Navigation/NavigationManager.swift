@@ -22,7 +22,7 @@ final class NavigationManager: ObservableObject {
         }
     }
 
-    // ❗ modalPushPaths updated via helper to track dismissals
+    // ✅ Use `modifyModalPushPath` to trigger dismiss detection
     @Published var modalPushPaths: [UUID: [PushContext]] = [:]
 
     var topSheet: ModalContext? {
@@ -53,7 +53,7 @@ final class NavigationManager: ObservableObject {
 
         if let modalID = contextID {
             if modalStack.contains(where: { $0.id == modalID }) {
-                updateModalPushPath(for: modalID, newValue: modalPushPaths[modalID, default: []] + [context])
+                modifyModalPushPath(for: modalID) { $0.append(context) }
                 print("📦 Pushed view of type \(context.viewTypeName) [context: modal \(modalID.uuidString.prefix(4))]")
             } else {
                 print("⚠️ Tried to push into modal \(modalID.uuidString.prefix(4)), but it's no longer mounted. Falling back to root.")
@@ -79,7 +79,7 @@ final class NavigationManager: ObservableObject {
         )
 
         modalStack.append(context)
-        modalPushPaths[context.id] = [] // ✅ Initialize push path for modal
+        modalPushPaths[context.id] = [] // ✅ Init empty push path
 
         fullNavigationHistory.append(
             NavigationItem(
@@ -197,7 +197,6 @@ final class NavigationManager: ObservableObject {
         logModalStack()
     }
 
-    // ✅ New helper to detect pops from modalPushPaths
     private func updateModalPushPath(for modalID: UUID, newValue: [PushContext]) {
         let oldValue = modalPushPaths[modalID] ?? []
         modalPushPaths[modalID] = newValue
@@ -209,6 +208,13 @@ final class NavigationManager: ObservableObject {
                 context.onDismiss?()
             }
         }
+    }
+
+    /// ✅ Use this everywhere instead of direct modalPushPaths[...] = ...
+    func modifyModalPushPath(for modalID: UUID, mutate: (inout [PushContext]) -> Void) {
+        var path = modalPushPaths[modalID, default: []]
+        mutate(&path)
+        updateModalPushPath(for: modalID, newValue: path)
     }
 
     func reset() {
