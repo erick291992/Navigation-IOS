@@ -23,11 +23,11 @@ struct SheetNavigationContainer: View {
                         .environmentObject(navigationManager)
                 }
         }
-        .id(currentID) // ✅ Only changes when sheet changes
+        .id(currentID ?? context.id) // ← This guards against rebuild
         .onAppear {
-            if currentID != context.id {
-                currentID = context.id
-            }
+            guard currentID != context.id else { return }
+            print("⚠️ Rebuilding SheetNavigationContainer due to ID change: \(String(describing: currentID)) → \(context.id)")
+            currentID = context.id
         }
     }
 

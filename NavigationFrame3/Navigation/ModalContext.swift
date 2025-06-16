@@ -9,11 +9,15 @@ import SwiftUI
 
 struct ModalContext: Identifiable, Equatable {
     let id = UUID()
-    let makeView: () -> AnyView
+    let rootView: AnyView
     let onDismiss: (() -> Void)?
 
-    var rootView: AnyView {
-        makeView()
+    init<Content: View>(
+        makeView: @escaping () -> Content,
+        onDismiss: (() -> Void)? = nil
+    ) {
+        self.rootView = AnyView(makeView())
+        self.onDismiss = onDismiss
     }
 
     static func == (lhs: ModalContext, rhs: ModalContext) -> Bool {
