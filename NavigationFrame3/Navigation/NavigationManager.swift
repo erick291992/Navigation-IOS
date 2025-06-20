@@ -16,14 +16,20 @@ final class NavigationManager: ObservableObject {
             guard oldValue.count > rootPushPath.count else { return }
             let removed = oldValue.suffix(from: rootPushPath.count)
             for context in removed {
-                print("🔥 Native pop: \(context.viewTypeName) [root]")
-                context.onDismiss?()
+                if suppressedDismissIDs.contains(context.id) {
+                    print("🚫 Suppressed native pop: \(context.viewTypeName)")
+                    suppressedDismissIDs.remove(context.id)
+                } else {
+                    print("🔥 Native pop: \(context.viewTypeName) [root]")
+                    context.onDismiss?()
+                }
             }
         }
     }
 
     // ✅ Use `modifyModalPushPath` to trigger dismiss detection
     @Published var modalPushPaths: [UUID: [PushContext]] = [:]
+    private var suppressedDismissIDs: Set<UUID> = []
 
     var topSheet: ModalContext? {
         modalStack.last
@@ -268,11 +274,11 @@ final class NavigationManager: ObservableObject {
             let poppedContexts = modalStack.suffix(from: modalIndex + 1)
             if triggerIntermediateDismissals {
                 for context in poppedContexts.reversed() {
-                    print("🔥 Intermediate modal onDismiss → \(context.id.uuidString.prefix(4))")
+                    print("🧨 Calling onDismiss → modal \(context.id.uuidString.prefix(4))")
                     context.onDismiss?()
                 }
             } else if let last = poppedContexts.dropLast().last {
-                print("🔥 onDismiss for landing modal: \(last.id.uuidString.prefix(4))")
+                print("🧨 Calling onDismiss for landing modal: \(last.id.uuidString.prefix(4))")
                 last.onDismiss?()
             }
 
@@ -286,7 +292,7 @@ final class NavigationManager: ObservableObject {
             let modalID = targetItem.id
             if let pushStack = modalPushPaths[modalID] {
                 for context in pushStack.reversed() {
-                    print("🔥 Modal push onDismiss → \(context.id.uuidString.prefix(4))")
+                    print("🧨 Calling onDismiss → push \(context.viewTypeName)")
                     context.onDismiss?()
                 }
                 updateModalPushPath(for: modalID, newValue: [])
@@ -296,11 +302,11 @@ final class NavigationManager: ObservableObject {
             let removedModals = modalStack
             if triggerIntermediateDismissals {
                 for context in removedModals.reversed() {
-                    print("🔥 Intermediate modal onDismiss → \(context.id.uuidString.prefix(4))")
+                    print("🧨 Calling onDismiss → intermediate modal \(context.id.uuidString.prefix(4))")
                     context.onDismiss?()
                 }
             } else if let first = modalStack.first {
-                print("🔥 onDismiss for modal above root: \(first.id.uuidString.prefix(4))")
+                print("🧨 Calling onDismiss for modal above root: \(first.id.uuidString.prefix(4))")
                 first.onDismiss?()
             }
 
@@ -316,15 +322,22 @@ final class NavigationManager: ObservableObject {
                         print("🔥 Root push onDismiss → \(context.id.uuidString.prefix(4))")
                         context.onDismiss?()
                     }
-                } else if let last = removed.dropLast().last {
-                    print("🔥 onDismiss for root landing: \(last.id.uuidString.prefix(4))")
+                } else if let last = removed.last {
+                    print("🧨 Calling onDismiss for root landing: \(last.viewTypeName)")
                     last.onDismiss?()
+                    suppressedDismissIDs.insert(last.id) // 👈 Prevent double-dismissing
                 }
                 rootPushPath = Array(rootPushPath.prefix(through: pushIndex))
             } else if fullNavigationHistory.first?.viewTypeName == targetItem.viewTypeName {
-                for context in rootPushPath.reversed() {
-                    print("🔥 Root push onDismiss → \(context.id.uuidString.prefix(4))")
-                    context.onDismiss?()
+                if triggerIntermediateDismissals {
+                    for context in rootPushPath.reversed() {
+                        print("🔥 Root push onDismiss → \(context.id.uuidString.prefix(4))")
+                        context.onDismiss?()
+                    }
+                } else if let last = rootPushPath.last {
+                    print("🧨 Calling onDismiss for root landing: \(last.viewTypeName)")
+                    last.onDismiss?()
+                    suppressedDismissIDs.insert(last.id) // 👈 prevent double dismiss
                 }
                 rootPushPath = []
             }
