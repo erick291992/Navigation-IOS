@@ -21,7 +21,12 @@ struct NavigationCoordinator<Root: View>: View {
         // ✅ Register root in full history
         let typeName = String(describing: Root.self)
         print("Registering root view: \(typeName)")
-        let rootItem = NavigationItem(id: UUID(), viewTypeName: typeName, type: .push)
+        let rootItem = NavigationItem(
+            id: UUID(),
+            viewTypeName: typeName,
+            type: .push,
+            location: .root
+        )
         manager.fullNavigationHistory.append(rootItem)
     }
 

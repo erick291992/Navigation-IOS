@@ -66,20 +66,43 @@ final class NavigationManager: ObservableObject {
 
         if let modalID = contextID {
             if modalStack.contains(where: { $0.id == modalID }) {
+                let index = (modalPushPaths[modalID]?.count ?? 0)
                 modifyModalPushPath(for: modalID) { $0.append(context) }
                 print("📦 Pushed view of type \(context.viewTypeName) [context: modal \(modalID.uuidString.prefix(4))]")
+                fullNavigationHistory.append(
+                    NavigationItem(
+                        id: context.id,
+                        viewTypeName: context.viewTypeName,
+                        type: .push,
+                        location: .modalPush(modalID: modalID, index: index)
+                    )
+                )
             } else {
-                print("⚠️ Tried to push into modal \(modalID.uuidString.prefix(4)), but it's no longer mounted. Falling back to root.")
+                let index = rootPushPath.count
                 rootPushPath.append(context)
+                print("⚠️ Tried to push into modal \(modalID.uuidString.prefix(4)), but it's no longer mounted. Falling back to root.")
+                fullNavigationHistory.append(
+                    NavigationItem(
+                        id: context.id,
+                        viewTypeName: context.viewTypeName,
+                        type: .push,
+                        location: .rootPush(index: index)
+                    )
+                )
             }
         } else {
+            let index = rootPushPath.count
             rootPushPath.append(context)
             print("📦 Pushed view of type \(context.viewTypeName) [context: root]")
+            fullNavigationHistory.append(
+                NavigationItem(
+                    id: context.id,
+                    viewTypeName: context.viewTypeName,
+                    type: .push,
+                    location: .rootPush(index: index)
+                )
+            )
         }
-
-        fullNavigationHistory.append(
-            NavigationItem(id: context.id, viewTypeName: context.viewTypeName, type: .push)
-        )
     }
 
     func presentSheet<Content: View>(
@@ -121,13 +144,15 @@ final class NavigationManager: ObservableObject {
             print("♻️ Reusing existing push path for modal \(context.id.uuidString.prefix(4))")
         }
 
+        let index = modalStack.count
         modalStack.append(context)
 
         fullNavigationHistory.append(
             NavigationItem(
                 id: context.id,
                 viewTypeName: String(describing: Content.self),
-                type: .sheet
+                type: .sheet,
+                location: .modalStack(index: index)
             )
         )
 
@@ -171,13 +196,15 @@ final class NavigationManager: ObservableObject {
             modalPushPaths[context.id] = []
         }
 
+        let index = modalStack.count
         modalStack.append(context)
 
         fullNavigationHistory.append(
             NavigationItem(
                 id: context.id,
                 viewTypeName: String(describing: Content.self),
-                type: .sheet // Or `.fullScreen` if you want to add a new `NavigationType`
+                type: .fullscreen,
+                location: .modalStack(index: index)
             )
         )
 
@@ -244,106 +271,59 @@ final class NavigationManager: ObservableObject {
 
 
 
-    func dismissTo<Content: View>(
-        _ target: Content.Type,
-        triggerIntermediateDismissals: Bool = false
-    ) {
+    func dismissTo<Content: View>(_ target: Content.Type, triggerIntermediateDismissals: Bool = false) {
         print("📜 Full Navigation History:")
         for item in fullNavigationHistory {
             print("• \(item.viewTypeName) [\(item.type.rawValue)]")
         }
-
+        
         let targetName = String(describing: target)
-
-        guard let targetIndex = fullNavigationHistory.lastIndex(where: {
-            $0.viewTypeName == targetName
-        }) else {
+        print("\n=== dismissTo: \(targetName) ===")
+        guard let targetIndex = fullNavigationHistory.lastIndex(where: { $0.viewTypeName == targetName }) else {
             print("❌ Could not find \(targetName) in full history")
             return
         }
-
-        print("🎯 Attempting to dismiss to: \(targetName)")
         let targetItem = fullNavigationHistory[targetIndex]
+        print("Found target in history at index \(targetIndex): \(targetItem)")
+        print("Location: \(targetItem.location)")
 
-        if targetItem.type == .sheet {
-            guard let modalIndex = modalStack.lastIndex(where: { $0.id == targetItem.id }) else {
-                print("❌ Matching modalContext not found for \(targetName)")
-                return
-            }
-
-            let poppedContexts = modalStack.suffix(from: modalIndex + 1)
-            if triggerIntermediateDismissals {
-                for context in poppedContexts.reversed() {
-                    print("🧨 Calling onDismiss → modal \(context.id.uuidString.prefix(4))")
-                    context.onDismiss?()
-                }
-            } else if let last = poppedContexts.dropLast().last {
-                print("🧨 Calling onDismiss for landing modal: \(last.id.uuidString.prefix(4))")
-                last.onDismiss?()
-            }
-
-            let removedModals = modalStack.suffix(from: modalIndex + 1)
-            modalStack = Array(modalStack.prefix(modalIndex + 1))
-
-            for context in removedModals {
-                modalPushPaths[context.id] = nil
-            }
-
-            let modalID = targetItem.id
-            if let pushStack = modalPushPaths[modalID] {
-                for context in pushStack.reversed() {
-                    print("🧨 Calling onDismiss → push \(context.viewTypeName)")
-                    context.onDismiss?()
-                }
-                updateModalPushPath(for: modalID, newValue: [])
-            }
-
-        } else {
-            let removedModals = modalStack
-            if triggerIntermediateDismissals {
-                for context in removedModals.reversed() {
-                    print("🧨 Calling onDismiss → intermediate modal \(context.id.uuidString.prefix(4))")
-                    context.onDismiss?()
-                }
-            } else if let first = modalStack.first {
-                print("🧨 Calling onDismiss for modal above root: \(first.id.uuidString.prefix(4))")
-                first.onDismiss?()
-            }
-
+        switch targetItem.location {
+        case .root:
+            print("→ Dismissing to root. Clearing modalStack, modalPushPaths, and rootPushPath.")
+            for modal in modalStack.reversed() { print("Dismiss modal: \(modal.id)"); modal.onDismiss?() }
             modalStack.removeAll()
-            for modal in removedModals {
-                modalPushPaths.removeValue(forKey: modal.id)
-            }
-
-            if let pushIndex = rootPushPath.firstIndex(where: { $0.viewTypeName == targetItem.viewTypeName }) {
-                let removed = rootPushPath.suffix(from: pushIndex + 1)
-                if triggerIntermediateDismissals {
-                    for context in removed.reversed() {
-                        print("🔥 Root push onDismiss → \(context.id.uuidString.prefix(4))")
-                        context.onDismiss?()
-                    }
-                } else if let last = removed.last {
-                    print("🧨 Calling onDismiss for root landing: \(last.viewTypeName)")
-                    last.onDismiss?()
-                    suppressedDismissIDs.insert(last.id) // 👈 Prevent double-dismissing
-                }
-                rootPushPath = Array(rootPushPath.prefix(through: pushIndex))
-            } else if fullNavigationHistory.first?.viewTypeName == targetItem.viewTypeName {
-                if triggerIntermediateDismissals {
-                    for context in rootPushPath.reversed() {
-                        print("🔥 Root push onDismiss → \(context.id.uuidString.prefix(4))")
-                        context.onDismiss?()
-                    }
-                } else if let last = rootPushPath.last {
-                    print("🧨 Calling onDismiss for root landing: \(last.viewTypeName)")
-                    last.onDismiss?()
-                    suppressedDismissIDs.insert(last.id) // 👈 prevent double dismiss
-                }
-                rootPushPath = []
-            }
+            modalPushPaths.removeAll()
+            for context in rootPushPath.reversed() { print("Dismiss root push: \(context.viewTypeName)"); context.onDismiss?() }
+            rootPushPath = []
+        case .rootPush(let index):
+            print("→ Dismissing to rootPush index \(index). Keeping up to this index in rootPushPath.")
+            let toRemove = rootPushPath.suffix(from: index + 1)
+            for context in toRemove.reversed() { print("Dismiss root push: \(context.viewTypeName)"); context.onDismiss?() }
+            rootPushPath = Array(rootPushPath.prefix(index + 1))
+        case .modalStack(let modalIndex):
+            print("→ Dismissing to modalStack index \(modalIndex). Keeping up to this index in modalStack.")
+            let toRemove = modalStack.suffix(from: modalIndex + 1)
+            for modal in toRemove.reversed() { print("Dismiss modal: \(modal.id)"); modal.onDismiss?() }
+            for modal in toRemove { print("Remove modalPushPath for: \(modal.id)"); modalPushPaths[modal.id] = nil }
+            modalStack = Array(modalStack.prefix(modalIndex + 1))
+        case .modalPush(let modalID, let pushIndex):
+            print("→ Dismissing to modalPush in modal \(modalID) at index \(pushIndex). Keeping up to this index in modalPushPaths.")
+            guard var stack = modalPushPaths[modalID] else { print("⚠️ modalPushPaths for \(modalID) not found"); break }
+            let toRemove = stack.suffix(from: pushIndex + 1)
+            for context in toRemove.reversed() { print("Dismiss modal push: \(context.viewTypeName)"); context.onDismiss?() }
+            stack = Array(stack.prefix(pushIndex + 1))
+            modalPushPaths[modalID] = stack
         }
 
-        logModalStack()
+        
+        // Remove all items above the target in fullNavigationHistory
+        print("→ Trimming fullNavigationHistory to index \(targetIndex)")
+        fullNavigationHistory = Array(fullNavigationHistory.prefix(targetIndex + 1))
+        print("=== End dismissTo ===\n")
+        print("modalStack after dismissTo: \(modalStack.map { $0.id })")
+        print("modalPushPaths after dismissTo: \(modalPushPaths.mapValues { $0.map { $0.viewTypeName } })")
+        print("rootPushPath after dismissTo: \(rootPushPath.map { $0.viewTypeName })")
+        print("fullNavigationHistory after dismissTo: \(fullNavigationHistory.map { $0.viewTypeName })")
     }
 
     private func updateModalPushPath(for modalID: UUID, newValue: [PushContext]) {
