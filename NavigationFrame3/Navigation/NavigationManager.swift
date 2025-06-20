@@ -52,6 +52,11 @@ final class NavigationManager: ObservableObject {
         case replaceAll    // 🔄 Remove all sheets, then present new one
     }
 
+    enum DismissalMode {
+        case all        // Call onDismiss for every removed view (intermediate)
+        case landing    // Only call onDismiss for the view you land on (the last one removed)
+        case parent     // Only call onDismiss for the direct parent of the current view
+    }
 
     func push<Content: View>(
         @ViewBuilder view: @escaping () -> Content,
@@ -271,59 +276,66 @@ final class NavigationManager: ObservableObject {
 
 
 
-    func dismissTo<Content: View>(_ target: Content.Type, triggerIntermediateDismissals: Bool = false) {
+    func dismissTo<Content: View>(_ target: Content.Type, mode: DismissalMode = .landing) {
+        let targetName = String(describing: target)
+        print("\n=== dismissTo: \(targetName) [mode: \(mode)] ===")
         print("📜 Full Navigation History:")
         for item in fullNavigationHistory {
             print("• \(item.viewTypeName) [\(item.type.rawValue)]")
         }
-        
-        let targetName = String(describing: target)
-        print("\n=== dismissTo: \(targetName) ===")
         guard let targetIndex = fullNavigationHistory.lastIndex(where: { $0.viewTypeName == targetName }) else {
             print("❌ Could not find \(targetName) in full history")
             return
         }
-        let targetItem = fullNavigationHistory[targetIndex]
-        print("Found target in history at index \(targetIndex): \(targetItem)")
-        print("Location: \(targetItem.location)")
-
-        switch targetItem.location {
-        case .root:
-            print("→ Dismissing to root. Clearing modalStack, modalPushPaths, and rootPushPath.")
-            for modal in modalStack.reversed() { print("Dismiss modal: \(modal.id)"); modal.onDismiss?() }
-            modalStack.removeAll()
-            modalPushPaths.removeAll()
-            for context in rootPushPath.reversed() { print("Dismiss root push: \(context.viewTypeName)"); context.onDismiss?() }
-            rootPushPath = []
-        case .rootPush(let index):
-            print("→ Dismissing to rootPush index \(index). Keeping up to this index in rootPushPath.")
-            let toRemove = rootPushPath.suffix(from: index + 1)
-            for context in toRemove.reversed() { print("Dismiss root push: \(context.viewTypeName)"); context.onDismiss?() }
-            rootPushPath = Array(rootPushPath.prefix(index + 1))
-        case .modalStack(let modalIndex):
-            print("→ Dismissing to modalStack index \(modalIndex). Keeping up to this index in modalStack.")
-            let toRemove = modalStack.suffix(from: modalIndex + 1)
-            for modal in toRemove.reversed() { print("Dismiss modal: \(modal.id)"); modal.onDismiss?() }
-            for modal in toRemove { print("Remove modalPushPath for: \(modal.id)"); modalPushPaths[modal.id] = nil }
-            modalStack = Array(modalStack.prefix(modalIndex + 1))
-        case .modalPush(let modalID, let pushIndex):
-            print("→ Dismissing to modalPush in modal \(modalID) at index \(pushIndex). Keeping up to this index in modalPushPaths.")
-            guard var stack = modalPushPaths[modalID] else { print("⚠️ modalPushPaths for \(modalID) not found"); break }
-            let toRemove = stack.suffix(from: pushIndex + 1)
-            for context in toRemove.reversed() { print("Dismiss modal push: \(context.viewTypeName)"); context.onDismiss?() }
-            stack = Array(stack.prefix(pushIndex + 1))
-            modalPushPaths[modalID] = stack
+        let toRemove = fullNavigationHistory.suffix(from: targetIndex + 1)
+        print("Will remove \(toRemove.count) items above target.")
+        let count = toRemove.count
+        for (index, item) in toRemove.reversed().enumerated() {
+            switch item.location {
+            case .rootPush(let idx):
+                guard rootPushPath.indices.contains(idx) else { break }
+                suppressedDismissIDs.insert(rootPushPath[idx].id)
+                let removed = rootPushPath.remove(at: idx)
+                if shouldCallOnDismiss(mode: mode, index: index, count: count) {
+                    print("Dismiss root push: \(removed.viewTypeName)")
+                    removed.onDismiss?()
+                }
+            case .modalStack(let idx):
+                guard modalStack.indices.contains(idx) else { break }
+                let removed = modalStack.remove(at: idx)
+                if shouldCallOnDismiss(mode: mode, index: index, count: count) {
+                    print("Dismiss modal: \(removed.id)")
+                    removed.onDismiss?()
+                }
+                modalPushPaths[removed.id] = nil
+            case .modalPush(let modalID, let pushIdx):
+                guard var stack = modalPushPaths[modalID], stack.indices.contains(pushIdx) else { break }
+                suppressedDismissIDs.insert(stack[pushIdx].id)
+                let removed = stack.remove(at: pushIdx)
+                if shouldCallOnDismiss(mode: mode, index: index, count: count) {
+                    print("Dismiss modal push: \(removed.viewTypeName)")
+                    removed.onDismiss?()
+                }
+                modalPushPaths[modalID] = stack
+            case .root:
+                // Do nothing, root stays
+                break
+            }
         }
-
-        
-        // Remove all items above the target in fullNavigationHistory
-        print("→ Trimming fullNavigationHistory to index \(targetIndex)")
         fullNavigationHistory = Array(fullNavigationHistory.prefix(targetIndex + 1))
+        print("→ Trimming fullNavigationHistory to index \(targetIndex)")
         print("=== End dismissTo ===\n")
-        print("modalStack after dismissTo: \(modalStack.map { $0.id })")
-        print("modalPushPaths after dismissTo: \(modalPushPaths.mapValues { $0.map { $0.viewTypeName } })")
-        print("rootPushPath after dismissTo: \(rootPushPath.map { $0.viewTypeName })")
-        print("fullNavigationHistory after dismissTo: \(fullNavigationHistory.map { $0.viewTypeName })")
+    }
+
+    private func shouldCallOnDismiss(mode: DismissalMode, index: Int, count: Int) -> Bool {
+        switch mode {
+        case .all:
+            return true
+        case .parent:
+            return index == 0 // first in toRemove (topmost, direct parent)
+        case .landing:
+            return index == count - 1 // last in toRemove (landing view)
+        }
     }
 
     private func updateModalPushPath(for modalID: UUID, newValue: [PushContext]) {

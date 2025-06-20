@@ -16,38 +16,8 @@
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "366"
             endingLineNumber = "366"
-            landmarkName = "logPushStack()"
+            landmarkName = "reset()"
             landmarkType = "7">
-            <Locations>
-               <Location
-                  uuid = "56248E5E-1F92-42BD-984A-3A02401BBAE2 - cde92c861dd117aa"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "NavigationFrame3.NavigationManager.logPushStack() -&gt; ()"
-                  moduleName = "NavigationFrame3.debug.dylib"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/NavigationManager.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "366"
-                  endingLineNumber = "366">
-               </Location>
-               <Location
-                  uuid = "56248E5E-1F92-42BD-984A-3A02401BBAE2 - cde92c861dd117aa"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "NavigationFrame3.NavigationManager.logPushStack() -&gt; ()"
-                  moduleName = "NavigationFrame3.debug.dylib"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/NavigationManager.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "366"
-                  endingLineNumber = "366">
-               </Location>
-            </Locations>
          </BreakpointContent>
       </BreakpointProxy>
    </Breakpoints>
