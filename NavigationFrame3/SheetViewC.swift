@@ -42,6 +42,10 @@ struct ViewC: View {
             Button("Dismiss sheet/fullscreen") {
                 navigationManager.dismissSheet()
             }
+            
+            Button("Dismiss stack") {
+                navigationManager.dismissPush()
+            }
         }
         .padding()
         .onAppear {

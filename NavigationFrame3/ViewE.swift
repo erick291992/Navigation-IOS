@@ -25,6 +25,10 @@ struct ViewE: View {
                 NavigationManagerRegistry.shared.manager(for: "tab2")?.dismissSheet()
             }
             
+            Button("Dismiss stack") {
+                navigationManager.dismissPush()
+            }
+            
             Button("Present ViewF") {
 //                navigationManager.presentSheet {
 //                    ViewD()

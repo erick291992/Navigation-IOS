@@ -204,6 +204,38 @@ final class NavigationManager: ObservableObject {
     }
 
 
+    func dismissPush() {
+        // Check if a modal is active
+        if let modalID = modalStack.last?.id {
+            guard var currentStack = modalPushPaths[modalID], !currentStack.isEmpty else { return }
+            
+            let removed = currentStack.removeLast()
+            print("❎ Dismissed pushed view: \(removed.viewTypeName) [modal \(modalID.uuidString.prefix(4))]")
+            removed.onDismiss?()
+
+            updateModalPushPath(for: modalID, newValue: currentStack)
+            
+            // Also remove from full navigation history
+            fullNavigationHistory.removeAll { $0.id == removed.id }
+
+        } else {
+            // Otherwise, dismiss from root push stack
+            guard !rootPushPath.isEmpty else { return }
+
+            let removed = rootPushPath.removeLast()
+            print("❎ Dismissed pushed view: \(removed.viewTypeName) [root]")
+            removed.onDismiss?()
+
+            // Since we manually modified rootPushPath, manually publish it
+            rootPushPath = rootPushPath
+
+            // Also remove from full navigation history
+            fullNavigationHistory.removeAll { $0.id == removed.id }
+        }
+
+        logPushStack()
+    }
+
 
 
     func dismissTo<Content: View>(
@@ -336,4 +368,19 @@ final class NavigationManager: ObservableObject {
             print("• \(context.id)")
         }
     }
+    
+    private func logPushStack() {
+        if let modalID = modalStack.last?.id {
+            print("📦 Push Stack [modal \(modalID.uuidString.prefix(4))]:")
+            for ctx in modalPushPaths[modalID] ?? [] {
+                print("• \(ctx.viewTypeName)")
+            }
+        } else {
+            print("📦 Push Stack [root]:")
+            for ctx in rootPushPath {
+                print("• \(ctx.viewTypeName)")
+            }
+        }
+    }
+
 }

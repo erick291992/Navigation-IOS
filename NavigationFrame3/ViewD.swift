@@ -18,6 +18,10 @@ struct ViewD: View {
                 navigationManager.dismissSheet()
             }
             
+            Button("Dismiss stack") {
+                navigationManager.dismissPush()
+            }
+            
             Button("Dismiss to ViewC") {
                 navigationManager.dismissTo(ViewC.self)
             }
