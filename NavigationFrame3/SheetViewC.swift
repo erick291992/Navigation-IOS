@@ -7,9 +7,10 @@
 import SwiftUI
 struct ViewC: View {
     @EnvironmentObject var navigationManager: NavigationManager
-    private let id = UUID()
+    private var id = UUID()
 
     init() {
+        id = UUID()
         print("🔧 ViewC init with ID: \(id)")
     }
 
@@ -38,17 +39,23 @@ struct ViewC: View {
                     print("🔥 Pushed ViewD was dismissed")
                 }
             }
+            Button("Dismiss sheet/fullscreen") {
+                navigationManager.dismissSheet()
+            }
         }
         .padding()
         .onAppear {
-            print("👀 ViewC appeared")
+            print("👀 ViewC appeared [ID: \(id)] → likely entering view hierarchy")
         }
         .onDisappear {
             print("🚪 ViewC disappeared")
         }
+        .onChange(of: navigationManager.modalPushPaths) { _ in
+            print("💡 ViewC body reevaluated [ID: \(id)] → push path likely updated")
+        }
     }
 
     private func logBodyRender() {
-        print("💡 ViewC body re-evaluated for ID: \(id)")
+        print("💡 ViewC body reevaluated [ID: \(id)] → preparing base")
     }
 }

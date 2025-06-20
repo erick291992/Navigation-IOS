@@ -35,19 +35,31 @@ struct NavigationCoordinator<Root: View>: View {
                 }
         }
         .environmentObject(navigationManager)
-        .sheet(item: topSheetBinding) { context in
-            SheetNavigationContainer(
-                context: context,
-                navigationManager: navigationManager
-            )
+        .sheet(item: topSheetContext) { context in
+            if context.style == .sheet {
+                SheetNavigationContainer(
+                    context: context,
+                    navigationManager: navigationManager
+                )
+            }
 //            .environmentObject(navigationManager)
+        }
+        .fullScreenCover(item: topFullScreenContext) { context in
+            if context.style == .fullScreen {
+                SheetNavigationContainer(
+                    context: context,
+                    navigationManager: navigationManager
+                )
+            }
         }
     }
 
     /// A computed binding that allows SwiftUI to track the top-most sheet.
-    private var topSheetBinding: Binding<ModalContext?> {
+    private var topSheetContext: Binding<ModalContext?> {
         Binding(
-            get: { navigationManager.modalStack.last },
+            get: {
+                navigationManager.modalStack.last(where: { $0.style == .sheet })
+            },
             set: { newValue in
                 if newValue == nil {
                     navigationManager.dismissSheet()
@@ -55,4 +67,18 @@ struct NavigationCoordinator<Root: View>: View {
             }
         )
     }
+
+    private var topFullScreenContext: Binding<ModalContext?> {
+        Binding(
+            get: {
+                navigationManager.modalStack.last(where: { $0.style == .fullScreen })
+            },
+            set: { newValue in
+                if newValue == nil {
+                    navigationManager.dismissSheet()
+                }
+            }
+        )
+    }
+
 }

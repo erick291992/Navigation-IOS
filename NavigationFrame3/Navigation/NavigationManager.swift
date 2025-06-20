@@ -102,6 +102,7 @@ final class NavigationManager: ObservableObject {
         }
 
         let context = ModalContext(
+            style: .sheet,
             makeView: { AnyView(view()) },
             onDismiss: onDismiss
         )
@@ -128,8 +129,55 @@ final class NavigationManager: ObservableObject {
         logModalStack()
     }
 
+    func presentFullScreen<Content: View>(
+        style: SheetPresentationStyle = .stack,
+        @ViewBuilder view: @escaping () -> Content,
+        onDismiss: (() -> Void)? = nil
+    ) {
+        switch style {
+        case .replaceLast:
+            if let removed = modalStack.popLast() {
+                print("🔥 Replacing last modal: \(removed.id.uuidString.prefix(4))")
+                removed.onDismiss?()
+                modalPushPaths[removed.id] = nil
+            }
 
+        case .replaceAll:
+            for context in modalStack.reversed() {
+                print("🔥 Replacing all → dismissing modal: \(context.id.uuidString.prefix(4))")
+                context.onDismiss?()
+                modalPushPaths[context.id] = nil
+            }
+            modalStack.removeAll()
 
+        case .stack:
+            break
+        }
+
+        let context = ModalContext(
+            style: .fullScreen,
+            makeView: view,
+            onDismiss: onDismiss
+        )
+
+        if modalPushPaths[context.id] == nil {
+            print("🆕 Initializing push path for modal \(context.id.uuidString.prefix(4))")
+            modalPushPaths[context.id] = []
+        }
+
+        modalStack.append(context)
+
+        fullNavigationHistory.append(
+            NavigationItem(
+                id: context.id,
+                viewTypeName: String(describing: Content.self),
+                type: .sheet // Or `.fullScreen` if you want to add a new `NavigationType`
+            )
+        )
+
+        print("🎯 Presented fullScreenCover \(context.id) of type \(Content.self)")
+        logModalStack()
+    }
 
     func dismissSheet() {
         guard let removed = modalStack.popLast() else { return }

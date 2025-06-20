@@ -23,6 +23,14 @@ struct ViewB: View {
                 }
 
             }
+            Button("Present Full Screen ViewC") {
+                navigationManager.presentFullScreen {
+                    ViewC()
+                } onDismiss: {
+                    print("🔥 ViewC was dismissed")
+                }
+
+            }
             Button("Push ViewC") {
                 navigationManager.push {
                     ViewC()
