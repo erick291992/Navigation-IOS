@@ -1,0 +1,54 @@
+# === Xcode ===
+*.xcworkspace
+!default.xcworkspace
+*.xcuserstate
+*.xccheckout
+*.moved-aside
+*.xcuserdatad/
+*.xcscmblueprint
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+*.xcodeproj/xcuserdata/
+
+# === Build ===
+build/
+DerivedData/
+*.o
+*.LinkFileList
+*.dSYM.zip
+*.dSYM
+
+# === SwiftPM ===
+.swiftpm/
+.build/
+
+# === CocoaPods ===
+Pods/
+Podfile.lock
+
+# === Carthage ===
+Carthage/
+Carthage/Build/
+
+# === Swift Package Manager ===
+Packages/
+Package.resolved
+
+# === Fastlane ===
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+
+# === Archives ===
+*.xcarchive
+
+# === Other ===
+*.DS_Store
+*.log
+*.orig
+*.swp
+*.tmp
+*.env
+.env.*
+Secrets.plist
