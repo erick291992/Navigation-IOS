@@ -37,19 +37,3 @@ final class NavigationManagerRegistry {
         }
     }
 }
-
-
-//extension NavigationManagerRegistry {
-//    func dismissTo<Content: View>(_ target: Content.Type) {
-//        let targetName = String(describing: target)
-//
-//        for manager in managers.values {
-//            if manager.dismissTo(targetName) {
-//                print("✅ Global dismissTo \(targetName)")
-//                return
-//            }
-//        }
-//
-//        print("❌ No manager found containing \(targetName)")
-//    }
-//}

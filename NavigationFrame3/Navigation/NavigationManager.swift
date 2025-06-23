@@ -35,17 +35,6 @@ final class NavigationManager: ObservableObject {
         modalStack.last
     }
 
-    var topSheetBinding: Binding<ModalContext?> {
-        Binding(
-            get: { self.topSheet },
-            set: { newValue in
-                if newValue == nil {
-                    self.dismissSheet()
-                }
-            }
-        )
-    }
-    
     enum SheetPresentationStyle {
         case stack         // ➕ Add to top of stack (default)
         case replaceLast   // 🔁 Remove top sheet, then present new one

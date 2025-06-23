@@ -47,7 +47,6 @@ struct NavigationCoordinator<Root: View>: View {
                     navigationManager: navigationManager
                 )
             }
-//            .environmentObject(navigationManager)
         }
         .fullScreenCover(item: topFullScreenContext) { context in
             if context.style == .fullScreen {
