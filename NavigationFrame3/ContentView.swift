@@ -13,13 +13,7 @@ struct ContentView: View {
         VStack {
             Button("Present ViewE on Tab 2") {
                 selectedTab = "tab2"
-
-                // Slight delay to give SwiftUI time to mount the tab
-//                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-//                    routeToViewE()
-//                }
                 routeToViewE()
-
             }
             .padding()
 
@@ -45,8 +39,6 @@ struct ContentView: View {
         }
     }
 }
-
-
 
 #Preview {
     ContentView()

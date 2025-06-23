@@ -6,12 +6,13 @@
 //
 import SwiftUI
 
-final class NavigationManager: ObservableObject {
-    @Published var modalStack: [ModalContext] = []
-    @Published var fullNavigationHistory: [NavigationItem] = []
+@Observable
+final class NavigationManager {
+    var modalStack: [ModalContext] = []
+    var fullNavigationHistory: [NavigationItem] = []
 
     // ✅ onDismiss triggered when views are popped from root stack
-    @Published var rootPushPath: [PushContext] = [] {
+    var rootPushPath: [PushContext] = [] {
         didSet {
             guard oldValue.count > rootPushPath.count else { return }
             let removed = oldValue.suffix(from: rootPushPath.count)
@@ -28,7 +29,7 @@ final class NavigationManager: ObservableObject {
     }
 
     // ✅ Use `modifyModalPushPath` to trigger dismiss detection
-    @Published var modalPushPaths: [UUID: [PushContext]] = [:]
+    var modalPushPaths: [UUID: [PushContext]] = [:]
     private var suppressedDismissIDs: Set<UUID> = []
 
     var topSheet: ModalContext? {
@@ -140,6 +141,9 @@ final class NavigationManager: ObservableObject {
 
         let index = modalStack.count
         modalStack.append(context)
+
+        print("📝 Adding modal to stack: \(context.id) at index \(index)")
+        print("📝 Modal stack count after adding: \(modalStack.count)")
 
         fullNavigationHistory.append(
             NavigationItem(

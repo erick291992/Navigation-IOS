@@ -5,8 +5,9 @@
 //  Created by Erick Manrique on 5/16/25.
 //
 import SwiftUI
+
 struct ViewC: View {
-    @EnvironmentObject var navigationManager: NavigationManager
+    @Environment(\.navigationManager) var navigationManager: NavigationManager
     private var id = UUID()
 
     init() {

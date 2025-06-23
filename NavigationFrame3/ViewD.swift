@@ -7,7 +7,7 @@
 import SwiftUI
 
 struct ViewD: View {
-    @EnvironmentObject var navigationManager: NavigationManager
+    @Environment(\.navigationManager) var navigationManager: NavigationManager
 
     var body: some View {
         VStack(spacing: 20) {

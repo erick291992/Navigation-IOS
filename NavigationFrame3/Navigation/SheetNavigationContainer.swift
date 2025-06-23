@@ -8,7 +8,7 @@ import SwiftUI
 
 struct SheetNavigationContainer: View {
     let context: ModalContext
-    @ObservedObject var navigationManager: NavigationManager
+    @Bindable var navigationManager: NavigationManager
 
     @State private var currentID: UUID?
 
@@ -17,10 +17,10 @@ struct SheetNavigationContainer: View {
 
         NavigationStack(path: pushPathBinding(for: modalID)) {
             context.rootView
-                .environmentObject(navigationManager)
+                .environment(\.navigationManager, navigationManager)
                 .navigationDestination(for: PushContext.self) { pushContext in
                     pushContext.makeView()
-                        .environmentObject(navigationManager)
+                        .environment(\.navigationManager, navigationManager)
                 }
         }
         .id(currentID ?? context.id) // ← This guards against rebuild
@@ -28,6 +28,9 @@ struct SheetNavigationContainer: View {
             guard currentID != context.id else { return }
             print("⚠️ Rebuilding SheetNavigationContainer due to ID change: \(String(describing: currentID)) → \(context.id)")
             currentID = context.id
+        }
+        .onAppear {
+            print("📱 SheetNavigationContainer appeared for modal: \(context.id)")
         }
     }
 
