@@ -86,7 +86,7 @@ struct NavigationCoordinator<Root: View>: View {
         Binding(
             get: {
                 let topSheet = navigationManager.modalStack.last(where: { $0.style == .sheet })
-                print("🔍 topSheetContext.get: \(topSheet?.id ?? UUID())")
+                print("🔍 topSheetContext.get: \(topSheet?.id.uuidString ?? "NO SHEET")")
                 print("🔍 Modal stack count: \(navigationManager.modalStack.count)")
                 for (index, modal) in navigationManager.modalStack.enumerated() {
                     print("🔍 Modal \(index): \(modal.id) - style: \(modal.style)")

@@ -16,4 +16,4 @@ extension EnvironmentValues {
         get { self[NavigationManagerKey.self] }
         set { self[NavigationManagerKey.self] = newValue }
     }
-} 
+}

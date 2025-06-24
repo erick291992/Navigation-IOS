@@ -53,5 +53,8 @@ struct ViewE: View {
         .onAppear {
             print("👀 ViewE appeared")
         }
+        .onDisappear {
+            print("👋 ViewE disappeared")
+        }
     }
 }

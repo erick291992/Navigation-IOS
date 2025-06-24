@@ -32,10 +32,6 @@ final class NavigationManager {
     var modalPushPaths: [UUID: [PushContext]] = [:]
     private var suppressedDismissIDs: Set<UUID> = []
 
-    var topSheet: ModalContext? {
-        modalStack.last
-    }
-
     enum SheetPresentationStyle {
         case stack         // ➕ Add to top of stack (default)
         case replaceLast   // 🔁 Remove top sheet, then present new one
