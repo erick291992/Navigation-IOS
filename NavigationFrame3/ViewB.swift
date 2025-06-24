@@ -42,6 +42,22 @@ struct ViewB: View {
             Button("Dismiss Sheet") {
                 navigationManager.dismissSheet()
             }
+            
+            Button("Push ViewB") {
+                navigationManager.push {
+                    ViewB()
+                } onDismiss: {
+                    print("🔥 Pushed ViewB was dismissed")
+                }
+            }
+            
+            Button("Dismiss stack") {
+                navigationManager.dismissPush()
+            }
+            
+            Button("Dismiss to ViewB") {
+                navigationManager.dismissTo(ViewB.self)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.green.opacity(0.2))

@@ -22,6 +22,10 @@ struct ViewD: View {
                 navigationManager.dismissPush()
             }
             
+            Button("Dismiss") {
+                navigationManager.dismiss()
+            }
+            
             Button("Dismiss to ViewC") {
                 navigationManager.dismissTo(ViewC.self)
             }

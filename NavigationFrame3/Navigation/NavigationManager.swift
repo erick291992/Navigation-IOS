@@ -230,7 +230,6 @@ final class NavigationManager {
         logModalStack()
     }
 
-
     func dismissPush() {
         // Check if a modal is active
         if let modalID = modalStack.last?.id {
@@ -263,7 +262,30 @@ final class NavigationManager {
         logPushStack()
     }
 
-
+    /// Unified dismiss function that automatically determines what to dismiss
+    func dismiss() {
+        // Use full navigation history to determine what to dismiss
+        guard !fullNavigationHistory.isEmpty else {
+            print("🎯 Unified dismiss: nothing to dismiss (empty history)")
+            return
+        }
+        
+        // Get the last navigation item (most recent)
+        guard let lastItem = fullNavigationHistory.last else {
+            print("🎯 Unified dismiss: nothing to dismiss")
+            return
+        }
+        
+        print("🎯 Unified dismiss: dismissing \(lastItem.viewTypeName) [\(lastItem.type.rawValue)]")
+        
+        // Dismiss based on the type of the last navigation item
+        switch lastItem.type {
+        case .sheet, .fullscreen:
+            dismissSheet()
+        case .push:
+            dismissPush()
+        }
+    }
 
     func dismissTo<Content: View>(_ target: Content.Type, mode: DismissalMode = .landing) {
         let targetName = String(describing: target)
@@ -347,7 +369,6 @@ final class NavigationManager {
         updateModalPushPath(for: modalID, newValue: path) // diff-check & publish
     }
 
-
     func reset() {
         modalStack.removeAll()
         modalPushPaths.removeAll()
@@ -376,5 +397,4 @@ final class NavigationManager {
             }
         }
     }
-
 }

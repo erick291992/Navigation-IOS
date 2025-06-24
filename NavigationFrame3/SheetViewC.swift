@@ -47,6 +47,17 @@ struct ViewC: View {
             Button("Dismiss stack") {
                 navigationManager.dismissPush()
             }
+            
+            Button("Push ViewB") {
+                navigationManager.push {
+                    ViewB()
+                } onDismiss: {
+                    print("🔥 Pushed ViewB was dismissed")
+                }
+            }            
+            Button("Dismiss to ViewB") {
+                navigationManager.dismissTo(ViewB.self)
+            }
         }
         .padding()
         .onAppear {
