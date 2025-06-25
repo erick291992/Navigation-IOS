@@ -6,24 +6,30 @@
 //
 import SwiftUI
 
-struct NavigationCoordinator<Root: View>: View {
-    let rootView: Root
-    @Bindable var navigationManager: NavigationManager
-    let scopeKey: String
+struct NavigationCoordinator<Content: View>: View {
+    let rootView: Content
+    let key: String
+    let logLevel: NavigationManager.LogLevel
     
-    init(rootView: Root, key: String, manager: NavigationManager? = nil) {
+    @Bindable var navigationManager: NavigationManager
+    
+    init(rootView: Content, key: String, logLevel: NavigationManager.LogLevel = .debug) {
         self.rootView = rootView
-        self.scopeKey = key
+        self.key = key
+        self.logLevel = logLevel
         
         // Use existing manager from registry or create new one
         if let existingManager = NavigationManagerRegistry.shared.manager(for: key) {
             self.navigationManager = existingManager
             print("🏗️ NavigationCoordinator reusing existing manager for key: \(key)")
+            // Don't override log level - keep user's setting
         } else {
-            self.navigationManager = manager ?? NavigationManager()
+            let newManager = NavigationManager()
+            newManager.logLevel = logLevel
+            self.navigationManager = newManager
             print("🏗️ NavigationCoordinator creating new manager for key: \(key)")
         }
-
+        
         print("🏗️ NavigationCoordinator init for key: \(key)")
         print("🏗️ NavigationManager instance: \(ObjectIdentifier(self.navigationManager))")
 
@@ -31,7 +37,7 @@ struct NavigationCoordinator<Root: View>: View {
         NavigationManagerRegistry.shared.register(self.navigationManager, for: key)
         
         // Only register root if it's not already registered
-        let typeName = String(describing: Root.self)
+        let typeName = String(describing: Content.self)
         if !self.navigationManager.fullNavigationHistory.contains(where: { $0.viewTypeName == typeName && $0.location == .root }) {
             print("Registering root view: \(typeName)")
             let rootItem = NavigationItem(
@@ -78,7 +84,7 @@ struct NavigationCoordinator<Root: View>: View {
                 }
             }
         }
-        .id("NavigationCoordinator-\(scopeKey)") // Use scopeKey as stable identifier
+        .id("NavigationCoordinator-\(key)") // Use key as stable identifier
     }
 
     /// A computed binding that allows SwiftUI to track the top-most sheet.
