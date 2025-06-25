@@ -44,6 +44,11 @@ final class NavigationManager {
         case parent     // Only call onDismiss for the direct parent of the current view
     }
 
+    enum DismissToMode {
+        case root      // Go to the first occurrence (root)
+        case recent    // Go to the most recent occurrence
+    }
+
     func push<Content: View>(
         @ViewBuilder view: @escaping () -> Content,
         onDismiss: (() -> Void)? = nil
@@ -287,17 +292,30 @@ final class NavigationManager {
         }
     }
 
-    func dismissTo<Content: View>(_ target: Content.Type, mode: DismissalMode = .landing) {
+    func dismissTo<Content: View>(_ target: Content.Type, mode: DismissalMode = .landing, dismissToMode: DismissToMode = .root) {
         let targetName = String(describing: target)
-        print("\n=== dismissTo: \(targetName) [mode: \(mode)] ===")
+        print("\n=== dismissTo: \(targetName) [mode: \(mode), dismissToMode: \(dismissToMode)] ===")
         print("📜 Full Navigation History:")
         for item in fullNavigationHistory {
             print("• \(item.viewTypeName) [\(item.type.rawValue)]")
         }
-        guard let targetIndex = fullNavigationHistory.lastIndex(where: { $0.viewTypeName == targetName }) else {
-            print("❌ Could not find \(targetName) in full history")
-            return
+        
+        let targetIndex: Int
+        switch dismissToMode {
+        case .root:
+            guard let index = fullNavigationHistory.firstIndex(where: { $0.viewTypeName == targetName }) else {
+                print("❌ Could not find \(targetName) in full history")
+                return
+            }
+            targetIndex = index
+        case .recent:
+            guard let index = fullNavigationHistory.lastIndex(where: { $0.viewTypeName == targetName }) else {
+                print("❌ Could not find \(targetName) in full history")
+                return
+            }
+            targetIndex = index
         }
+        
         let toRemove = fullNavigationHistory.suffix(from: targetIndex + 1)
         print("Will remove \(toRemove.count) items above target.")
         let count = toRemove.count
