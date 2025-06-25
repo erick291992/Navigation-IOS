@@ -228,10 +228,13 @@ final class NavigationManager {
         let removedID = removed.id
         log("❎ Dismissed sheet \(removedID) with dismissalMode: \(dismissalMode)", level: .info)
 
+        // Check if there are pushed views BEFORE processing them
+        let hasPushedViews = !(modalPushPaths[removedID]?.isEmpty ?? true)
+
         // ✅ Trigger onDismiss for pushed views in the dismissed sheet based on dismissalMode
         if let removedStack = modalPushPaths[removedID] {
             let count = removedStack.count
-            // Only run the loop for .all or .topmost
+            // Only run the loop for .all or .topmost (not .landing)
             if dismissalMode == .all || dismissalMode == .topmost {
                 for (index, context) in removedStack.reversed().enumerated() {
                     if shouldCallOnDismiss(mode: dismissalMode, index: index, count: count) {
@@ -252,8 +255,10 @@ final class NavigationManager {
             // Call sheet's root onDismiss for .all and .landing
             removed.onDismiss?()
         case .topmost:
-            // Don't call sheet's root onDismiss for .topmost
-            break
+            // For .topmost, call sheet's root onDismiss ONLY if there are no pushed views
+            if !hasPushedViews {
+                removed.onDismiss?()
+            }
         }
 
         // �� Re-log modal stack for visibility
