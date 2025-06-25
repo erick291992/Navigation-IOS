@@ -47,7 +47,7 @@ final class NavigationManager {
     enum DismissalMode {
         case all        // Call onDismiss for every removed view (intermediate)
         case landing    // Only call onDismiss for the view you land on (the last one removed)
-        case parent     // Only call onDismiss for the direct parent of the current view
+        case topmost    // Only call onDismiss for the topmost (currently visible) view being removed
     }
 
     enum DismissToMode {
@@ -303,7 +303,7 @@ final class NavigationManager {
         }
     }
 
-    func dismissTo<T: View>(_ target: T.Type, dismissToMode: DismissToMode = .recent, dismissalMode: DismissalMode = .parent) {
+    func dismissTo<T: View>(_ target: T.Type, dismissToMode: DismissToMode = .recent, dismissalMode: DismissalMode = .topmost) {
         guard !fullNavigationHistory.isEmpty else {
             log("⚠️ Cannot dismissTo - navigation history is empty", level: .error)
             return
@@ -406,7 +406,7 @@ final class NavigationManager {
         switch mode {
         case .all:
             return true
-        case .parent:
+        case .topmost:
             return index == 0 // first in toRemove (topmost, direct parent)
         case .landing:
             return index == count - 1 // last in toRemove (landing view)
