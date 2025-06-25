@@ -55,7 +55,7 @@ final class NavigationManager {
         case recent    // Go to the most recent occurrence
     }
 
-    private func log(_ message: String, level: LogLevel) {
+    func log(_ message: String, level: LogLevel) {
         guard level.rawValue <= logLevel.rawValue else { return }
         print(message)
     }
@@ -75,7 +75,7 @@ final class NavigationManager {
             if modalStack.contains(where: { $0.id == modalID }) {
                 let index = (modalPushPaths[modalID]?.count ?? 0)
                 modifyModalPushPath(for: modalID) { $0.append(context) }
-                print("📦 Pushed view of type \(context.viewTypeName) [context: modal \(modalID.uuidString.prefix(4))]")
+                log("📦 Pushed view of type \(context.viewTypeName) [context: modal \(modalID.uuidString.prefix(4))]", level: .info)
                 fullNavigationHistory.append(
                     NavigationItem(
                         id: context.id,
@@ -87,7 +87,7 @@ final class NavigationManager {
             } else {
                 let index = rootPushPath.count
                 rootPushPath.append(context)
-                print("⚠️ Tried to push into modal \(modalID.uuidString.prefix(4)), but it's no longer mounted. Falling back to root.")
+                log("⚠️ Tried to push into modal \(modalID.uuidString.prefix(4)), but it's no longer mounted. Falling back to root.", level: .info)
                 fullNavigationHistory.append(
                     NavigationItem(
                         id: context.id,
@@ -100,7 +100,7 @@ final class NavigationManager {
         } else {
             let index = rootPushPath.count
             rootPushPath.append(context)
-            print("📦 Pushed view of type \(context.viewTypeName) [context: root]")
+            log("📦 Pushed view of type \(context.viewTypeName) [context: root]", level: .info)
             fullNavigationHistory.append(
                 NavigationItem(
                     id: context.id,
@@ -120,14 +120,14 @@ final class NavigationManager {
         switch style {
         case .replaceLast:
             if let removed = modalStack.popLast() {
-                print("🔥 Replacing last modal: \(removed.id.uuidString.prefix(4))")
+                log("🔥 Replacing last modal: \(removed.id.uuidString.prefix(4))", level: .info)
                 removed.onDismiss?()
                 modalPushPaths[removed.id] = nil
             }
 
         case .replaceAll:
             for context in modalStack.reversed() {
-                print("🔥 Replacing all → dismissing modal: \(context.id.uuidString.prefix(4))")
+                log("🔥 Replacing all → dismissing modal: \(context.id.uuidString.prefix(4))", level: .info)
                 context.onDismiss?()
                 modalPushPaths[context.id] = nil
             }
@@ -145,17 +145,17 @@ final class NavigationManager {
 
         // ✅ Only initialize if not already present
         if modalPushPaths[context.id] == nil {
-            print("🆕 Initializing push path for modal \(context.id.uuidString.prefix(4))")
+            log("🆕 Initializing push path for modal \(context.id.uuidString.prefix(4))", level: .info)
             modalPushPaths[context.id] = []
         } else {
-            print("♻️ Reusing existing push path for modal \(context.id.uuidString.prefix(4))")
+            log("♻️ Reusing existing push path for modal \(context.id.uuidString.prefix(4))", level: .info)
         }
 
         let index = modalStack.count
         modalStack.append(context)
 
-        print("📝 Adding modal to stack: \(context.id) at index \(index)")
-        print("📝 Modal stack count after adding: \(modalStack.count)")
+        log("📝 Adding modal to stack: \(context.id) at index \(index)", level: .info)
+        log("📝 Modal stack count after adding: \(modalStack.count)", level: .info)
 
         fullNavigationHistory.append(
             NavigationItem(
@@ -166,7 +166,7 @@ final class NavigationManager {
             )
         )
 
-        print("🎯 Presented sheet \(context.id) of type \(Content.self)")
+        log("🎯 Presented sheet \(context.id) of type \(Content.self)", level: .info)
         logModalStack()
     }
 
@@ -178,14 +178,14 @@ final class NavigationManager {
         switch style {
         case .replaceLast:
             if let removed = modalStack.popLast() {
-                print("🔥 Replacing last modal: \(removed.id.uuidString.prefix(4))")
+                log("🔥 Replacing last modal: \(removed.id.uuidString.prefix(4))", level: .info)
                 removed.onDismiss?()
                 modalPushPaths[removed.id] = nil
             }
 
         case .replaceAll:
             for context in modalStack.reversed() {
-                print("🔥 Replacing all → dismissing modal: \(context.id.uuidString.prefix(4))")
+                log("🔥 Replacing all → dismissing modal: \(context.id.uuidString.prefix(4))", level: .info)
                 context.onDismiss?()
                 modalPushPaths[context.id] = nil
             }
@@ -202,7 +202,7 @@ final class NavigationManager {
         )
 
         if modalPushPaths[context.id] == nil {
-            print("🆕 Initializing push path for modal \(context.id.uuidString.prefix(4))")
+            log("🆕 Initializing push path for modal \(context.id.uuidString.prefix(4))", level: .info)
             modalPushPaths[context.id] = []
         }
 
@@ -218,7 +218,7 @@ final class NavigationManager {
             )
         )
 
-        print("🎯 Presented fullScreenCover \(context.id) of type \(Content.self)")
+        log("🎯 Presented fullScreenCover \(context.id) of type \(Content.self)", level: .info)
         logModalStack()
     }
 
@@ -438,7 +438,7 @@ final class NavigationManager {
         modalPushPaths.removeAll()
         rootPushPath = []
         fullNavigationHistory = []
-        print("🧼 NavigationManager fully reset")
+        log("🧼 NavigationManager fully reset", level: .info)
     }
 
     private func logModalStack() {

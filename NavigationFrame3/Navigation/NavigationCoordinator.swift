@@ -13,7 +13,7 @@ struct NavigationCoordinator<Content: View>: View {
     
     @Bindable var navigationManager: NavigationManager
     
-    init(rootView: Content, key: String, logLevel: NavigationManager.LogLevel = .debug) {
+    init(rootView: Content, key: String, logLevel: NavigationManager.LogLevel = .error) {
         self.rootView = rootView
         self.key = key
         self.logLevel = logLevel
@@ -21,17 +21,17 @@ struct NavigationCoordinator<Content: View>: View {
         // Use existing manager from registry or create new one
         if let existingManager = NavigationManagerRegistry.shared.manager(for: key) {
             self.navigationManager = existingManager
-            print("🏗️ NavigationCoordinator reusing existing manager for key: \(key)")
+            navigationManager.log("🏗️ NavigationCoordinator reusing existing manager for key: \(key)", level: .info)
             // Don't override log level - keep user's setting
         } else {
             let newManager = NavigationManager()
             newManager.logLevel = logLevel
             self.navigationManager = newManager
-            print("🏗️ NavigationCoordinator creating new manager for key: \(key)")
+            navigationManager.log("🏗️ NavigationCoordinator creating new manager for key: \(key)", level: .info)
         }
         
-        print("🏗️ NavigationCoordinator init for key: \(key)")
-        print("🏗️ NavigationManager instance: \(ObjectIdentifier(self.navigationManager))")
+        navigationManager.log("🏗️ NavigationCoordinator init for key: \(key)", level: .info)
+        navigationManager.log("🏗️ NavigationManager instance: \(ObjectIdentifier(self.navigationManager))", level: .debug)
 
         // Register this manager globally so it can be accessed from anywhere
         NavigationManagerRegistry.shared.register(self.navigationManager, for: key)
@@ -39,7 +39,7 @@ struct NavigationCoordinator<Content: View>: View {
         // Only register root if it's not already registered
         let typeName = String(describing: Content.self)
         if !self.navigationManager.fullNavigationHistory.contains(where: { $0.viewTypeName == typeName && $0.location == .root }) {
-            print("Registering root view: \(typeName)")
+            navigationManager.log("Registering root view: \(typeName)", level: .info)
             let rootItem = NavigationItem(
                 id: UUID(),
                 viewTypeName: typeName,
@@ -48,7 +48,7 @@ struct NavigationCoordinator<Content: View>: View {
             )
             self.navigationManager.fullNavigationHistory.append(rootItem)
         } else {
-            print("Root view already registered: \(typeName)")
+            navigationManager.log("Root view already registered: \(typeName)", level: .info)
         }
     }
 
@@ -69,7 +69,7 @@ struct NavigationCoordinator<Content: View>: View {
                     navigationManager: navigationManager
                 )
                 .onAppear {
-                    print("🎭 Sheet presenting: \(context.id)")
+                    navigationManager.log("🎭 Sheet presenting: \(context.id)", level: .info)
                 }
             }
         }
@@ -80,7 +80,7 @@ struct NavigationCoordinator<Content: View>: View {
                     navigationManager: navigationManager
                 )
                 .onAppear {
-                    print("🎭 FullScreen presenting: \(context.id)")
+                    navigationManager.log("🎭 FullScreen presenting: \(context.id)", level: .info)
                 }
             }
         }
@@ -92,15 +92,15 @@ struct NavigationCoordinator<Content: View>: View {
         Binding(
             get: {
                 let topSheet = navigationManager.modalStack.last(where: { $0.style == .sheet })
-                print("🔍 topSheetContext.get: \(topSheet?.id.uuidString ?? "NO SHEET")")
-                print("🔍 Modal stack count: \(navigationManager.modalStack.count)")
+                navigationManager.log("🔍 topSheetContext.get: \(topSheet?.id.uuidString ?? "NO SHEET")", level: .debug)
+                navigationManager.log("🔍 Modal stack count: \(navigationManager.modalStack.count)", level: .debug)
                 for (index, modal) in navigationManager.modalStack.enumerated() {
-                    print("🔍 Modal \(index): \(modal.id) - style: \(modal.style)")
+                    navigationManager.log("🔍 Modal \(index): \(modal.id) - style: \(modal.style)", level: .debug)
                 }
                 return topSheet
             },
             set: { newValue in
-                print("🔍 topSheetContext.set: \(newValue?.id ?? UUID())")
+                navigationManager.log("🔍 topSheetContext.set: \(newValue?.id ?? UUID())", level: .debug)
                 if newValue == nil {
                     navigationManager.dismissSheet()
                 }

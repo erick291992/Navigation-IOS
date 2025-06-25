@@ -26,11 +26,11 @@ struct SheetNavigationContainer: View {
         .id(currentID ?? context.id) // ← This guards against rebuild
         .onAppear {
             guard currentID != context.id else { return }
-            print("⚠️ Rebuilding SheetNavigationContainer due to ID change: \(String(describing: currentID)) → \(context.id)")
+            navigationManager.log("⚠️ Rebuilding SheetNavigationContainer due to ID change: \(String(describing: currentID)) → \(context.id)", level: .info)
             currentID = context.id
         }
         .onAppear {
-            print("📱 SheetNavigationContainer appeared for modal: \(context.id)")
+            navigationManager.log("📱 SheetNavigationContainer appeared for modal: \(context.id)", level: .info)
         }
     }
 
