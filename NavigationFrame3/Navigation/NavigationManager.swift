@@ -303,14 +303,14 @@ final class NavigationManager {
         }
     }
 
-    func dismissTo<T: View>(_ target: T.Type, dismissToMode: DismissToMode = .recent) {
+    func dismissTo<T: View>(_ target: T.Type, dismissToMode: DismissToMode = .recent, dismissalMode: DismissalMode = .parent) {
         guard !fullNavigationHistory.isEmpty else {
             log("⚠️ Cannot dismissTo - navigation history is empty", level: .error)
             return
         }
         
         let targetName = String(describing: target)
-        log("🎯 Dismissing to \(targetName) with mode: \(dismissToMode)", level: .info)
+        log("🎯 Dismissing to \(targetName) with mode: \(dismissToMode), dismissalMode: \(dismissalMode)", level: .info)
         log("📜 Current history: \(fullNavigationHistory.map { $0.viewTypeName })", level: .debug)
         
         var targetIndex: Int
@@ -371,14 +371,14 @@ final class NavigationManager {
                 guard rootPushPath.indices.contains(idx) else { break }
                 suppressedDismissIDs.insert(rootPushPath[idx].id)
                 let removed = rootPushPath.remove(at: idx)
-                if shouldCallOnDismiss(mode: .landing, index: index, count: count) {
+                if shouldCallOnDismiss(mode: dismissalMode, index: index, count: count) {
                     log("Dismiss root push: \(removed.viewTypeName)", level: .info)
                     removed.onDismiss?()
                 }
             case .modalStack(let idx):
                 guard modalStack.indices.contains(idx) else { break }
                 let removed = modalStack.remove(at: idx)
-                if shouldCallOnDismiss(mode: .landing, index: index, count: count) {
+                if shouldCallOnDismiss(mode: dismissalMode, index: index, count: count) {
                     log("Dismiss modal: \(removed.id)", level: .info)
                     removed.onDismiss?()
                 }
@@ -387,7 +387,7 @@ final class NavigationManager {
                 guard var stack = modalPushPaths[modalID], stack.indices.contains(pushIdx) else { break }
                 suppressedDismissIDs.insert(stack[pushIdx].id)
                 let removed = stack.remove(at: pushIdx)
-                if shouldCallOnDismiss(mode: .landing, index: index, count: count) {
+                if shouldCallOnDismiss(mode: dismissalMode, index: index, count: count) {
                     log("Dismiss modal push: \(removed.viewTypeName)", level: .info)
                     removed.onDismiss?()
                 }
