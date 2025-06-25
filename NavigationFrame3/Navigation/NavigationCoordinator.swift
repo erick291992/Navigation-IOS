@@ -11,14 +11,25 @@ struct NavigationCoordinator<Content: View>: View {
     let key: String
     let logLevel: NavigationManager.LogLevel
     let hideDefaultBackButton: Bool
+    let dismissalMode: NavigationManager.DismissalMode
+    let dismissToMode: NavigationManager.DismissToMode
     
     @Bindable var navigationManager: NavigationManager
     
-    init(rootView: Content, key: String, logLevel: NavigationManager.LogLevel = .debug, hideDefaultBackButton: Bool = false) {
+    init(
+        rootView: Content, 
+        key: String, 
+        hideDefaultBackButton: Bool = false,
+        dismissalMode: NavigationManager.DismissalMode = .topmost,
+        dismissToMode: NavigationManager.DismissToMode = .recent,
+        logLevel: NavigationManager.LogLevel = .debug
+    ) {
         self.rootView = rootView
         self.key = key
-        self.logLevel = logLevel
         self.hideDefaultBackButton = hideDefaultBackButton
+        self.dismissalMode = dismissalMode
+        self.dismissToMode = dismissToMode
+        self.logLevel = logLevel
         
         // Use existing manager from registry or create new one
         if let existingManager = NavigationManagerRegistry.shared.manager(for: key) {
@@ -28,6 +39,9 @@ struct NavigationCoordinator<Content: View>: View {
         } else {
             let newManager = NavigationManager()
             newManager.logLevel = logLevel
+            // Set default dismissal modes
+            newManager.defaultDismissalMode = dismissalMode
+            newManager.defaultDismissToMode = dismissToMode
             self.navigationManager = newManager
             navigationManager.log("🏗️ NavigationCoordinator creating new manager for key: \(key)", level: .info)
         }

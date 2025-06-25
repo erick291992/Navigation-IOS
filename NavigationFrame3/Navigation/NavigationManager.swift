@@ -13,6 +13,8 @@ final class NavigationManager {
     }
     
     var logLevel: LogLevel = .error
+    var defaultDismissalMode: DismissalMode = .all
+    var defaultDismissToMode: DismissToMode = .recent
 
     var modalStack: [ModalContext] = []
     var fullNavigationHistory: [NavigationItem] = []
@@ -222,11 +224,12 @@ final class NavigationManager {
         logModalStack()
     }
 
-    func dismissSheet(dismissalMode: DismissalMode = .topmost) {
+    func dismissSheet(dismissalMode: DismissalMode? = nil) {
+        let mode = dismissalMode ?? defaultDismissalMode
         guard let removed = modalStack.popLast() else { return }
 
         let removedID = removed.id
-        log("❎ Dismissed sheet \(removedID) with dismissalMode: \(dismissalMode)", level: .info)
+        log("❎ Dismissed sheet \(removedID) with dismissalMode: \(mode)", level: .info)
 
         // Check if there are pushed views BEFORE processing them
         let hasPushedViews = !(modalPushPaths[removedID]?.isEmpty ?? true)
@@ -235,9 +238,9 @@ final class NavigationManager {
         if let removedStack = modalPushPaths[removedID] {
             let count = removedStack.count
             // Only run the loop for .all or .topmost (not .landing)
-            if dismissalMode == .all || dismissalMode == .topmost {
+            if mode == .all || mode == .topmost {
                 for (index, context) in removedStack.reversed().enumerated() {
-                    if shouldCallOnDismiss(mode: dismissalMode, index: index, count: count) {
+                    if shouldCallOnDismiss(mode: mode, index: index, count: count) {
                         log("🔥 Native pop: \(context.viewTypeName) [modal \(removedID.uuidString.prefix(4))]", level: .info)
                         context.onDismiss?()
                     }
@@ -250,7 +253,7 @@ final class NavigationManager {
         modalPushPaths[removedID] = nil
 
         // ✅ Trigger modal-level onDismiss based on dismissalMode
-        switch dismissalMode {
+        switch mode {
         case .all, .landing:
             // Call sheet's root onDismiss for .all and .landing
             removed.onDismiss?()
@@ -261,7 +264,7 @@ final class NavigationManager {
             }
         }
 
-        // �� Re-log modal stack for visibility
+        // Re-log modal stack for visibility
         logModalStack()
     }
 
@@ -316,24 +319,27 @@ final class NavigationManager {
         // Dismiss based on the type of the last navigation item
         switch lastItem.type {
         case .sheet, .fullscreen:
-            dismissSheet()
+            dismissSheet() // Uses defaultDismissalMode
         case .push:
             dismissPush()
         }
     }
 
-    func dismissTo<T: View>(_ target: T.Type, dismissToMode: DismissToMode = .recent, dismissalMode: DismissalMode = .topmost) {
+    func dismissTo<T: View>(_ target: T.Type, dismissToMode: DismissToMode? = nil, dismissalMode: DismissalMode? = nil) {
+        let toMode = dismissToMode ?? defaultDismissToMode
+        let disMode = dismissalMode ?? defaultDismissalMode
+        
         guard !fullNavigationHistory.isEmpty else {
             log("⚠️ Cannot dismissTo - navigation history is empty", level: .error)
             return
         }
         
         let targetName = String(describing: target)
-        log("🎯 Dismissing to \(targetName) with mode: \(dismissToMode), dismissalMode: \(dismissalMode)", level: .info)
+        log("🎯 Dismissing to \(targetName) with mode: \(toMode), dismissalMode: \(disMode)", level: .info)
         log("📜 Current history: \(fullNavigationHistory.map { $0.viewTypeName })", level: .debug)
         
         var targetIndex: Int
-        switch dismissToMode {
+        switch toMode {
         case .root:
             // For root, we want to find the first occurrence of the target
             guard let index = fullNavigationHistory.firstIndex(where: { $0.viewTypeName == targetName }) else {
@@ -390,14 +396,14 @@ final class NavigationManager {
                 guard rootPushPath.indices.contains(idx) else { break }
                 suppressedDismissIDs.insert(rootPushPath[idx].id)
                 let removed = rootPushPath.remove(at: idx)
-                if shouldCallOnDismiss(mode: dismissalMode, index: index, count: count) {
+                if shouldCallOnDismiss(mode: disMode, index: index, count: count) {
                     log("Dismiss root push: \(removed.viewTypeName)", level: .info)
                     removed.onDismiss?()
                 }
             case .modalStack(let idx):
                 guard modalStack.indices.contains(idx) else { break }
                 let removed = modalStack.remove(at: idx)
-                if shouldCallOnDismiss(mode: dismissalMode, index: index, count: count) {
+                if shouldCallOnDismiss(mode: disMode, index: index, count: count) {
                     log("Dismiss modal: \(removed.id)", level: .info)
                     removed.onDismiss?()
                 }
@@ -406,7 +412,7 @@ final class NavigationManager {
                 guard var stack = modalPushPaths[modalID], stack.indices.contains(pushIdx) else { break }
                 suppressedDismissIDs.insert(stack[pushIdx].id)
                 let removed = stack.remove(at: pushIdx)
-                if shouldCallOnDismiss(mode: dismissalMode, index: index, count: count) {
+                if shouldCallOnDismiss(mode: disMode, index: index, count: count) {
                     log("Dismiss modal push: \(removed.viewTypeName)", level: .info)
                     removed.onDismiss?()
                 }
