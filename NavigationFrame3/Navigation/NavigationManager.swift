@@ -222,27 +222,41 @@ final class NavigationManager {
         logModalStack()
     }
 
-    func dismissSheet() {
+    func dismissSheet(dismissalMode: DismissalMode = .topmost) {
         guard let removed = modalStack.popLast() else { return }
 
         let removedID = removed.id
-        log("❎ Dismissed sheet \(removedID)", level: .info)
+        log("❎ Dismissed sheet \(removedID) with dismissalMode: \(dismissalMode)", level: .info)
 
-        // ✅ Trigger onDismiss for all pushed views in the dismissed sheet
+        // ✅ Trigger onDismiss for pushed views in the dismissed sheet based on dismissalMode
         if let removedStack = modalPushPaths[removedID] {
-            for context in removedStack.reversed() {
-                log("🔥 Native pop: \(context.viewTypeName) [modal \(removedID.uuidString.prefix(4))]", level: .info)
-                context.onDismiss?()
+            let count = removedStack.count
+            // Only run the loop for .all or .topmost
+            if dismissalMode == .all || dismissalMode == .topmost {
+                for (index, context) in removedStack.reversed().enumerated() {
+                    if shouldCallOnDismiss(mode: dismissalMode, index: index, count: count) {
+                        log("🔥 Native pop: \(context.viewTypeName) [modal \(removedID.uuidString.prefix(4))]", level: .info)
+                        context.onDismiss?()
+                    }
+                }
             }
+            // For .landing, do nothing here (only the sheet root's onDismiss will be called below)
         }
 
         // ✅ Remove push path only for the dismissed modal
         modalPushPaths[removedID] = nil
 
-        // ✅ Trigger modal-level onDismiss last
-        removed.onDismiss?()
+        // ✅ Trigger modal-level onDismiss based on dismissalMode
+        switch dismissalMode {
+        case .all, .landing:
+            // Call sheet's root onDismiss for .all and .landing
+            removed.onDismiss?()
+        case .topmost:
+            // Don't call sheet's root onDismiss for .topmost
+            break
+        }
 
-        // 🧱 Re-log modal stack for visibility
+        // �� Re-log modal stack for visibility
         logModalStack()
     }
 
