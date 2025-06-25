@@ -10,13 +10,15 @@ struct NavigationCoordinator<Content: View>: View {
     let rootView: Content
     let key: String
     let logLevel: NavigationManager.LogLevel
+    let hideDefaultBackButton: Bool
     
     @Bindable var navigationManager: NavigationManager
     
-    init(rootView: Content, key: String, logLevel: NavigationManager.LogLevel = .error) {
+    init(rootView: Content, key: String, logLevel: NavigationManager.LogLevel = .debug, hideDefaultBackButton: Bool = false) {
         self.rootView = rootView
         self.key = key
         self.logLevel = logLevel
+        self.hideDefaultBackButton = hideDefaultBackButton
         
         // Use existing manager from registry or create new one
         if let existingManager = NavigationManagerRegistry.shared.manager(for: key) {
@@ -59,6 +61,7 @@ struct NavigationCoordinator<Content: View>: View {
                 .navigationDestination(for: PushContext.self) { context in
                     context.makeView()
                         .environment(\.navigationManager, navigationManager)
+                        .navigationBarBackButtonHidden(hideDefaultBackButton)
                 }
         }
         .environment(\.navigationManager, navigationManager)
@@ -66,7 +69,8 @@ struct NavigationCoordinator<Content: View>: View {
             if context.style == .sheet {
                 SheetNavigationContainer(
                     context: context,
-                    navigationManager: navigationManager
+                    navigationManager: navigationManager,
+                    hideDefaultBackButton: hideDefaultBackButton
                 )
                 .onAppear {
                     navigationManager.log("🎭 Sheet presenting: \(context.id)", level: .info)
@@ -77,7 +81,8 @@ struct NavigationCoordinator<Content: View>: View {
             if context.style == .fullScreen {
                 SheetNavigationContainer(
                     context: context,
-                    navigationManager: navigationManager
+                    navigationManager: navigationManager,
+                    hideDefaultBackButton: hideDefaultBackButton
                 )
                 .onAppear {
                     navigationManager.log("🎭 FullScreen presenting: \(context.id)", level: .info)

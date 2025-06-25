@@ -20,6 +20,11 @@ struct ViewC: View {
         return VStack(spacing: 20) {
             Text("🌊 ViewC (Presented from B)")
                 .font(.title2)
+                .padding(.top)
+
+            Text("This is a sheet - no back button by default")
+                .font(.caption)
+                .foregroundColor(.secondary)
 
             Button("Present ViewD") {
 //                navigationManager.presentSheet {

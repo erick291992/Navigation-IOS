@@ -14,6 +14,10 @@ struct ViewD: View {
             Text("🧱 ViewD (Presented from C)")
                 .font(.title2)
 
+            Text("This view WILL show a back button if pushed within a sheet")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
             Button("Dismiss sheet") {
                 navigationManager.dismissSheet()
             }
