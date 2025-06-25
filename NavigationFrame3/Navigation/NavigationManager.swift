@@ -277,7 +277,9 @@ final class NavigationManager {
             log("❎ Dismissed pushed view: \(removed.viewTypeName) [modal \(modalID.uuidString.prefix(4))]", level: .info)
             removed.onDismiss?()
 
-            updateModalPushPath(for: modalID, newValue: currentStack)
+            // Directly update the path without triggering updateModalPushPath
+            // since we're doing manual dismissal, not detecting native dismissal
+            modalPushPaths[modalID] = currentStack
             
             // Also remove from full navigation history
             fullNavigationHistory.removeAll { $0.id == removed.id }
@@ -286,12 +288,16 @@ final class NavigationManager {
             // Otherwise, dismiss from root push stack
             guard !rootPushPath.isEmpty else { return }
 
+            // Add to suppressed IDs BEFORE removing to prevent didSet from triggering onDismiss
+            let removedID = rootPushPath.last!.id
+            suppressedDismissIDs.insert(removedID)
+            
             let removed = rootPushPath.removeLast()
             log("❎ Dismissed pushed view: \(removed.viewTypeName) [root]", level: .info)
             removed.onDismiss?()
 
-            // Since we manually modified rootPushPath, manually publish it
-            rootPushPath = rootPushPath
+            // rootPushPath is already updated by removeLast(), no need to reassign
+            // This prevents triggering SwiftUI's native dismissal detection
 
             // Also remove from full navigation history
             fullNavigationHistory.removeAll { $0.id == removed.id }
