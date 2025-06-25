@@ -58,6 +58,9 @@ struct ViewB: View {
             Button("Dismiss to ViewB") {
                 navigationManager.dismissTo(ViewB.self)
             }
+            Button("Dismiss") {
+                navigationManager.dismiss()
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.green.opacity(0.2))

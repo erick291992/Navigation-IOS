@@ -47,6 +47,9 @@ struct ViewC: View {
             Button("Dismiss stack") {
                 navigationManager.dismissPush()
             }
+            Button("Dismiss") {
+                navigationManager.dismiss()
+            }
             
             Button("Push ViewB") {
                 navigationManager.push {
