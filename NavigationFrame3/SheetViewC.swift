@@ -56,6 +56,10 @@ struct ViewC: View {
                 navigationManager.dismiss()
             }
             
+            Button("Dismiss back") {
+                navigationManager.dismissBack()
+            }
+            
             Button("Push ViewB") {
                 navigationManager.push {
                     ViewB()

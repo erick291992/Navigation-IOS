@@ -33,6 +33,10 @@ struct ViewE: View {
                 navigationManager.dismiss()
             }
             
+            Button("Dismiss back") {
+                navigationManager.dismissBack()
+            }
+            
             Button("Present ViewF") {
 //                navigationManager.presentSheet {
 //                    ViewD()

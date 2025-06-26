@@ -28,6 +28,10 @@ struct ViewF: View {
             Button("Dismiss") {
                 navigationManager.dismiss()
             }
+            
+            Button("Dismiss back") {
+                navigationManager.dismissBack()
+            }
         }
         .padding()
         .onAppear {

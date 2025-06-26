@@ -30,6 +30,10 @@ struct ViewD: View {
                 navigationManager.dismiss()
             }
             
+            Button("Dismiss back") {
+                navigationManager.dismissBack()
+            }
+            
             Button("Dismiss to ViewC") {
                 navigationManager.dismissTo(ViewC.self)
             }

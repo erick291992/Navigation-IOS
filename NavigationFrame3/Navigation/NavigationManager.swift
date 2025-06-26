@@ -331,6 +331,93 @@ final class NavigationManager {
         }
     }
 
+    /// Intelligent dismiss function that goes back to the previous logical view
+    func dismissBack() {
+        guard !fullNavigationHistory.isEmpty else {
+            log("🎯 DismissBack: nothing to dismiss (empty history)", level: .info)
+            return
+        }
+        
+        // If we only have the root view, we can't go back
+        if fullNavigationHistory.count == 1 {
+            log("🎯 DismissBack: already at root, nothing to dismiss", level: .info)
+            return
+        }
+        
+        // Find the previous view in the history
+        let previousIndex = fullNavigationHistory.count - 2
+        let previousItem = fullNavigationHistory[previousIndex]
+        let previousViewType = previousItem.viewTypeName
+        
+        log("🎯 DismissBack: going back to \(previousViewType)", level: .info)
+        
+        // Use dismissTo to go back to the previous view
+        // We need to use the actual type, so we'll use a different approach
+        dismissToPreviousView()
+    }
+    
+    /// Dismiss everything after the previous view to go back to it
+    private func dismissToPreviousView() {
+        guard fullNavigationHistory.count > 1 else {
+            log("🎯 DismissToPreviousView: already at root", level: .info)
+            return
+        }
+        
+        // Find the target index (previous view)
+        let targetIndex = fullNavigationHistory.count - 2
+        
+        // Get all items to remove (everything after the target)
+        let toRemove = fullNavigationHistory.suffix(from: targetIndex + 1)
+        log("🎯 DismissToPreviousView: removing \(toRemove.count) items to go back to \(fullNavigationHistory[targetIndex].viewTypeName)", level: .info)
+        
+        // Remove items in reverse order (from newest to oldest)
+        for item in toRemove.reversed() {
+            log("🎯 DismissToPreviousView: removing \(item.viewTypeName) [\(item.type.rawValue)]", level: .info)
+            
+            // Dismiss the item based on its location
+            switch item.location {
+            case .rootPush(let idx):
+                guard rootPushPath.indices.contains(idx) else { break }
+                
+                // Add to suppressed IDs BEFORE removing to prevent didSet from triggering onDismiss
+                let removedID = rootPushPath[idx].id
+                suppressedDismissIDs.insert(removedID)
+                
+                let removed = rootPushPath.remove(at: idx)
+                log("❎ Dismissed pushed view: \(removed.viewTypeName) [root]", level: .info)
+                removed.onDismiss?()
+                
+            case .modalStack(let idx):
+                guard modalStack.indices.contains(idx) else { break }
+                let removed = modalStack.remove(at: idx)
+                log("❎ Dismissed modal: \(removed.id)", level: .info)
+                removed.onDismiss?()
+                modalPushPaths[removed.id] = nil
+                
+            case .modalPush(let modalID, let pushIdx):
+                guard var stack = modalPushPaths[modalID], stack.indices.contains(pushIdx) else { break }
+                
+                // Add to suppressed IDs BEFORE removing to prevent updateModalPushPath from triggering onDismiss
+                let removedID = stack[pushIdx].id
+                suppressedDismissIDs.insert(removedID)
+                
+                let removed = stack.remove(at: pushIdx)
+                log("❎ Dismissed pushed view: \(removed.viewTypeName) [modal \(modalID.uuidString.prefix(4))]", level: .info)
+                removed.onDismiss?()
+                modalPushPaths[modalID] = stack
+                
+            case .root:
+                // Root stays, do nothing
+                break
+            }
+        }
+        
+        // Trim the history to the target index
+        fullNavigationHistory = Array(fullNavigationHistory.prefix(targetIndex + 1))
+        
+        log("🎯 DismissToPreviousView: now at \(fullNavigationHistory.last?.viewTypeName ?? "unknown")", level: .info)
+    }
+
     func dismissTo<T: View>(_ target: T.Type, dismissToMode: DismissToMode? = nil, dismissalMode: DismissalMode? = nil) {
         let toMode = dismissToMode ?? defaultDismissToMode
         let disMode = dismissalMode ?? defaultDismissalMode
