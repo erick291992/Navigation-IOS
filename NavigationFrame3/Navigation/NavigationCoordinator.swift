@@ -12,6 +12,7 @@ struct NavigationCoordinator<Content: View>: View {
     let logLevel: NavigationManager.LogLevel
     let hideDefaultBackButton: Bool
     let dismissalMode: NavigationManager.DismissalMode
+    let sheetDismissalMode: NavigationManager.DismissalMode
     let dismissToMode: NavigationManager.DismissToMode
     
     @Bindable var navigationManager: NavigationManager
@@ -21,6 +22,7 @@ struct NavigationCoordinator<Content: View>: View {
         key: String, 
         hideDefaultBackButton: Bool = false,
         dismissalMode: NavigationManager.DismissalMode = .topmost,
+        sheetDismissalMode: NavigationManager.DismissalMode = .topmost,
         dismissToMode: NavigationManager.DismissToMode = .recent,
         logLevel: NavigationManager.LogLevel = .debug
     ) {
@@ -28,6 +30,7 @@ struct NavigationCoordinator<Content: View>: View {
         self.key = key
         self.hideDefaultBackButton = hideDefaultBackButton
         self.dismissalMode = dismissalMode
+        self.sheetDismissalMode = sheetDismissalMode
         self.dismissToMode = dismissToMode
         self.logLevel = logLevel
         
@@ -41,6 +44,7 @@ struct NavigationCoordinator<Content: View>: View {
             newManager.logLevel = logLevel
             // Set default dismissal modes
             newManager.defaultDismissalMode = dismissalMode
+            newManager.defaultSheetDismissalMode = sheetDismissalMode
             newManager.defaultDismissToMode = dismissToMode
             self.navigationManager = newManager
             navigationManager.log("🏗️ NavigationCoordinator creating new manager for key: \(key)", level: .info)

@@ -12,8 +12,9 @@ final class NavigationManager {
         case none = 0, error = 1, info = 2, debug = 3
     }
     
-    var logLevel: LogLevel = .error
+    var logLevel: LogLevel = .debug
     var defaultDismissalMode: DismissalMode = .all
+    var defaultSheetDismissalMode: DismissalMode = .all
     var defaultDismissToMode: DismissToMode = .recent
 
     var modalStack: [ModalContext] = []
@@ -225,7 +226,7 @@ final class NavigationManager {
     }
 
     func dismissSheet(dismissalMode: DismissalMode? = nil) {
-        let mode = dismissalMode ?? defaultDismissalMode
+        let mode = dismissalMode ?? defaultSheetDismissalMode
         guard let removed = modalStack.popLast() else { return }
 
         let removedID = removed.id
