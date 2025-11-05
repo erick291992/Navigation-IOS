@@ -34,6 +34,7 @@ struct ViewF: View {
             }
         }
         .padding()
+        .background(Color.cyan.opacity(0.5))
         .onAppear {
             print("👀 ViewF appeared")
         }
