@@ -81,6 +81,7 @@ struct ViewC: View {
         .onChange(of: navigationManager.modalPushPaths) { _ in
             print("💡 ViewC body reevaluated [ID: \(id)] → push path likely updated")
         }
+        .background(.red)
     }
 
     private func logBodyRender() {

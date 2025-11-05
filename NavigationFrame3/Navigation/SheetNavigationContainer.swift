@@ -10,13 +10,20 @@ struct SheetNavigationContainer: View {
     let context: ModalContext
     @Bindable var navigationManager: NavigationManager
     let hideDefaultBackButton: Bool
+    let backgroundColor: Color?
 
     @State private var currentID: UUID?
 
-    init(context: ModalContext, navigationManager: NavigationManager, hideDefaultBackButton: Bool = false) {
+    init(
+        context: ModalContext,
+        navigationManager: NavigationManager,
+        hideDefaultBackButton: Bool = false,
+        backgroundColor: Color? = nil
+    ) {
         self.context = context
         self.navigationManager = navigationManager
         self.hideDefaultBackButton = hideDefaultBackButton
+        self.backgroundColor = backgroundColor
     }
 
     @ViewBuilder
@@ -24,7 +31,7 @@ struct SheetNavigationContainer: View {
         let modalID = context.id
         let presentationOptions = context.sheetPresentationOptions
 
-        let baseView = NavigationStack(path: pushPathBinding(for: modalID)) {
+        let navigationStack = NavigationStack(path: pushPathBinding(for: modalID)) {
             context.rootView
                 .environment(\.navigationManager, navigationManager)
                 .navigationDestination(for: PushContext.self) { pushContext in
@@ -33,6 +40,14 @@ struct SheetNavigationContainer: View {
                         .navigationBarBackButtonHidden(hideDefaultBackButton)
                 }
         }
+        
+        let baseView: AnyView = {
+            if let backgroundColor = backgroundColor {
+                return AnyView(navigationStack.background(backgroundColor))
+            } else {
+                return AnyView(navigationStack)
+            }
+        }()
         
         // Apply presentation modifiers conditionally, following SwiftUI's modifier pattern
         // These modifiers must be applied to the view presented in the sheet

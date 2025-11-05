@@ -14,6 +14,7 @@ struct NavigationCoordinator<Content: View>: View {
     let dismissalMode: NavigationManager.DismissalMode
     let sheetDismissalMode: NavigationManager.DismissalMode
     let dismissToMode: NavigationManager.DismissToMode
+    let backgroundColor: Color?
     
     @Bindable var navigationManager: NavigationManager
     
@@ -24,7 +25,8 @@ struct NavigationCoordinator<Content: View>: View {
         dismissalMode: NavigationManager.DismissalMode = .topmost,
         sheetDismissalMode: NavigationManager.DismissalMode = .topmost,
         dismissToMode: NavigationManager.DismissToMode = .recent,
-        logLevel: NavigationManager.LogLevel = NavigationManager.LogLevel.default
+        logLevel: NavigationManager.LogLevel = NavigationManager.LogLevel.default,
+        backgroundColor: Color? = nil  // nil = transparent (Apple's default in sheets)
     ) {
         self.rootView = rootView
         self.key = key
@@ -33,6 +35,7 @@ struct NavigationCoordinator<Content: View>: View {
         self.sheetDismissalMode = sheetDismissalMode
         self.dismissToMode = dismissToMode
         self.logLevel = logLevel
+        self.backgroundColor = backgroundColor
         
         // Use existing manager from registry or create new one
         if let existingManager = NavigationManagerRegistry.shared.manager(for: key) {
@@ -73,7 +76,7 @@ struct NavigationCoordinator<Content: View>: View {
     }
 
     var body: some View {
-        NavigationStack(path: $navigationManager.rootPushPath) {
+        let navigationStack = NavigationStack(path: $navigationManager.rootPushPath) {
             rootView
                 .environment(\.navigationManager, navigationManager)
                 .navigationDestination(for: PushContext.self) { context in
@@ -82,13 +85,23 @@ struct NavigationCoordinator<Content: View>: View {
                         .navigationBarBackButtonHidden(hideDefaultBackButton)
                 }
         }
+        
+        return Group {
+            if let backgroundColor = backgroundColor {
+                navigationStack
+                    .background(backgroundColor)
+            } else {
+                navigationStack
+            }
+        }
         .environment(\.navigationManager, navigationManager)
         .sheet(item: topSheetContext) { context in
             if context.style == .sheet {
                 SheetNavigationContainer(
                     context: context,
                     navigationManager: navigationManager,
-                    hideDefaultBackButton: hideDefaultBackButton
+                    hideDefaultBackButton: hideDefaultBackButton,
+                    backgroundColor: backgroundColor
                 )
                 .onAppear {
                     navigationManager.log("🎭 Sheet presenting: \(context.id)", level: .info)
@@ -100,7 +113,8 @@ struct NavigationCoordinator<Content: View>: View {
                 SheetNavigationContainer(
                     context: context,
                     navigationManager: navigationManager,
-                    hideDefaultBackButton: hideDefaultBackButton
+                    hideDefaultBackButton: hideDefaultBackButton,
+                    backgroundColor: backgroundColor
                 )
                 .onAppear {
                     navigationManager.log("🎭 FullScreen presenting: \(context.id)", level: .info)

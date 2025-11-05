@@ -62,10 +62,11 @@ struct ViewB: View {
                 navigationManager.dismiss()
             }
             Button("intent") {
-                navigationManager.presentSheet(detents: [.medium], dragIndicator: .visible) {
+                navigationManager.presentSheet(
+                    detents: [.medium, .large],
+                    dragIndicator: .visible
+                ) {
                     ViewC()
-                } onDismiss: {
-                    
                 }
             }
         }
