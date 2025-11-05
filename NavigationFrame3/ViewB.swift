@@ -61,6 +61,13 @@ struct ViewB: View {
             Button("Dismiss") {
                 navigationManager.dismiss()
             }
+            Button("intent") {
+                navigationManager.presentSheet(detents: [.medium], dragIndicator: .visible) {
+                    ViewC()
+                } onDismiss: {
+                    
+                }
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.green.opacity(0.2))

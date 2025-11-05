@@ -117,6 +117,8 @@ final class NavigationManager {
 
     func presentSheet<Content: View>(
         style: SheetPresentationStyle = .stack,
+        detents: Set<PresentationDetent>? = nil,
+        dragIndicator: Visibility? = nil,
         @ViewBuilder view: @escaping () -> Content,
         onDismiss: (() -> Void)? = nil
     ) {
@@ -140,8 +142,13 @@ final class NavigationManager {
             break // Default: allow stacking
         }
 
+        let presentationOptions = (detents != nil || dragIndicator != nil) 
+            ? SheetPresentationOptions(detents: detents, dragIndicator: dragIndicator)
+            : nil
+
         let context = ModalContext(
             style: .sheet,
+            sheetPresentationOptions: presentationOptions,
             makeView: { AnyView(view()) },
             onDismiss: onDismiss
         )
