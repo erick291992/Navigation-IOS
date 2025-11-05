@@ -68,7 +68,7 @@ struct NavigationCoordinator<Content: View>: View {
             )
             self.navigationManager.fullNavigationHistory.append(rootItem)
         } else {
-            navigationManager.log("Root view already registered: \(typeName)", level: .info)
+            navigationManager.log("Root view already registered: \(typeName)", level: .debug)
         }
     }
 

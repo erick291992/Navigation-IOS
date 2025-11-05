@@ -58,7 +58,7 @@ struct SheetNavigationContainer: View {
             .onAppear {
                 print("SheetNavigationContainer onAppear")
                 guard currentID != context.id else { return }
-                navigationManager.log("⚠️ Rebuilding SheetNavigationContainer due to ID change: \(String(describing: currentID)) → \(context.id)", level: .info)
+                navigationManager.log("⚠️ Rebuilding SheetNavigationContainer due to ID change: \(String(describing: currentID)) → \(context.id)", level: .debug)
                 currentID = context.id
             }
             .onAppear {

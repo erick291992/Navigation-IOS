@@ -15,7 +15,7 @@ final class NavigationManager {
         /// Computed once at compile time - same value for all instances
         static var `default`: LogLevel {
             #if DEBUG
-            return .debug
+            return .info
             #else
             return .none
             #endif
@@ -23,7 +23,7 @@ final class NavigationManager {
     }
     
     #if DEBUG
-    var logLevel: LogLevel = .debug
+    var logLevel: LogLevel = .info
     #else
     var logLevel: LogLevel = .none
     #endif
@@ -104,7 +104,7 @@ final class NavigationManager {
             } else {
                 let index = rootPushPath.count
                 rootPushPath.append(context)
-                log("⚠️ Tried to push into modal \(modalID.uuidString.prefix(4)), but it's no longer mounted. Falling back to root.", level: .info)
+                log("⚠️ Tried to push into modal \(modalID.uuidString.prefix(4)), but it's no longer mounted. Falling back to root.", level: .error)
                 fullNavigationHistory.append(
                     NavigationItem(
                         id: context.id,
@@ -169,17 +169,17 @@ final class NavigationManager {
 
         // ✅ Only initialize if not already present
         if modalPushPaths[context.id] == nil {
-            log("🆕 Initializing push path for modal \(context.id.uuidString.prefix(4))", level: .info)
+            log("🆕 Initializing push path for modal \(context.id.uuidString.prefix(4))", level: .debug)
             modalPushPaths[context.id] = []
         } else {
-            log("♻️ Reusing existing push path for modal \(context.id.uuidString.prefix(4))", level: .info)
+            log("♻️ Reusing existing push path for modal \(context.id.uuidString.prefix(4))", level: .debug)
         }
 
         let index = modalStack.count
         modalStack.append(context)
 
-        log("📝 Adding modal to stack: \(context.id) at index \(index)", level: .info)
-        log("📝 Modal stack count after adding: \(modalStack.count)", level: .info)
+        log("📝 Adding modal to stack: \(context.id) at index \(index)", level: .debug)
+        log("📝 Modal stack count after adding: \(modalStack.count)", level: .debug)
 
         fullNavigationHistory.append(
             NavigationItem(
@@ -226,7 +226,7 @@ final class NavigationManager {
         )
 
         if modalPushPaths[context.id] == nil {
-            log("🆕 Initializing push path for modal \(context.id.uuidString.prefix(4))", level: .info)
+            log("🆕 Initializing push path for modal \(context.id.uuidString.prefix(4))", level: .debug)
             modalPushPaths[context.id] = []
         }
 
