@@ -10,9 +10,23 @@ import SwiftUI
 final class NavigationManager {
     enum LogLevel: Int {
         case none = 0, error = 1, info = 2, debug = 3
+        
+        /// Default log level based on build configuration
+        /// Computed once at compile time - same value for all instances
+        static var `default`: LogLevel {
+            #if DEBUG
+            return .debug
+            #else
+            return .none
+            #endif
+        }
     }
     
+    #if DEBUG
     var logLevel: LogLevel = .debug
+    #else
+    var logLevel: LogLevel = .none
+    #endif
     var defaultDismissalMode: DismissalMode = .all
     var defaultSheetDismissalMode: DismissalMode = .all
     var defaultDismissToMode: DismissToMode = .recent

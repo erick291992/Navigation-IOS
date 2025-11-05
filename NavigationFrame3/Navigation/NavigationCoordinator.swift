@@ -24,7 +24,7 @@ struct NavigationCoordinator<Content: View>: View {
         dismissalMode: NavigationManager.DismissalMode = .topmost,
         sheetDismissalMode: NavigationManager.DismissalMode = .topmost,
         dismissToMode: NavigationManager.DismissToMode = .recent,
-        logLevel: NavigationManager.LogLevel = .debug
+        logLevel: NavigationManager.LogLevel = NavigationManager.LogLevel.default
     ) {
         self.rootView = rootView
         self.key = key
