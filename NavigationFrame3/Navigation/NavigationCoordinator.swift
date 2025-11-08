@@ -6,6 +6,19 @@
 //
 import SwiftUI
 
+/// Helper class to automatically unregister manager when coordinator is deallocated
+private class CoordinatorLifecycleObserver {
+    let key: String
+    
+    init(key: String) {
+        self.key = key
+    }
+    
+    deinit {
+        NavigationManagerRegistry.shared.unregister(key: key)
+    }
+}
+
 struct NavigationCoordinator<Content: View>: View {
     let rootView: Content
     let key: String
@@ -18,6 +31,9 @@ struct NavigationCoordinator<Content: View>: View {
     let sheetBackgroundColor: Color?
     
     @Bindable var navigationManager: NavigationManager
+    
+    // Lifecycle observer that auto-unregisters manager when coordinator is deallocated
+    @State private var lifecycleObserver: CoordinatorLifecycleObserver?
     
     init(
         rootView: Content,
@@ -44,11 +60,9 @@ struct NavigationCoordinator<Content: View>: View {
         if let existingManager = NavigationManagerRegistry.shared.manager(for: key) {
             self.navigationManager = existingManager
             navigationManager.log("🏗️ NavigationCoordinator reusing existing manager for key: \(key)", level: .info)
-            // Don't override log level - keep user's setting
         } else {
             let newManager = NavigationManager()
             newManager.logLevel = logLevel
-            // Set default dismissal modes
             newManager.defaultDismissalMode = dismissalMode
             newManager.defaultSheetDismissalMode = sheetDismissalMode
             newManager.defaultDismissToMode = dismissToMode
@@ -57,7 +71,6 @@ struct NavigationCoordinator<Content: View>: View {
         }
         
         navigationManager.log("🏗️ NavigationCoordinator init for key: \(key)", level: .info)
-        navigationManager.log("🏗️ NavigationManager instance: \(ObjectIdentifier(self.navigationManager))", level: .debug)
 
         // Register this manager globally so it can be accessed from anywhere
         NavigationManagerRegistry.shared.register(self.navigationManager, for: key)
@@ -116,7 +129,13 @@ struct NavigationCoordinator<Content: View>: View {
                 }
             }
         }
-        .id("NavigationCoordinator-\(key)") // Use key as stable identifier
+        .onAppear {
+            // Create lifecycle observer when coordinator appears
+            // This will auto-unregister the manager when coordinator is deallocated
+            if lifecycleObserver == nil {
+                lifecycleObserver = CoordinatorLifecycleObserver(key: key)
+            }
+        }
     }
 
     /// A computed binding that allows SwiftUI to track the top-most sheet.
