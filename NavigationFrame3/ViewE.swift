@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct ViewE: View {
-    @EnvironmentObject var navigationManager: NavigationManager
+    @Environment(\.navigationManager) var navigationManager: NavigationManager
 
     var body: some View {
         VStack(spacing: 20) {
@@ -21,12 +21,20 @@ struct ViewE: View {
             Button("Dismiss to ViewC") {
                 navigationManager.dismissTo(ViewC.self)
             }
-            Button("Dismiss") {
+            Button("Dismiss tab") {
                 NavigationManagerRegistry.shared.manager(for: "tab2")?.dismissSheet()
             }
             
             Button("Dismiss stack") {
                 navigationManager.dismissPush()
+            }
+            
+            Button("Dismiss") {
+                navigationManager.dismiss()
+            }
+            
+            Button("Dismiss back") {
+                navigationManager.dismissBack()
             }
             
             Button("Present ViewF") {
@@ -50,8 +58,12 @@ struct ViewE: View {
             }
         }
         .padding()
+        .background(Color.yellow.opacity(0.5))
         .onAppear {
             print("👀 ViewE appeared")
+        }
+        .onDisappear {
+            print("👋 ViewE disappeared")
         }
     }
 }

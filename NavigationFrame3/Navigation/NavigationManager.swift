@@ -6,46 +6,76 @@
 //
 import SwiftUI
 
-final class NavigationManager: ObservableObject {
-    @Published var modalStack: [ModalContext] = []
-    @Published var fullNavigationHistory: [NavigationItem] = []
+@Observable
+final class NavigationManager {
+    enum LogLevel: Int {
+        case none = 0, error = 1, info = 2, debug = 3
+        
+        /// Default log level based on build configuration
+        /// Computed once at compile time - same value for all instances
+        static var `default`: LogLevel {
+            #if DEBUG
+            return .info
+            #else
+            return .none
+            #endif
+        }
+    }
+    
+    #if DEBUG
+    var logLevel: LogLevel = .info
+    #else
+    var logLevel: LogLevel = .none
+    #endif
+    var defaultDismissalMode: DismissalMode = .all
+    var defaultSheetDismissalMode: DismissalMode = .all
+    var defaultDismissToMode: DismissToMode = .recent
+
+    var modalStack: [ModalContext] = []
+    var fullNavigationHistory: [NavigationItem] = []
 
     // ✅ onDismiss triggered when views are popped from root stack
-    @Published var rootPushPath: [PushContext] = [] {
+    var rootPushPath: [PushContext] = [] {
         didSet {
             guard oldValue.count > rootPushPath.count else { return }
             let removed = oldValue.suffix(from: rootPushPath.count)
             for context in removed {
-                print("🔥 Native pop: \(context.viewTypeName) [root]")
-                context.onDismiss?()
+                if suppressedDismissIDs.contains(context.id) {
+                    log("🚫 Suppressed native pop: \(context.viewTypeName)", level: .debug)
+                    suppressedDismissIDs.remove(context.id)
+                } else {
+                    log("🔥 Native pop: \(context.viewTypeName) [root]", level: .info)
+                    context.onDismiss?()
+                }
             }
         }
     }
 
     // ✅ Use `modifyModalPushPath` to trigger dismiss detection
-    @Published var modalPushPaths: [UUID: [PushContext]] = [:]
+    var modalPushPaths: [UUID: [PushContext]] = [:]
+    private var suppressedDismissIDs: Set<UUID> = []
 
-    var topSheet: ModalContext? {
-        modalStack.last
-    }
-
-    var topSheetBinding: Binding<ModalContext?> {
-        Binding(
-            get: { self.topSheet },
-            set: { newValue in
-                if newValue == nil {
-                    self.dismissSheet()
-                }
-            }
-        )
-    }
-    
     enum SheetPresentationStyle {
         case stack         // ➕ Add to top of stack (default)
         case replaceLast   // 🔁 Remove top sheet, then present new one
         case replaceAll    // 🔄 Remove all sheets, then present new one
     }
 
+    enum DismissalMode {
+        case all        // Call onDismiss for every removed view (intermediate)
+        case landing    // Only call onDismiss for the view you land on (the last one removed)
+        case topmost    // Only call onDismiss for the topmost (currently visible) view being removed
+    }
+
+    enum DismissToMode {
+        case root      // Go to the first occurrence (root)
+        case recent    // Go to the most recent occurrence
+    }
+
+    func log(_ message: String, level: LogLevel) {
+        guard level.rawValue <= logLevel.rawValue else { return }
+        print(message)
+    }
 
     func push<Content: View>(
         @ViewBuilder view: @escaping () -> Content,
@@ -60,38 +90,63 @@ final class NavigationManager: ObservableObject {
 
         if let modalID = contextID {
             if modalStack.contains(where: { $0.id == modalID }) {
+                let index = (modalPushPaths[modalID]?.count ?? 0)
                 modifyModalPushPath(for: modalID) { $0.append(context) }
-                print("📦 Pushed view of type \(context.viewTypeName) [context: modal \(modalID.uuidString.prefix(4))]")
+                log("📦 Pushed view of type \(context.viewTypeName) [context: modal \(modalID.uuidString.prefix(4))]", level: .info)
+                fullNavigationHistory.append(
+                    NavigationItem(
+                        id: context.id,
+                        viewTypeName: context.viewTypeName,
+                        type: .push,
+                        location: .modalPush(modalID: modalID, index: index)
+                    )
+                )
             } else {
-                print("⚠️ Tried to push into modal \(modalID.uuidString.prefix(4)), but it's no longer mounted. Falling back to root.")
+                let index = rootPushPath.count
                 rootPushPath.append(context)
+                log("⚠️ Tried to push into modal \(modalID.uuidString.prefix(4)), but it's no longer mounted. Falling back to root.", level: .error)
+                fullNavigationHistory.append(
+                    NavigationItem(
+                        id: context.id,
+                        viewTypeName: context.viewTypeName,
+                        type: .push,
+                        location: .rootPush(index: index)
+                    )
+                )
             }
         } else {
+            let index = rootPushPath.count
             rootPushPath.append(context)
-            print("📦 Pushed view of type \(context.viewTypeName) [context: root]")
+            log("📦 Pushed view of type \(context.viewTypeName) [context: root]", level: .info)
+            fullNavigationHistory.append(
+                NavigationItem(
+                    id: context.id,
+                    viewTypeName: context.viewTypeName,
+                    type: .push,
+                    location: .rootPush(index: index)
+                )
+            )
         }
-
-        fullNavigationHistory.append(
-            NavigationItem(id: context.id, viewTypeName: context.viewTypeName, type: .push)
-        )
     }
 
     func presentSheet<Content: View>(
         style: SheetPresentationStyle = .stack,
+        detents: Set<PresentationDetent>? = nil,
+        dragIndicator: Visibility? = nil,
         @ViewBuilder view: @escaping () -> Content,
         onDismiss: (() -> Void)? = nil
     ) {
         switch style {
         case .replaceLast:
             if let removed = modalStack.popLast() {
-                print("🔥 Replacing last modal: \(removed.id.uuidString.prefix(4))")
+                log("🔥 Replacing last modal: \(removed.id.uuidString.prefix(4))", level: .info)
                 removed.onDismiss?()
                 modalPushPaths[removed.id] = nil
             }
 
         case .replaceAll:
             for context in modalStack.reversed() {
-                print("🔥 Replacing all → dismissing modal: \(context.id.uuidString.prefix(4))")
+                log("🔥 Replacing all → dismissing modal: \(context.id.uuidString.prefix(4))", level: .info)
                 context.onDismiss?()
                 modalPushPaths[context.id] = nil
             }
@@ -101,31 +156,41 @@ final class NavigationManager: ObservableObject {
             break // Default: allow stacking
         }
 
+        let presentationOptions = (detents != nil || dragIndicator != nil) 
+            ? SheetPresentationOptions(detents: detents, dragIndicator: dragIndicator)
+            : nil
+
         let context = ModalContext(
             style: .sheet,
+            sheetPresentationOptions: presentationOptions,
             makeView: { AnyView(view()) },
             onDismiss: onDismiss
         )
 
         // ✅ Only initialize if not already present
         if modalPushPaths[context.id] == nil {
-            print("🆕 Initializing push path for modal \(context.id.uuidString.prefix(4))")
+            log("🆕 Initializing push path for modal \(context.id.uuidString.prefix(4))", level: .debug)
             modalPushPaths[context.id] = []
         } else {
-            print("♻️ Reusing existing push path for modal \(context.id.uuidString.prefix(4))")
+            log("♻️ Reusing existing push path for modal \(context.id.uuidString.prefix(4))", level: .debug)
         }
 
+        let index = modalStack.count
         modalStack.append(context)
+
+        log("📝 Adding modal to stack: \(context.id) at index \(index)", level: .debug)
+        log("📝 Modal stack count after adding: \(modalStack.count)", level: .debug)
 
         fullNavigationHistory.append(
             NavigationItem(
                 id: context.id,
                 viewTypeName: String(describing: Content.self),
-                type: .sheet
+                type: .sheet,
+                location: .modalStack(index: index)
             )
         )
 
-        print("🎯 Presented sheet \(context.id) of type \(Content.self)")
+        log("🎯 Presented sheet \(context.id) of type \(Content.self)", level: .info)
         logModalStack()
     }
 
@@ -137,14 +202,14 @@ final class NavigationManager: ObservableObject {
         switch style {
         case .replaceLast:
             if let removed = modalStack.popLast() {
-                print("🔥 Replacing last modal: \(removed.id.uuidString.prefix(4))")
+                log("🔥 Replacing last modal: \(removed.id.uuidString.prefix(4))", level: .info)
                 removed.onDismiss?()
                 modalPushPaths[removed.id] = nil
             }
 
         case .replaceAll:
             for context in modalStack.reversed() {
-                print("🔥 Replacing all → dismissing modal: \(context.id.uuidString.prefix(4))")
+                log("🔥 Replacing all → dismissing modal: \(context.id.uuidString.prefix(4))", level: .info)
                 context.onDismiss?()
                 modalPushPaths[context.id] = nil
             }
@@ -161,48 +226,69 @@ final class NavigationManager: ObservableObject {
         )
 
         if modalPushPaths[context.id] == nil {
-            print("🆕 Initializing push path for modal \(context.id.uuidString.prefix(4))")
+            log("🆕 Initializing push path for modal \(context.id.uuidString.prefix(4))", level: .debug)
             modalPushPaths[context.id] = []
         }
 
+        let index = modalStack.count
         modalStack.append(context)
 
         fullNavigationHistory.append(
             NavigationItem(
                 id: context.id,
                 viewTypeName: String(describing: Content.self),
-                type: .sheet // Or `.fullScreen` if you want to add a new `NavigationType`
+                type: .fullscreen,
+                location: .modalStack(index: index)
             )
         )
 
-        print("🎯 Presented fullScreenCover \(context.id) of type \(Content.self)")
+        log("🎯 Presented fullScreenCover \(context.id) of type \(Content.self)", level: .info)
         logModalStack()
     }
 
-    func dismissSheet() {
+    func dismissSheet(dismissalMode: DismissalMode? = nil) {
+        let mode = dismissalMode ?? defaultSheetDismissalMode
         guard let removed = modalStack.popLast() else { return }
 
         let removedID = removed.id
-        print("❎ Dismissed sheet \(removedID)")
+        log("❎ Dismissed sheet \(removedID) with dismissalMode: \(mode)", level: .info)
 
-        // ✅ Trigger onDismiss for all pushed views in the dismissed sheet
+        // Check if there are pushed views BEFORE processing them
+        let hasPushedViews = !(modalPushPaths[removedID]?.isEmpty ?? true)
+
+        // ✅ Trigger onDismiss for pushed views in the dismissed sheet based on dismissalMode
         if let removedStack = modalPushPaths[removedID] {
-            for context in removedStack.reversed() {
-                print("🔥 Modal push onDismiss → \(context.viewTypeName)")
-                context.onDismiss?()
+            let count = removedStack.count
+            // Only run the loop for .all or .topmost (not .landing)
+            if mode == .all || mode == .topmost {
+                for (index, context) in removedStack.reversed().enumerated() {
+                    if shouldCallOnDismiss(mode: mode, index: index, count: count) {
+                        log("🔥 Native pop: \(context.viewTypeName) [modal \(removedID.uuidString.prefix(4))]", level: .info)
+                        context.onDismiss?()
+                    }
+                }
             }
+            // For .landing, do nothing here (only the sheet root's onDismiss will be called below)
         }
 
         // ✅ Remove push path only for the dismissed modal
         modalPushPaths[removedID] = nil
 
-        // ✅ Trigger modal-level onDismiss last
-        removed.onDismiss?()
+        // ✅ Trigger modal-level onDismiss based on dismissalMode
+        switch mode {
+        case .all, .landing:
+            // Call sheet's root onDismiss for .all and .landing
+            removed.onDismiss?()
+        case .topmost:
+            // For .topmost, call sheet's root onDismiss ONLY if there are no pushed views
+            if !hasPushedViews {
+                removed.onDismiss?()
+            }
+        }
 
-        // 🧱 Re-log modal stack for visibility
+        // Re-log modal stack for visibility
         logModalStack()
     }
-
 
     func dismissPush() {
         // Check if a modal is active
@@ -210,10 +296,12 @@ final class NavigationManager: ObservableObject {
             guard var currentStack = modalPushPaths[modalID], !currentStack.isEmpty else { return }
             
             let removed = currentStack.removeLast()
-            print("❎ Dismissed pushed view: \(removed.viewTypeName) [modal \(modalID.uuidString.prefix(4))]")
+            log("❎ Dismissed pushed view: \(removed.viewTypeName) [modal \(modalID.uuidString.prefix(4))]", level: .info)
             removed.onDismiss?()
 
-            updateModalPushPath(for: modalID, newValue: currentStack)
+            // Directly update the path without triggering updateModalPushPath
+            // since we're doing manual dismissal, not detecting native dismissal
+            modalPushPaths[modalID] = currentStack
             
             // Also remove from full navigation history
             fullNavigationHistory.removeAll { $0.id == removed.id }
@@ -222,12 +310,16 @@ final class NavigationManager: ObservableObject {
             // Otherwise, dismiss from root push stack
             guard !rootPushPath.isEmpty else { return }
 
+            // Add to suppressed IDs BEFORE removing to prevent didSet from triggering onDismiss
+            let removedID = rootPushPath.last!.id
+            suppressedDismissIDs.insert(removedID)
+            
             let removed = rootPushPath.removeLast()
-            print("❎ Dismissed pushed view: \(removed.viewTypeName) [root]")
+            log("❎ Dismissed pushed view: \(removed.viewTypeName) [root]", level: .info)
             removed.onDismiss?()
 
-            // Since we manually modified rootPushPath, manually publish it
-            rootPushPath = rootPushPath
+            // rootPushPath is already updated by removeLast(), no need to reassign
+            // This prevents triggering SwiftUI's native dismissal detection
 
             // Also remove from full navigation history
             fullNavigationHistory.removeAll { $0.id == removed.id }
@@ -236,101 +328,229 @@ final class NavigationManager: ObservableObject {
         logPushStack()
     }
 
-
-
-    func dismissTo<Content: View>(
-        _ target: Content.Type,
-        triggerIntermediateDismissals: Bool = false
-    ) {
-        print("📜 Full Navigation History:")
-        for item in fullNavigationHistory {
-            print("• \(item.viewTypeName) [\(item.type.rawValue)]")
-        }
-
-        let targetName = String(describing: target)
-
-        guard let targetIndex = fullNavigationHistory.lastIndex(where: {
-            $0.viewTypeName == targetName
-        }) else {
-            print("❌ Could not find \(targetName) in full history")
+    /// Unified dismiss function that automatically determines what to dismiss
+    func dismiss() {
+        // Use full navigation history to determine what to dismiss
+        guard !fullNavigationHistory.isEmpty else {
+            log("🎯 Unified dismiss: nothing to dismiss (empty history)", level: .info)
             return
         }
+        
+        // Get the last navigation item (most recent)
+        guard let lastItem = fullNavigationHistory.last else {
+            log("🎯 Unified dismiss: nothing to dismiss", level: .info)
+            return
+        }
+        
+        log("🎯 Unified dismiss: dismissing \(lastItem.viewTypeName) [\(lastItem.type.rawValue)]", level: .info)
+        
+        // Dismiss based on the type of the last navigation item
+        switch lastItem.type {
+        case .sheet, .fullscreen:
+            dismissSheet() // Uses defaultDismissalMode
+        case .push:
+            dismissPush()
+        }
+    }
 
-        print("🎯 Attempting to dismiss to: \(targetName)")
-        let targetItem = fullNavigationHistory[targetIndex]
-
-        if targetItem.type == .sheet {
-            guard let modalIndex = modalStack.lastIndex(where: { $0.id == targetItem.id }) else {
-                print("❌ Matching modalContext not found for \(targetName)")
-                return
-            }
-
-            let poppedContexts = modalStack.suffix(from: modalIndex + 1)
-            if triggerIntermediateDismissals {
-                for context in poppedContexts.reversed() {
-                    print("🔥 Intermediate modal onDismiss → \(context.id.uuidString.prefix(4))")
-                    context.onDismiss?()
-                }
-            } else if let last = poppedContexts.dropLast().last {
-                print("🔥 onDismiss for landing modal: \(last.id.uuidString.prefix(4))")
-                last.onDismiss?()
-            }
-
-            let removedModals = modalStack.suffix(from: modalIndex + 1)
-            modalStack = Array(modalStack.prefix(modalIndex + 1))
-
-            for context in removedModals {
-                modalPushPaths[context.id] = nil
-            }
-
-            let modalID = targetItem.id
-            if let pushStack = modalPushPaths[modalID] {
-                for context in pushStack.reversed() {
-                    print("🔥 Modal push onDismiss → \(context.id.uuidString.prefix(4))")
-                    context.onDismiss?()
-                }
-                updateModalPushPath(for: modalID, newValue: [])
-            }
-
-        } else {
-            let removedModals = modalStack
-            if triggerIntermediateDismissals {
-                for context in removedModals.reversed() {
-                    print("🔥 Intermediate modal onDismiss → \(context.id.uuidString.prefix(4))")
-                    context.onDismiss?()
-                }
-            } else if let first = modalStack.first {
-                print("🔥 onDismiss for modal above root: \(first.id.uuidString.prefix(4))")
-                first.onDismiss?()
-            }
-
-            modalStack.removeAll()
-            for modal in removedModals {
-                modalPushPaths.removeValue(forKey: modal.id)
-            }
-
-            if let pushIndex = rootPushPath.firstIndex(where: { $0.viewTypeName == targetItem.viewTypeName }) {
-                let removed = rootPushPath.suffix(from: pushIndex + 1)
-                if triggerIntermediateDismissals {
-                    for context in removed.reversed() {
-                        print("🔥 Root push onDismiss → \(context.id.uuidString.prefix(4))")
-                        context.onDismiss?()
-                    }
-                } else if let last = removed.dropLast().last {
-                    print("🔥 onDismiss for root landing: \(last.id.uuidString.prefix(4))")
-                    last.onDismiss?()
-                }
-                rootPushPath = Array(rootPushPath.prefix(through: pushIndex))
-            } else if fullNavigationHistory.first?.viewTypeName == targetItem.viewTypeName {
-                for context in rootPushPath.reversed() {
-                    print("🔥 Root push onDismiss → \(context.id.uuidString.prefix(4))")
-                    context.onDismiss?()
-                }
-                rootPushPath = []
+    /// Intelligent dismiss function that goes back to the previous logical view
+    func dismissBack() {
+        guard !fullNavigationHistory.isEmpty else {
+            log("🎯 DismissBack: nothing to dismiss (empty history)", level: .info)
+            return
+        }
+        
+        // If we only have the root view, we can't go back
+        if fullNavigationHistory.count == 1 {
+            log("🎯 DismissBack: already at root, nothing to dismiss", level: .info)
+            return
+        }
+        
+        // Find the previous view in the history
+        let previousIndex = fullNavigationHistory.count - 2
+        let previousItem = fullNavigationHistory[previousIndex]
+        let previousViewType = previousItem.viewTypeName
+        
+        log("🎯 DismissBack: going back to \(previousViewType)", level: .info)
+        
+        // Use dismissTo to go back to the previous view
+        // We need to use the actual type, so we'll use a different approach
+        dismissToPreviousView()
+    }
+    
+    /// Dismiss everything after the previous view to go back to it
+    private func dismissToPreviousView() {
+        guard fullNavigationHistory.count > 1 else {
+            log("🎯 DismissToPreviousView: already at root", level: .info)
+            return
+        }
+        
+        // Find the target index (previous view)
+        let targetIndex = fullNavigationHistory.count - 2
+        
+        // Get all items to remove (everything after the target)
+        let toRemove = fullNavigationHistory.suffix(from: targetIndex + 1)
+        log("🎯 DismissToPreviousView: removing \(toRemove.count) items to go back to \(fullNavigationHistory[targetIndex].viewTypeName)", level: .info)
+        
+        // Remove items in reverse order (from newest to oldest)
+        for item in toRemove.reversed() {
+            log("🎯 DismissToPreviousView: removing \(item.viewTypeName) [\(item.type.rawValue)]", level: .info)
+            
+            // Dismiss the item based on its location
+            switch item.location {
+            case .rootPush(let idx):
+                guard rootPushPath.indices.contains(idx) else { break }
+                
+                // Add to suppressed IDs BEFORE removing to prevent didSet from triggering onDismiss
+                let removedID = rootPushPath[idx].id
+                suppressedDismissIDs.insert(removedID)
+                
+                let removed = rootPushPath.remove(at: idx)
+                log("❎ Dismissed pushed view: \(removed.viewTypeName) [root]", level: .info)
+                removed.onDismiss?()
+                
+            case .modalStack(let idx):
+                guard modalStack.indices.contains(idx) else { break }
+                let removed = modalStack.remove(at: idx)
+                log("❎ Dismissed modal: \(removed.id)", level: .info)
+                removed.onDismiss?()
+                modalPushPaths[removed.id] = nil
+                
+            case .modalPush(let modalID, let pushIdx):
+                guard var stack = modalPushPaths[modalID], stack.indices.contains(pushIdx) else { break }
+                
+                // Add to suppressed IDs BEFORE removing to prevent updateModalPushPath from triggering onDismiss
+                let removedID = stack[pushIdx].id
+                suppressedDismissIDs.insert(removedID)
+                
+                let removed = stack.remove(at: pushIdx)
+                log("❎ Dismissed pushed view: \(removed.viewTypeName) [modal \(modalID.uuidString.prefix(4))]", level: .info)
+                removed.onDismiss?()
+                modalPushPaths[modalID] = stack
+                
+            case .root:
+                // Root stays, do nothing
+                break
             }
         }
+        
+        // Trim the history to the target index
+        fullNavigationHistory = Array(fullNavigationHistory.prefix(targetIndex + 1))
+        
+        log("🎯 DismissToPreviousView: now at \(fullNavigationHistory.last?.viewTypeName ?? "unknown")", level: .info)
+    }
 
-        logModalStack()
+    func dismissTo<T: View>(_ target: T.Type, dismissToMode: DismissToMode? = nil, dismissalMode: DismissalMode? = nil) {
+        let toMode = dismissToMode ?? defaultDismissToMode
+        let disMode = dismissalMode ?? defaultDismissalMode
+        
+        guard !fullNavigationHistory.isEmpty else {
+            log("⚠️ Cannot dismissTo - navigation history is empty", level: .error)
+            return
+        }
+        
+        let targetName = String(describing: target)
+        log("🎯 Dismissing to \(targetName) with mode: \(toMode), dismissalMode: \(disMode)", level: .info)
+        log("📜 Current history: \(fullNavigationHistory.map { $0.viewTypeName })", level: .debug)
+        
+        var targetIndex: Int
+        switch toMode {
+        case .root:
+            // For root, we want to find the first occurrence of the target
+            guard let index = fullNavigationHistory.firstIndex(where: { $0.viewTypeName == targetName }) else {
+                log("❌ Could not find \(targetName) in full history", level: .error)
+                return
+            }
+            targetIndex = index
+            log("🎯 Found first occurrence of \(targetName) at index \(index)", level: .info)
+            
+        case .recent:
+            // For recent, we want to find the most recent occurrence of the target
+            // First, find all occurrences of the target
+            let targetIndices = fullNavigationHistory.enumerated().compactMap { index, item in
+                item.viewTypeName == targetName ? index : nil
+            }
+            
+            guard !targetIndices.isEmpty else {
+                log("❌ Could not find \(targetName) in full history", level: .error)
+                return
+            }
+            
+            // Find the most recent occurrence
+            let mostRecentIndex = targetIndices.last!
+            
+            // If there's only one occurrence and we're not at it, go to it
+            if targetIndices.count == 1 && mostRecentIndex != fullNavigationHistory.count - 1 {
+                targetIndex = mostRecentIndex
+                log("🎯 Only one occurrence of \(targetName) found at index \(mostRecentIndex) - going to it", level: .info)
+            }
+            // If there's only one occurrence and we're already at it, do nothing
+            else if targetIndices.count == 1 && mostRecentIndex == fullNavigationHistory.count - 1 {
+                log("🎯 Only one occurrence of \(targetName) found - already at target", level: .info)
+                return
+            }
+            // If there are multiple occurrences and we're at the most recent, go to the previous one
+            else if mostRecentIndex == fullNavigationHistory.count - 1 {
+                let previousIndex = targetIndices[targetIndices.count - 2]
+                targetIndex = previousIndex
+                log("🎯 Already at most recent \(targetName), going to previous at index \(previousIndex)", level: .info)
+            }
+            // Otherwise, go to the most recent occurrence
+            else {
+                targetIndex = mostRecentIndex
+                log("🎯 Found most recent occurrence of \(targetName) at index \(mostRecentIndex)", level: .info)
+            }
+        }
+        
+        let toRemove = fullNavigationHistory.suffix(from: targetIndex + 1)
+        log("Will remove \(toRemove.count) items above target.", level: .info)
+        let count = toRemove.count
+        for (index, item) in toRemove.reversed().enumerated() {
+            switch item.location {
+            case .rootPush(let idx):
+                guard rootPushPath.indices.contains(idx) else { break }
+                suppressedDismissIDs.insert(rootPushPath[idx].id)
+                let removed = rootPushPath.remove(at: idx)
+                if shouldCallOnDismiss(mode: disMode, index: index, count: count) {
+                    log("Dismiss root push: \(removed.viewTypeName)", level: .info)
+                    removed.onDismiss?()
+                }
+            case .modalStack(let idx):
+                guard modalStack.indices.contains(idx) else { break }
+                let removed = modalStack.remove(at: idx)
+                if shouldCallOnDismiss(mode: disMode, index: index, count: count) {
+                    log("Dismiss modal: \(removed.id)", level: .info)
+                    removed.onDismiss?()
+                }
+                modalPushPaths[removed.id] = nil
+            case .modalPush(let modalID, let pushIdx):
+                guard var stack = modalPushPaths[modalID], stack.indices.contains(pushIdx) else { break }
+                suppressedDismissIDs.insert(stack[pushIdx].id)
+                let removed = stack.remove(at: pushIdx)
+                if shouldCallOnDismiss(mode: disMode, index: index, count: count) {
+                    log("Dismiss modal push: \(removed.viewTypeName)", level: .info)
+                    removed.onDismiss?()
+                }
+                modalPushPaths[modalID] = stack
+            case .root:
+                // Do nothing, root stays
+                break
+            }
+        }
+        fullNavigationHistory = Array(fullNavigationHistory.prefix(targetIndex + 1))
+        log("→ Trimming fullNavigationHistory to index \(targetIndex)", level: .debug)
+        log("=== End dismissTo ===", level: .debug)
+    }
+
+    private func shouldCallOnDismiss(mode: DismissalMode, index: Int, count: Int) -> Bool {
+        switch mode {
+        case .all:
+            return true
+        case .topmost:
+            return index == 0 // first in toRemove (topmost, direct parent)
+        case .landing:
+            return index == count - 1 // last in toRemove (landing view)
+        }
     }
 
     private func updateModalPushPath(for modalID: UUID, newValue: [PushContext]) {
@@ -340,7 +560,7 @@ final class NavigationManager: ObservableObject {
         if oldValue.count > newValue.count {
             let removed = oldValue.suffix(from: newValue.count)
             for context in removed {
-                print("🔥 Native pop: \(context.viewTypeName) [modal \(modalID.uuidString.prefix(4))]")
+                log("🔥 Native pop: \(context.viewTypeName) [modal \(modalID.uuidString.prefix(4))]", level: .info)
                 context.onDismiss?()
             }
         }
@@ -353,34 +573,32 @@ final class NavigationManager: ObservableObject {
         updateModalPushPath(for: modalID, newValue: path) // diff-check & publish
     }
 
-
     func reset() {
         modalStack.removeAll()
         modalPushPaths.removeAll()
         rootPushPath = []
         fullNavigationHistory = []
-        print("🧼 NavigationManager fully reset")
+        log("🧼 NavigationManager fully reset", level: .info)
     }
 
     private func logModalStack() {
-        print("🧱 Modal Stack:")
+        log("🧱 Modal Stack:", level: .debug)
         for context in modalStack {
-            print("• \(context.id)")
+            log("• \(context.id)", level: .debug)
         }
     }
     
     private func logPushStack() {
         if let modalID = modalStack.last?.id {
-            print("📦 Push Stack [modal \(modalID.uuidString.prefix(4))]:")
+            log("📦 Push Stack [modal \(modalID.uuidString.prefix(4))]:", level: .debug)
             for ctx in modalPushPaths[modalID] ?? [] {
-                print("• \(ctx.viewTypeName)")
+                log("• \(ctx.viewTypeName)", level: .debug)
             }
         } else {
-            print("📦 Push Stack [root]:")
+            log("📦 Push Stack [root]:", level: .debug)
             for ctx in rootPushPath {
-                print("• \(ctx.viewTypeName)")
+                log("• \(ctx.viewTypeName)", level: .debug)
             }
         }
     }
-
 }

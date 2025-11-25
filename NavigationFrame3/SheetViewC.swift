@@ -5,8 +5,9 @@
 //  Created by Erick Manrique on 5/16/25.
 //
 import SwiftUI
+
 struct ViewC: View {
-    @EnvironmentObject var navigationManager: NavigationManager
+    @Environment(\.navigationManager) var navigationManager: NavigationManager
     private var id = UUID()
 
     init() {
@@ -19,6 +20,11 @@ struct ViewC: View {
         return VStack(spacing: 20) {
             Text("🌊 ViewC (Presented from B)")
                 .font(.title2)
+                .padding(.top)
+
+            Text("This is a sheet - no back button by default")
+                .font(.caption)
+                .foregroundColor(.secondary)
 
             Button("Present ViewD") {
 //                navigationManager.presentSheet {
@@ -46,6 +52,24 @@ struct ViewC: View {
             Button("Dismiss stack") {
                 navigationManager.dismissPush()
             }
+            Button("Dismiss") {
+                navigationManager.dismiss()
+            }
+            
+            Button("Dismiss back") {
+                navigationManager.dismissBack()
+            }
+            
+            Button("Push ViewB") {
+                navigationManager.push {
+                    ViewB()
+                } onDismiss: {
+                    print("🔥 Pushed ViewB was dismissed")
+                }
+            }            
+            Button("Dismiss to ViewB") {
+                navigationManager.dismissTo(ViewB.self)
+            }
         }
         .padding()
         .onAppear {
@@ -57,6 +81,7 @@ struct ViewC: View {
         .onChange(of: navigationManager.modalPushPaths) { _ in
             print("💡 ViewC body reevaluated [ID: \(id)] → push path likely updated")
         }
+        .background(Color.blue.opacity(0.5))
     }
 
     private func logBodyRender() {

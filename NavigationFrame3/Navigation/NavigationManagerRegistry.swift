@@ -11,11 +11,20 @@ import SwiftUI
 final class NavigationManagerRegistry {
     static let shared = NavigationManagerRegistry()
 
-    private var managers: [String: NavigationManager] = [:]
+    // Wrapper class to hold weak references
+    private class WeakBox<T: AnyObject> {
+        weak var value: T?
+        init(_ value: T) {
+            self.value = value
+        }
+    }
+
+    // Change from strong to weak references
+    private var managers: [String: WeakBox<NavigationManager>] = [:]
     private var queuedActions: [String: [(NavigationManager) -> Void]] = [:]
 
     func register(_ manager: NavigationManager, for key: String) {
-        managers[key] = manager
+        managers[key] = WeakBox(manager)
 
         // Run any queued actions
         if let actions = queuedActions.removeValue(forKey: key) {
@@ -26,30 +35,32 @@ final class NavigationManagerRegistry {
     }
 
     func manager(for key: String) -> NavigationManager? {
-        return managers[key]
+        // Clean up nil references automatically
+        if let box = managers[key] {
+            if box.value == nil {
+                managers.removeValue(forKey: key)
+                return nil
+            }
+            return box.value
+        }
+        return nil
     }
 
     func perform(_ key: String, action: @escaping (NavigationManager) -> Void) {
-        if let manager = managers[key] {
+        if let manager = manager(for: key) {  // Uses the updated manager(for:) method
             action(manager)
         } else {
             queuedActions[key, default: []].append(action)
         }
     }
+    
+    func unregister(key: String) {
+        managers.removeValue(forKey: key)
+        queuedActions.removeValue(forKey: key)
+    }
+    
+    func clearAll() {
+        managers.removeAll()
+        queuedActions.removeAll()
+    }
 }
-
-
-//extension NavigationManagerRegistry {
-//    func dismissTo<Content: View>(_ target: Content.Type) {
-//        let targetName = String(describing: target)
-//
-//        for manager in managers.values {
-//            if manager.dismissTo(targetName) {
-//                print("✅ Global dismissTo \(targetName)")
-//                return
-//            }
-//        }
-//
-//        print("❌ No manager found containing \(targetName)")
-//    }
-//}
