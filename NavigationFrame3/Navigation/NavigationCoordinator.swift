@@ -23,7 +23,6 @@ struct NavigationCoordinator<Content: View>: View {
     let rootView: Content
     let key: String
     let logLevel: NavigationManager.LogLevel
-    let hideDefaultBackButton: Bool
     let dismissalMode: NavigationManager.DismissalMode
     let sheetDismissalMode: NavigationManager.DismissalMode
     let dismissToMode: NavigationManager.DismissToMode
@@ -38,7 +37,6 @@ struct NavigationCoordinator<Content: View>: View {
     init(
         rootView: Content,
         key: String,
-        hideDefaultBackButton: Bool = false,
         dismissalMode: NavigationManager.DismissalMode = .topmost,
         sheetDismissalMode: NavigationManager.DismissalMode = .topmost,
         dismissToMode: NavigationManager.DismissToMode = .recent,
@@ -48,7 +46,6 @@ struct NavigationCoordinator<Content: View>: View {
     ) {
         self.rootView = rootView
         self.key = key
-        self.hideDefaultBackButton = hideDefaultBackButton
         self.dismissalMode = dismissalMode
         self.sheetDismissalMode = sheetDismissalMode
         self.dismissToMode = dismissToMode
@@ -98,7 +95,6 @@ struct NavigationCoordinator<Content: View>: View {
                 .navigationDestination(for: PushContext.self) { context in
                     context.makeView()
                         .environment(\.navigationManager, navigationManager)
-                        .navigationBarBackButtonHidden(hideDefaultBackButton)
                 }
                 .containerBackground(navigationStackColor ?? .clear, for: .navigation)
         }
@@ -108,7 +104,6 @@ struct NavigationCoordinator<Content: View>: View {
                 SheetNavigationContainer(
                     context: context,
                     navigationManager: navigationManager,
-                    hideDefaultBackButton: hideDefaultBackButton,
                     backgroundColor: sheetBackgroundColor ?? navigationStackColor
                 )
                 .onAppear {
@@ -121,7 +116,6 @@ struct NavigationCoordinator<Content: View>: View {
                 SheetNavigationContainer(
                     context: context,
                     navigationManager: navigationManager,
-                    hideDefaultBackButton: hideDefaultBackButton,
                     backgroundColor: sheetBackgroundColor ?? navigationStackColor
                 )
                 .onAppear {
