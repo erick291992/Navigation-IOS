@@ -8,6 +8,7 @@ import SwiftUI
 
 struct ViewD: View {
     @Environment(\.navigationManager) var navigationManager: NavigationManager
+    @Environment(ViewCViewModel.self) private var viewCViewModel: ViewCViewModel? // ← Optional - may not be present
     var onDismiss: (() -> Void)? = nil
     private let id = UUID()
     
@@ -18,7 +19,8 @@ struct ViewD: View {
     }
 
     var body: some View {
-        let _ = print("🎨 ViewD body rendering - rootPushPath count: \(navigationManager.rootPushPath.count)")
+        let _ = navigationManager.log("🎨 ViewD body rendering - rootPushPath count: \(navigationManager.rootPushPath.count)", level: .info)
+        let _ = navigationManager.log("🔍 ViewD: viewCViewModel is \(viewCViewModel != nil ? "AVAILABLE ✅" : "NOT AVAILABLE ❌")", level: .info)
         return HStack {
             Color.primary.opacity(0.001) // Virtually transparent but still interactive - allows seeing view behind
                 .contentShape(Rectangle())
@@ -38,6 +40,23 @@ struct ViewD: View {
                 Text("This view should show ViewB behind through transparent areas")
                     .font(.caption)
                     .foregroundColor(.secondary)
+                
+                // Display ViewC ViewModel value to verify environment propagation
+                if let viewCViewModel = viewCViewModel {
+                    Text("ViewC ViewModel: \(viewCViewModel.testValue)")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                        .padding(8)
+                        .background(Color.black.opacity(0.3))
+                        .cornerRadius(4)
+                } else {
+                    Text("ViewC ViewModel: NOT AVAILABLE")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .padding(8)
+                        .background(Color.black.opacity(0.3))
+                        .cornerRadius(4)
+                }
                 
                 if let onDismiss = onDismiss {
                     Button("Dismiss Side Menu") {

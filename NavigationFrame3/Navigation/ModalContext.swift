@@ -32,17 +32,22 @@ struct ModalContext: Identifiable, Equatable {
     let rootView: AnyView
     let onDismiss: (() -> Void)?
     let sheetPresentationOptions: SheetPresentationOptions?
+    
+    /// Closure that applies environment to a view - generic, doesn't require knowing the type
+    let applyEnvironment: ((AnyView) -> AnyView)?
 
     init<Content: View>(
         style: ModalPresentationStyle,
         sheetPresentationOptions: SheetPresentationOptions? = nil,
         makeView: @escaping () -> Content,
-        onDismiss: (() -> Void)? = nil
+        onDismiss: (() -> Void)? = nil,
+        applyEnvironment: ((AnyView) -> AnyView)? = nil
     ) {
         self.style = style
         self.rootView = AnyView(makeView())
         self.onDismiss = onDismiss
         self.sheetPresentationOptions = sheetPresentationOptions
+        self.applyEnvironment = applyEnvironment
     }
 
     static func == (lhs: ModalContext, rhs: ModalContext) -> Bool {

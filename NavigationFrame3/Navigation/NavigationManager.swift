@@ -81,11 +81,34 @@ final class NavigationManager {
         @ViewBuilder view: @escaping () -> Content,
         onDismiss: (() -> Void)? = nil
     ) {
+        log("🚀 push: \(Content.self) WITHOUT environment", level: .info)
+        pushHelper(view: view, applyEnvironment: nil, onDismiss: onDismiss)
+    }
+    
+    func push<Content: View, T: AnyObject>(
+        @ViewBuilder view: @escaping () -> Content,
+        navigationEnvironment: T,
+        onDismiss: (() -> Void)? = nil
+    ) where T: Observable {
+        log("🚀 push: \(Content.self) WITH environment (\(type(of: navigationEnvironment)))", level: .info)
+        // Create a closure that captures the viewModel and applies it
+        let applier: (AnyView) -> AnyView = { anyView in
+            AnyView(anyView.environment(navigationEnvironment))
+        }
+        pushHelper(view: view, applyEnvironment: applier, onDismiss: onDismiss)
+    }
+    
+    private func pushHelper<Content: View>(
+        @ViewBuilder view: @escaping () -> Content,
+        applyEnvironment: ((AnyView) -> AnyView)?,
+        onDismiss: (() -> Void)?
+    ) {
         let contextID = modalStack.last?.id
         let context = PushContext(
             makeView: { AnyView(view()) },
             viewTypeName: String(describing: Content.self),
-            onDismiss: onDismiss
+            onDismiss: onDismiss,
+            applyEnvironment: applyEnvironment
         )
 
         if let modalID = contextID {
@@ -136,6 +159,48 @@ final class NavigationManager {
         @ViewBuilder view: @escaping () -> Content,
         onDismiss: (() -> Void)? = nil
     ) {
+        log("🚀 presentSheet: \(Content.self) WITHOUT environment", level: .info)
+        presentSheetHelper(
+            style: style,
+            detents: detents,
+            dragIndicator: dragIndicator,
+            view: view,
+            applyEnvironment: nil,
+            onDismiss: onDismiss
+        )
+    }
+    
+    func presentSheet<Content: View, T: AnyObject>(
+        style: SheetPresentationStyle = .stack,
+        detents: Set<PresentationDetent>? = nil,
+        dragIndicator: Visibility? = nil,
+        @ViewBuilder view: @escaping () -> Content,
+        navigationEnvironment: T,
+        onDismiss: (() -> Void)? = nil
+    ) where T: Observable {
+        log("🚀 presentSheet: \(Content.self) WITH environment (\(type(of: navigationEnvironment)))", level: .info)
+        // Create a closure that captures the viewModel and applies it
+        let applier: (AnyView) -> AnyView = { anyView in
+            AnyView(anyView.environment(navigationEnvironment))
+        }
+        presentSheetHelper(
+            style: style,
+            detents: detents,
+            dragIndicator: dragIndicator,
+            view: view,
+            applyEnvironment: applier,
+            onDismiss: onDismiss
+        )
+    }
+    
+    private func presentSheetHelper<Content: View>(
+        style: SheetPresentationStyle,
+        detents: Set<PresentationDetent>?,
+        dragIndicator: Visibility?,
+        @ViewBuilder view: @escaping () -> Content,
+        applyEnvironment: ((AnyView) -> AnyView)?,
+        onDismiss: (() -> Void)?
+    ) {
         switch style {
         case .replaceLast:
             if let removed = modalStack.popLast() {
@@ -163,8 +228,9 @@ final class NavigationManager {
         let context = ModalContext(
             style: .sheet,
             sheetPresentationOptions: presentationOptions,
-            makeView: { AnyView(view()) },
-            onDismiss: onDismiss
+            makeView: { view() },
+            onDismiss: onDismiss,
+            applyEnvironment: applyEnvironment
         )
 
         // ✅ Only initialize if not already present
@@ -199,6 +265,40 @@ final class NavigationManager {
         @ViewBuilder view: @escaping () -> Content,
         onDismiss: (() -> Void)? = nil
     ) {
+        log("🚀 presentFullScreen: \(Content.self) WITHOUT environment", level: .info)
+        presentFullScreenHelper(
+            style: style,
+            view: view,
+            applyEnvironment: nil,
+            onDismiss: onDismiss
+        )
+    }
+    
+    func presentFullScreen<Content: View, T: AnyObject>(
+        style: SheetPresentationStyle = .stack,
+        @ViewBuilder view: @escaping () -> Content,
+        navigationEnvironment: T,
+        onDismiss: (() -> Void)? = nil
+    ) where T: Observable {
+        log("🚀 presentFullScreen: \(Content.self) WITH environment (\(type(of: navigationEnvironment)))", level: .info)
+        // Create a closure that captures the viewModel and applies it
+        let applier: (AnyView) -> AnyView = { anyView in
+            AnyView(anyView.environment(navigationEnvironment))
+        }
+        presentFullScreenHelper(
+            style: style,
+            view: view,
+            applyEnvironment: applier,
+            onDismiss: onDismiss
+        )
+    }
+    
+    private func presentFullScreenHelper<Content: View>(
+        style: SheetPresentationStyle,
+        @ViewBuilder view: @escaping () -> Content,
+        applyEnvironment: ((AnyView) -> AnyView)?,
+        onDismiss: (() -> Void)?
+    ) {
         switch style {
         case .replaceLast:
             if let removed = modalStack.popLast() {
@@ -222,7 +322,8 @@ final class NavigationManager {
         let context = ModalContext(
             style: .fullScreen,
             makeView: view,
-            onDismiss: onDismiss
+            onDismiss: onDismiss,
+            applyEnvironment: applyEnvironment
         )
 
         if modalPushPaths[context.id] == nil {

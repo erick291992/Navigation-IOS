@@ -11,6 +11,9 @@ struct PushContext: Identifiable, Hashable {
     let makeView: () -> AnyView
     let viewTypeName: String
     let onDismiss: (() -> Void)?
+    
+    /// Closure that applies environment to a view - generic, doesn't require knowing the type
+    let applyEnvironment: ((AnyView) -> AnyView)?
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)

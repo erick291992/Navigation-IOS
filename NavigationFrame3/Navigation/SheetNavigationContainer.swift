@@ -30,12 +30,30 @@ struct SheetNavigationContainer: View {
     var body: some View {
         let modalID = context.id
         let presentationOptions = context.sheetPresentationOptions
-
-        let navigationStack = NavigationStack(path: pushPathBinding(for: modalID)) {
+        
+        // Apply environment using the closure if provided (generic - works with any Observable type)
+        let hasEnv = context.applyEnvironment != nil
+        let _ = navigationManager.log("📦 SheetNavigationContainer: applyEnvironment is \(hasEnv ? "PRESENT ✅ - applying to rootView" : "NOT PRESENT")", level: .info)
+        let rootView: AnyView = if let applier = context.applyEnvironment {
+            applier(context.rootView)
+        } else {
             context.rootView
+        }
+        
+        let navigationStack = NavigationStack(path: pushPathBinding(for: modalID)) {
+            rootView
                 .environment(\.navigationManager, navigationManager)
                 .navigationDestination(for: PushContext.self) { pushContext in
-                    pushContext.makeView()
+                    // Apply environment to pushed views as well
+                    let pushedView = pushContext.makeView()
+                    let hasEnv = pushContext.applyEnvironment != nil
+                    let _ = navigationManager.log("📦 SheetNavigationContainer.navigationDestination: \(pushContext.viewTypeName), applyEnvironment is \(hasEnv ? "PRESENT ✅ - applying" : "NOT PRESENT")", level: .info)
+                    let viewWithEnv: AnyView = if let applier = pushContext.applyEnvironment {
+                        applier(pushedView)
+                    } else {
+                        pushedView
+                    }
+                    viewWithEnv
                         .environment(\.navigationManager, navigationManager)
                         .navigationBarBackButtonHidden(hideDefaultBackButton)
                 }
@@ -80,7 +98,8 @@ struct SheetNavigationContainer: View {
                 navigationManager.log("📱 SheetNavigationContainer appeared for modal: \(context.id)", level: .info)
             }
     }
-
+    
+    
     private func pushPathBinding(for id: UUID) -> Binding<[PushContext]> {
         Binding(
             get: { navigationManager.modalPushPaths[id] ?? [] },
