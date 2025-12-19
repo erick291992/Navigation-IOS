@@ -56,7 +56,7 @@ struct NavigationCoordinator<Content: View>: View {
         // Use existing manager from registry or create new one
         if let existingManager = NavigationManagerRegistry.shared.manager(for: key) {
             self.navigationManager = existingManager
-            navigationManager.log("🏗️ NavigationCoordinator reusing existing manager for key: \(key)", level: .info)
+            navigationManager.log("🏗️ NavigationCoordinator reusing existing manager for key: \(key)", level: .debug)
         } else {
             let newManager = NavigationManager()
             newManager.logLevel = logLevel
@@ -67,15 +67,31 @@ struct NavigationCoordinator<Content: View>: View {
             navigationManager.log("🏗️ NavigationCoordinator creating new manager for key: \(key)", level: .info)
         }
         
-        navigationManager.log("🏗️ NavigationCoordinator init for key: \(key)", level: .info)
+
 
         // Register this manager globally so it can be accessed from anywhere
         NavigationManagerRegistry.shared.register(self.navigationManager, for: key)
         
         // Only register root if it's not already registered
         let typeName = String(describing: Content.self)
-        if !self.navigationManager.fullNavigationHistory.contains(where: { $0.viewTypeName == typeName && $0.location == .root }) {
+        let existingRoot = self.navigationManager.fullNavigationHistory.first(where: { $0.location == .root })
+        
+        if existingRoot == nil {
+            // No root registered yet - fresh manager
             navigationManager.log("Registering root view: \(typeName)", level: .info)
+            let rootItem = NavigationItem(
+                id: UUID(),
+                viewTypeName: typeName,
+                type: .push,
+                location: .root
+            )
+            self.navigationManager.fullNavigationHistory.append(rootItem)
+        } else if existingRoot?.viewTypeName != typeName {
+            // ZOMBIE DETECTION: Root type changed! This means the old coordinator died without
+            // proper cleanup (SwiftUI edge case). Reset the manager and register the new root.
+            navigationManager.log("🧟 Zombie manager detected for key: \(key) - root changed from \(existingRoot?.viewTypeName ?? "nil") to \(typeName). Resetting...", level: .info)
+            self.navigationManager.reset()
+            
             let rootItem = NavigationItem(
                 id: UUID(),
                 viewTypeName: typeName,
@@ -127,6 +143,25 @@ struct NavigationCoordinator<Content: View>: View {
             // Create lifecycle observer when coordinator appears
             // This will auto-unregister the manager when coordinator is deallocated
             if lifecycleObserver == nil {
+                // This is a FRESH appearance - the view was truly destroyed and recreated
+                // (not just a struct recreation by SwiftUI during rendering)
+                
+                // If the manager has stale pushed views, it's a zombie - reset it
+                if !navigationManager.rootPushPath.isEmpty {
+                    navigationManager.log("🧟 Fresh appearance with stale navigation stack detected for key: \(key). Resetting...", level: .info)
+                    navigationManager.reset()
+                    
+                    // Re-register the root view after reset
+                    let typeName = String(describing: Content.self)
+                    let rootItem = NavigationItem(
+                        id: UUID(),
+                        viewTypeName: typeName,
+                        type: .push,
+                        location: .root
+                    )
+                    navigationManager.fullNavigationHistory.append(rootItem)
+                }
+                
                 lifecycleObserver = CoordinatorLifecycleObserver(key: key)
             }
         }
