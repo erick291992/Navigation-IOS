@@ -9,7 +9,6 @@ import SwiftUI
 struct SheetNavigationContainer: View {
     let context: ModalContext
     @Bindable var navigationManager: NavigationManager
-    let hideDefaultBackButton: Bool
     let backgroundColor: Color?
 
     @State private var currentID: UUID?
@@ -17,12 +16,10 @@ struct SheetNavigationContainer: View {
     init(
         context: ModalContext,
         navigationManager: NavigationManager,
-        hideDefaultBackButton: Bool = false,
         backgroundColor: Color? = nil
     ) {
         self.context = context
         self.navigationManager = navigationManager
-        self.hideDefaultBackButton = hideDefaultBackButton
         self.backgroundColor = backgroundColor
     }
 
@@ -37,7 +34,6 @@ struct SheetNavigationContainer: View {
                 .navigationDestination(for: PushContext.self) { pushContext in
                     pushContext.makeView()
                         .environment(\.navigationManager, navigationManager)
-                        .navigationBarBackButtonHidden(hideDefaultBackButton)
                 }
         }
         
