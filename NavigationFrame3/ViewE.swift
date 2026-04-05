@@ -22,7 +22,7 @@ struct ViewE: View {
                 navigationManager.dismissTo(ViewC.self)
             }
             Button("Dismiss tab") {
-                NavigationManagerRegistry.shared.manager(for: "tab2")?.dismissSheet()
+                NavigationManagerRegistry.shared.manager(forCustomKey: "tab2")?.dismissSheet()
             }
             
             Button("Dismiss stack") {

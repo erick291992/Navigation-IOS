@@ -116,7 +116,7 @@ struct ViewD: View {
     }
 
     private func routeToViewE() {
-        if let manager = NavigationManagerRegistry.shared.manager(for: "tab2") {
+        if let manager = NavigationManagerRegistry.shared.manager(forCustomKey: "tab2") {
             manager.presentSheet {
                 ViewE()
             }
