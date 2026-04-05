@@ -1,23 +1,25 @@
 import SwiftUI
 import PhotosUI
 
-/// The main entry point for the Universal Media Picker.
+/// The main entry point for the Universal Media Picker (Crop Engine).
 public struct UniversalMediaPicker: View {
     let configuration: MediaPickerConfiguration
     let onCompletion: ([MediaItem]) -> Void
     let onCancel: () -> Void
+    let onGoBack: (() -> Void)? // Optional: Return to selection grid
     
     @State private var viewModel: MediaPickerViewModel
-    @State private var selection: [PhotosPickerItem] = []
     
     public init(
         configuration: MediaPickerConfiguration,
         onCompletion: @escaping ([MediaItem]) -> Void,
-        onCancel: @escaping () -> Void
+        onCancel: @escaping () -> Void,
+        onGoBack: (() -> Void)? = nil
     ) {
         self.configuration = configuration
         self.onCompletion = onCompletion
         self.onCancel = onCancel
+        self.onGoBack = onGoBack
         self._viewModel = State(initialValue: MediaPickerViewModel(
             configuration: configuration,
             onCompletion: onCompletion,
@@ -26,173 +28,80 @@ public struct UniversalMediaPicker: View {
     }
     
     public var body: some View {
-        NavigationStack {
-            ZStack {
-                Color(.systemBackground).ignoresSafeArea()
+        ZStack {
+            Color(.systemBackground).ignoresSafeArea()
+            
+            switch viewModel.state.flowState {
+            case .idle:
+                // If items are already present, we should transition to processing
+                // This is handled by the initial selection trigger in the parent/modifier
+                Color.clear
+                .onAppear {
+                    // Logic to handle items if they were passed in (Headless mode)
+                    if !viewModel.state.items.isEmpty && viewModel.state.flowState == .idle {
+                        // Handled by VM logic usually
+                    }
+                }
                 
-                switch viewModel.state.flowState {
-                case .idle:
-                    SelectionStage(
-                        viewModel: viewModel,
-                        selection: $selection,
-                        configuration: configuration
-                    )
-                    
-                case .processing:
-                    ProcessingOverlay()
-                    
-                case .camera:
-                    CameraPicker(
-                        onCapture: { image in
-                            viewModel.trigger(.didCapture(image))
+            case .processing:
+                ProcessingOverlay()
+                
+            case .camera:
+                CameraPicker(
+                    onCapture: { image in
+                        viewModel.trigger(.didCapture(image))
+                    },
+                    onCancel: {
+                        viewModel.trigger(.didCancelCrop)
+                    }
+                )
+                .ignoresSafeArea()
+                
+            case .cropping(let index, let total):
+                if index < viewModel.state.items.count {
+                    let item = viewModel.state.items[index]
+                    CropView(
+                        item: item,
+                        crop: configuration.crop,
+                        style: configuration.style,
+                        subtitle: "\(index + 1) of \(total)",
+                        thumbnails: viewModel.state.items.map { $0.thumbnail },
+                        activeIndex: index,
+                        croppedIndices: Set(viewModel.state.croppedResults.keys),
+                        onJump: { targetIndex in
+                            viewModel.jumpTo(index: targetIndex)
                         },
-                        onCancel: {
-                            viewModel.trigger(.didCancelCrop)
-                        }
-                    )
-                    .ignoresSafeArea()
-                    
-                case .cropping(let index, let total):
-                    if index < viewModel.state.items.count {
-                        let item = viewModel.state.items[index]
-                        CropView(
-                            item: item,
-                            crop: configuration.crop,
-                            style: configuration.style,
-                            subtitle: "\(index + 1) of \(total)",
-                            thumbnails: viewModel.state.items.map { $0.thumbnail },
-                            activeIndex: index,
-                            croppedIndices: Set(viewModel.state.croppedResults.keys),
-                            onJump: { targetIndex in
-                                viewModel.jumpTo(index: targetIndex)
-                            },
-                            onDone: { croppedImage in
-                                // Process cropped image back into a MediaItem
-                                Task {
-                                    let manager = MediaPickerManager.shared
-                                    do {
-                                        let newItem = try await manager.process(croppedImage)
-                                        await MainActor.run {
-                                            viewModel.trigger(.didFinishCrop(newItem))
-                                        }
+                        onDone: { croppedImage in
+                            Task {
+                                let manager = MediaPickerManager.shared
+                                do {
+                                    let newItem = try await manager.process(croppedImage)
+                                    await MainActor.run {
+                                        viewModel.trigger(.didFinishCrop(newItem))
                                     }
                                 }
-                            },
-                            onCancel: {
-                                viewModel.trigger(.didCancelCrop)
                             }
-                        )
-                        .transition(.move(edge: .trailing))
-                        .interactiveDismissDisabled()
-                    }
-                    
-                case .finished:
-                    // Finished is handled by onCompletion in ViewModel, 
-                    // which resets state back to .idle
-                    Color.clear
-                        .onAppear {
-                            // This might not be needed if finalization is triggered in VM
-                        }
-                }
-            }
-            .navigationTitle("Select Media")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    if case .idle = viewModel.state.flowState {
-                        Button("Cancel") {
-                            viewModel.cancel()
-                        }
-                    }
-                }
-            }
-            .onChange(of: selection) { _, newValue in
-                guard !newValue.isEmpty else { return }
-                viewModel.trigger(.didSelect(newValue))
-                selection = [] // Clear immediately for next selection
-            }
-            .onAppear {
-                selection = []
-            }
-        }
-    }
-}
-
-// MARK: - Subviews
-
-private struct SelectionStage: View {
-    var viewModel: MediaPickerViewModel
-    @Binding var selection: [PhotosPickerItem]
-    let configuration: MediaPickerConfiguration
-    
-    var body: some View {
-        VStack {
-            Spacer()
-            
-            VStack(spacing: 16) {
-                // Photo Library Card
-                PhotosPickerView(
-                    selection: $selection,
-                    limit: configuration.selectionLimit,
-                    filter: configuration.allowedTypes,
-                    style: configuration.style
-                )
-                
-                // Camera Card
-                if configuration.showCamera {
-                    Button(action: { viewModel.trigger(.requestCamera) }) {
-                        HStack(spacing: 16) {
-                            // Icon in a circle
-                            ZStack {
-                                Circle()
-                                    .fill(configuration.style.accentColor.opacity(0.1))
-                                    .frame(width: 54, height: 54)
-                                
-                                configuration.style.cameraIcon
-                                    .font(.system(size: 24, weight: .medium))
-                                    .foregroundColor(configuration.style.accentColor)
+                        },
+                        onCancel: {
+                            if let onGoBack = onGoBack {
+                                onGoBack()
+                            } else {
+                                onCancel()
                             }
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(configuration.style.cameraLabel)
-                                    .font(configuration.style.font.weight(.semibold))
-                                    .foregroundColor(.primary)
-                                
-                                Text(configuration.style.cameraSubtitle)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            Spacer()
-                            
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundColor(.secondary)
                         }
-                        .padding(16)
-                        .background(Color(.systemBackground))
-                        .cornerRadius(20)
-                        .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 5)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 20)
-                                .stroke(Color(.systemGray5), lineWidth: 1)
-                        )
-                    }
+                    )
+                    .transition(.move(edge: .trailing))
+                    .interactiveDismissDisabled()
                 }
                 
-                if let error = viewModel.state.errorMessage {
-                    Text(error)
-                        .foregroundColor(.red)
-                        .font(.caption)
-                        .padding(.top, 8)
-                }
+            case .finished:
+                Color.clear
             }
-            .padding(.horizontal, 24)
-            
-            Spacer()
-            Spacer() // Double spacer at bottom for "Instagram" lift
         }
-        .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .onAppear {
+            // If items are passed to the VM (from Tier 3 or Headless), 
+            // the VM should already have them in state.
+        }
     }
 }
 
@@ -200,9 +109,17 @@ private struct ProcessingOverlay: View {
     var body: some View {
         ZStack {
             Color.black.opacity(0.3).ignoresSafeArea()
-            ProgressView("Processing...")
-                .padding()
-                .background(RoundedRectangle(cornerRadius: 12).fill(.ultraThinMaterial))
+            VStack(spacing: 16) {
+                ProgressView()
+                    .tint(.white)
+                    .controlSize(.large)
+                Text("Processing...")
+                    .font(.subheadline.bold())
+                    .foregroundColor(.white)
+            }
+            .padding(30)
+            .background(.ultraThinMaterial)
+            .cornerRadius(24)
         }
     }
 }

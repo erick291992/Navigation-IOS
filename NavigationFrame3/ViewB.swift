@@ -1,12 +1,4 @@
-//
-//  ViewB.swift
-//  NavigationFrame2
-//
-//  Created by Erick Manrique on 5/16/25.
-//
-
 import SwiftUI
-import PhotosUI
 
 struct ViewB: View {
     @Environment(\.navigationManager) var navigationManager: NavigationManager
@@ -18,286 +10,178 @@ struct ViewB: View {
     }
 
     var body: some View {
-        @Bindable var vm = vm
         let _ = print("🎨 ViewB body rendering - rootPushPath count: \(navigationManager.rootPushPath.count)")
         return ZStack {
-            Color.green.opacity(0.8).ignoresSafeArea()
+            // New Sleek Gradient Background
+            LinearGradient(
+                colors: [.green.opacity(0.1), Color(uiColor: .systemBackground)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
             
             ScrollView {
-                VStack(spacing: 20) {
-                    if !vm.pickedItems.isEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 12) {
-                                ForEach(vm.pickedItems) { item in
-                                    Image(uiImage: item.thumbnail)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 80, height: 80)
-                                        .cornerRadius(8)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 8)
-                                                .stroke(Color.white.opacity(0.5), lineWidth: 1)
-                                        )
-                                }
-                            }
-                            .padding(.horizontal)
-                        }
-                        .frame(height: 100)
+                VStack(spacing: 24) {
+                    // Header Area
+                    VStack(spacing: 8) {
+                        Text("🅱️ Navigation Master")
+                            .font(.system(size: 40, weight: .black, design: .rounded))
+                            .foregroundColor(.green.opacity(0.8))
+                        
+                        Text("Original Navigation Testing Ground")
+                            .font(.subheadline.bold())
+                            .foregroundColor(.secondary)
                     }
+                    .padding(.top, 40)
                     
-                    Group {
-                        Text("Tier 1: Drop-In View")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        
-                        PickerButton(title: "Square (Drop-In)", icon: "square") {
-                            vm.openPicker(crop: MediaCrop.square)
+                    // Info Card
+                    VStack(spacing: 4) {
+                        Text("Root Stack Count")
+                            .font(.caption2.bold())
+                            .foregroundColor(.secondary)
+                            .textCase(.uppercase)
+                        Text("\(navigationManager.rootPushPath.count)")
+                            .font(.system(size: 48, weight: .bold, design: .monospaced))
+                            .foregroundColor(.green)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color(uiColor: .secondarySystemBackground))
+                    .cornerRadius(24)
+                    .shadow(color: .black.opacity(0.05), radius: 15, x: 0, y: 10)
+                    .padding(.horizontal)
+
+                    // Navigation Actions
+                    VStack(spacing: 12) {
+                        NavigationButton(title: "Present ViewC", icon: "plus.square.on.square", color: .blue) {
+                            navigationManager.presentSheet { ViewC() }
                         }
                         
-                        PickerButton(title: "Freeform (Drop-In)", icon: "pencil.and.outline") {
-                            vm.openPicker(crop: MediaCrop.freeform)
+                        NavigationButton(title: "Full Screen ViewC", icon: "arrow.up.left.and.arrow.down.right", color: .indigo) {
+                            navigationManager.presentFullScreen { ViewC() }
                         }
                         
-                        PickerButton(title: "Multi-Select (Max 3)", icon: "square.stack") {
-                            vm.openPicker(crop: MediaCrop.square, limit: 3)
+                        NavigationButton(title: "Push ViewC", icon: "arrow.right.square", color: .teal) {
+                            navigationManager.push { ViewC() }
                         }
                         
-                        Text("Tier 2: One-Liner Modifier")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Divider().padding(.vertical, 8)
                         
-                        PickerButton(title: "Sleek Pink (Modifier)", icon: "sparkles") {
-                            vm.showModifierPicker = true
+                        NavigationButton(title: "Push ViewB (Recursive)", icon: "arrow.clockwise", color: .green) {
+                            navigationManager.push { ViewB() }
                         }
                         
-                        Text("Tier 3: Headless Engine")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        
-                        // Gallery Button (Headless)
-                        PhotosPicker(selection: $vm.headlessSelection, maxSelectionCount: 3, matching: .images) {
-                            PickerButton(title: "Custom UI (Headless)", icon: "sparkles") { /* Action handled by PhotosPicker */ }
-                        }
-                        .onChange(of: vm.headlessSelection) { _, items in
-                            vm.didSelectHeadless(items)
+                        NavigationButton(title: "Push ViewD", icon: "square.grid.2x2", color: .orange) {
+                            navigationManager.push { ViewD(onDismiss: {}) }
                         }
                         
-                        // Camera Button (Headless)
-                        PickerButton(title: "Custom Camera (Headless)", icon: "camera.fill") {
-                            vm.flowState = .camera
+                        Divider().padding(.vertical, 8)
+    
+                        HStack(spacing: 12) {
+                            QuickAction(title: "Dismiss Sheet", icon: "xmark.circle", color: .red) {
+                                navigationManager.dismissSheet()
+                            }
+                            QuickAction(title: "Dismiss Push", icon: "arrow.left.circle", color: .red) {
+                                navigationManager.dismissPush()
+                            }
+                        }
+                        
+                        NavigationButton(title: "Dismiss back to ViewB", icon: "arrow.uturn.backward", color: .red) {
+                            navigationManager.dismissTo(ViewB.self)
+                        }
+                        
+                        NavigationButton(title: "Show Side Menu", icon: "sidebar.right", color: .primary) {
+                            withAnimation(.spring()) {
+                                isShowingSideMenu = true
+                            }
                         }
                     }
                     .padding(.horizontal)
-                    
-                    Text("🅱️ ViewB")
-                    .font(.largeTitle)
-                
-                    Text("Root Stack Count: \(navigationManager.rootPushPath.count)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-    
-                    Button("Present ViewC") {
-                        navigationManager.presentSheet {
-                            ViewC()
-                        } onDismiss: {
-                            print("🔥 ViewC was dismissed")
-                        }
-                    }
-                    
-                    Button("Present Full Screen ViewC") {
-                        navigationManager.presentFullScreen {
-                            ViewC()
-                        } onDismiss: {
-                            print("🔥 ViewC was dismissed")
-                        }
-                    }
-                    
-                    Button("Push ViewC") {
-                        navigationManager.push {
-                            ViewC()
-                        } onDismiss: {
-                            print("🔥 Pushed ViewC was dismissed")
-                        }
-                    }
-    
-                    Button("Dismiss Sheet") {
-                        navigationManager.dismissSheet()
-                    }
-                    
-                    Button("Push ViewB") {
-                        navigationManager.push {
-                            ViewB()
-                        } onDismiss: {
-                            print("🔥 Pushed ViewB was dismissed")
-                        }
-                    }
-                    
-                    Button("Push ViewD") {
-                        navigationManager.push {
-                            ViewD()
-                        } onDismiss: {
-                            print("🔥 Pushed ViewD was dismissed")
-                        }
-                    }
-                    
-                    Button("Dismiss stack") {
-                        navigationManager.dismissPush()
-                    }
-                    
-                    Button("Dismiss to ViewB") {
-                        navigationManager.dismissTo(ViewB.self)
-                    }
-                    
-                    Button("Dismiss") {
-                        navigationManager.dismiss()
-                    }
-                    
-                    Button("intent") {
-                        navigationManager.presentSheet(
-                            detents: [.medium, .large],
-                            dragIndicator: .visible
-                        ) {
-                            ViewC()
-                        }
-                    }
-                    
-                    Button("Show Side Menu (ViewD)") {
-                        isShowingSideMenu = true
-                    }
                 }
-                .padding(.vertical)
+                .padding(.bottom, 40)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear {
-            print("👀 ViewB appeared - rootPushPath count: \(navigationManager.rootPushPath.count)")
-        }
-        .onDisappear {
-            print("👋 ViewB disappeared - rootPushPath count: \(navigationManager.rootPushPath.count)")
-        }
-        .onChange(of: navigationManager.rootPushPath.count) { oldCount, newCount in
-            print("📊 ViewB: rootPushPath count changed from \(oldCount) to \(newCount)")
-            print("📊 ViewB: Current rootPushPath: \(navigationManager.rootPushPath.map { $0.viewTypeName })")
-        }
-        
+            
             // Overlay side menu (ViewD) when shown
             if isShowingSideMenu {
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation { isShowingSideMenu = false }
+                    }
+                
                 NavigationCoordinator(
-                    rootView: ViewD(onDismiss: { isShowingSideMenu = false }),
+                    rootView: ViewD(onDismiss: { withAnimation { isShowingSideMenu = false } }),
                     customKey: "SideMenuView"
                 )
                 .transition(.move(edge: .trailing))
                 .zIndex(1)
             }
         }
-        .mediaPicker(
-            isPresented: $vm.showModifierPicker,
-            configuration: .init(crop: .square, style: .pinkSleek),
-            onCompletion: { items in
-                vm.handlePickerResult(items)
-            }
-        )
-        .sheet(isPresented: $vm.showPicker) {
-            UniversalMediaPicker(
-                configuration: .init(
-                    selectionLimit: vm.selectionLimit,
-                    crop: vm.cropMode
-                ),
-                onCompletion: { items in
-                    vm.handlePickerResult(items)
-                },
-                onCancel: {
-                    vm.cancelPicker()
-                }
-            )
-            .id(vm.pickerId) // Use the UUID to force fresh state
-        }
-        .sheet(isPresented: Binding(
-            get: { if case .cropping = vm.flowState { return true } else { return false } },
-            set: { if !$0 { vm.flowState = .idle } }
-        )) {
-            if case .cropping(let index, let total) = vm.flowState, index < vm.headlessItems.count {
-                let item = vm.headlessItems[index]
-                CropView(
-                    item: item,
-                    crop: .freeform,
-                    subtitle: "Image \(index + 1)/\(total)",
-                    thumbnails: vm.headlessItems.map { $0.thumbnail },
-                    activeIndex: index,
-                    croppedIndices: Set(vm.headlessResults.keys),
-                    onJump: { vm.jumpTo(index: $0) },
-                    onDone: { cropped in
-                        vm.handleCropResult(cropped, at: index)
-                    },
-                    onCancel: {
-                        vm.flowState = .idle
-                    }
-                )
-            }
-        }
-        .fullScreenCover(isPresented: Binding(
-            get: { if case .camera = vm.flowState { return true } else { return false } },
-            set: { if !$0 { vm.flowState = .idle } }
-        )) {
-            CameraPicker(
-                onCapture: { image in
-                    vm.handleCameraCapture(image)
-                },
-                onCancel: {
-                    vm.flowState = .idle
-                }
-            )
-            .ignoresSafeArea()
+        .onAppear {
+            print("👀 ViewB appeared")
         }
     }
 }
 
-struct PickerButton: View {
+// MARK: - Subviews
+struct NavigationButton: View {
     let title: String
     let icon: String
+    let color: Color
     let action: () -> Void
     
     var body: some View {
         Button(action: action) {
-            HStack {
-                Circle()
-                    .fill(Color.blue.opacity(0.1))
-                    .frame(width: 32, height: 32)
-                    .overlay(
-                        Image(systemName: icon)
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.blue)
-                    )
+            HStack(spacing: 16) {
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(color)
+                    .frame(width: 44, height: 44)
+                    .background(color.opacity(0.1))
+                    .clipShape(Circle())
                 
                 Text(title)
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.black)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(.primary)
                 
                 Spacer()
                 
                 Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.gray)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.secondary.opacity(0.5))
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(Color.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color(uiColor: .secondarySystemBackground))
             .cornerRadius(16)
-            .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 4)
+            .shadow(color: .black.opacity(0.03), radius: 5, x: 0, y: 2)
         }
+        .buttonStyle(.plain)
     }
 }
 
-
-
-
-//final class ViewBViewModel: ObservableObject {
-//    private let navigationManager = NavigationManager()
-//
-//    func goToC() {
-//        navigationManager.push(view: { ViewC() })
-//    }
-//
-//    func presentD() {
-//        navigationManager.presentSheet(view: { ViewD() })
-//    }
-//}
+struct QuickAction: View {
+    let title: String
+    let icon: String
+    let color: Color
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 20, weight: .bold))
+                Text(title)
+                    .font(.caption.bold())
+                    .foregroundColor(.primary)
+            }
+            .foregroundColor(color) // Icon and other elements
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(color.opacity(0.1))
+            .cornerRadius(16)
+        }
+        .buttonStyle(.plain)
+    }
+}

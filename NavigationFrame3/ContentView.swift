@@ -22,7 +22,7 @@ struct ContentView: View {
                     .tabItem { Label("Tab 1", systemImage: "1.circle") }
                     .tag("tab1")
 
-                NavigationCoordinator(rootView: ViewB(), customKey: "tab2")
+                NavigationCoordinator(rootView: MasterGalleryView(), customKey: "tab2")
                     .tabItem { Label("Tab 2", systemImage: "2.circle") }
                     .tag("tab2")
             }

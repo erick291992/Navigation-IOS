@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import AVFoundation
 
 /// Handles the low-level processing of media assets into Unified MediaItem objects.
 public class MediaPickerManager {
