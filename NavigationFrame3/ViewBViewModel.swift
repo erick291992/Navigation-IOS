@@ -74,6 +74,20 @@ class ViewBViewModel {
         headlessResults = [:]
     }
     
+    func handleCameraCapture(_ image: UIImage) {
+        // In a real app, process this image via MediaPickerManager
+        Task {
+            let manager = MediaPickerManager.shared
+            do {
+                let item = try await manager.process(image)
+                await MainActor.run {
+                    self.headlessItems = [item]
+                    self.flowState = .cropping(index: 0, total: 1)
+                }
+            }
+        }
+    }
+    
     func handleCropResult(_ image: UIImage, at index: Int) {
         Task {
             let processed = try? await MediaPickerEngine.shared.process(image)

@@ -65,6 +65,7 @@ public struct MediaPickerState {
     public enum FlowState: Equatable {
         case idle
         case processing
+        case camera
         case cropping(index: Int, total: Int)
         case finished
     }

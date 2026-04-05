@@ -53,15 +53,11 @@ public class MediaPickerViewModel {
                 moveToNextUncropped()
             }
             
+        case .requestCamera:
+            state.flowState = .camera
+            
         case .didCancelCrop:
             state.flowState = .idle
-            
-        case .requestCamera:
-            // For now, camera is handled via dedicated Stage in old code, 
-            // but we can just use the state machine.
-            // In linear flow it went selection -> camera -> crop.
-            // For simplicity, we'll keep it as a trigger that starts a flow.
-            break
             
         case .requestLibrary:
             state.flowState = .idle

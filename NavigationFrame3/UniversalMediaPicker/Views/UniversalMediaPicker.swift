@@ -41,6 +41,17 @@ public struct UniversalMediaPicker: View {
                 case .processing:
                     ProcessingOverlay()
                     
+                case .camera:
+                    CameraPicker(
+                        onCapture: { image in
+                            viewModel.trigger(.didCapture(image))
+                        },
+                        onCancel: {
+                            viewModel.trigger(.didCancelCrop)
+                        }
+                    )
+                    .ignoresSafeArea()
+                    
                 case .cropping(let index, let total):
                     if index < viewModel.state.items.count {
                         let item = viewModel.state.items[index]

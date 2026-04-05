@@ -58,7 +58,7 @@ struct ViewB: View {
                             vm.openPicker(crop: MediaCrop.freeform)
                         }
                         
-                        PickerButton(title: "Multi-Select (Max 3)", icon: "stack") {
+                        PickerButton(title: "Multi-Select (Max 3)", icon: "square.stack") {
                             vm.openPicker(crop: MediaCrop.square, limit: 3)
                         }
                         
@@ -74,24 +74,17 @@ struct ViewB: View {
                             .font(.headline)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         
+                        // Gallery Button (Headless)
                         PhotosPicker(selection: $vm.headlessSelection, maxSelectionCount: 3, matching: .images) {
-                            HStack {
-                                Circle()
-                                    .fill(Color.orange.opacity(0.1))
-                                    .frame(width: 32, height: 32)
-                                    .overlay(Image(systemName: "cpu").foregroundColor(.orange))
-                                Text("Custom UI (Headless)")
-                                    .foregroundColor(.black)
-                                Spacer()
-                                Image(systemName: "chevron.right").font(.caption).foregroundColor(.gray)
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .background(Color.white)
-                            .cornerRadius(16)
+                            PickerButton(title: "Custom UI (Headless)", icon: "sparkles") { /* Action handled by PhotosPicker */ }
                         }
                         .onChange(of: vm.headlessSelection) { _, items in
                             vm.didSelectHeadless(items)
+                        }
+                        
+                        // Camera Button (Headless)
+                        PickerButton(title: "Custom Camera (Headless)", icon: "camera.fill") {
+                            vm.flowState = .camera
                         }
                     }
                     .padding(.horizontal)
@@ -240,6 +233,20 @@ struct ViewB: View {
                     }
                 )
             }
+        }
+        .fullScreenCover(isPresented: Binding(
+            get: { if case .camera = vm.flowState { return true } else { return false } },
+            set: { if !$0 { vm.flowState = .idle } }
+        )) {
+            CameraPicker(
+                onCapture: { image in
+                    vm.handleCameraCapture(image)
+                },
+                onCancel: {
+                    vm.flowState = .idle
+                }
+            )
+            .ignoresSafeArea()
         }
     }
 }
