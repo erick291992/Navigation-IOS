@@ -27,6 +27,7 @@ public class MediaPickerViewModel {
     
     public init(
         configuration: MediaPickerConfiguration,
+        initialItems: [MediaItem] = [],
         manager: MediaPickerManager = .shared,
         onCompletion: @escaping ([MediaItem]) -> Void,
         onCancel: @escaping () -> Void
@@ -35,6 +36,11 @@ public class MediaPickerViewModel {
         self.manager = manager
         self.onCompletion = onCompletion
         self.onCancel = onCancel
+        self.state.items = initialItems
+        
+        if !initialItems.isEmpty {
+            self.moveToNextUncropped()
+        }
     }
     
     // MARK: - Action Handler

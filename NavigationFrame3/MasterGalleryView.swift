@@ -29,29 +29,48 @@ struct MasterGalleryView: View {
                     
                     // Elite Integration Section
                     VStack(spacing: 24) {
-                        Text("🛠️ Integration Tiers")
-                            .font(.system(size: 24, weight: .bold, design: .rounded))
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Text("💎 Unified Creator (V3)")
+                            .font(.system(size: 24, weight: .black, design: .rounded))
+                            .foregroundColor(.primary)
+                            .padding(.top, 24)
                         
-                        VStack(spacing: 12) {
-                            // TIER 1 & 2: Frictionless Modifier Flow
-                            MediaPickerButton(title: "Tier 1 & 2: Instant Picker", icon: "sparkles") {
-                                vm.showModifierPicker = true
+                        MediaPickerButton(title: "Open Elite Picker", icon: "sparkles") {
+                            vm.showModifierPicker = true
+                        }
+                        
+                        Divider().padding(.vertical, 8)
+                        
+                        Text("🛠️ Modular Building Blocks (Tier 3)")
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                            .foregroundColor(.secondary)
+                            .padding(.top, 16)
+                        
+                        HStack(spacing: 16) {
+                            PhotosPicker(
+                                selection: $vm.headlessSelection,
+                                maxSelectionCount: 3,
+                                matching: .images
+                            ) {
+                                MediaPickerNavCard(
+                                    title: "Custom Library",
+                                    subtitle: "Headless selection",
+                                    icon: "photo.on.rectangle",
+                                    color: .blue,
+                                    action: {} // Handled by PhotosPicker overlay
+                                )
                             }
-                            .tint(.blue)
+                            .buttonStyle(.plain) // Prevent double-tap highlights
+                            .onChange(of: vm.headlessSelection) { _, newValue in
+                                vm.didSelectHeadless(newValue)
+                            }
                             
-                            // TIER 3: Custom Headless Flow
-                            HStack(spacing: 12) {
-                                PhotosPicker(selection: $vm.headlessSelection, maxSelectionCount: 3, matching: .images) {
-                                    MediaPickerButtonLabel(title: "Tier 3: Custom Library", icon: "photo.stack")
-                                }
-                                .onChange(of: vm.headlessSelection) { _, items in
-                                    vm.didSelectHeadless(items)
-                                }
-                                
-                                MediaPickerButton(title: "Tier 3: Custom Camera", icon: "camera.fill") {
-                                    vm.flowState = .camera
-                                }
+                            MediaPickerNavCard(
+                                title: "Custom Camera",
+                                subtitle: "Raw viewfinder",
+                                icon: "camera",
+                                color: .blue
+                            ) {
+                                vm.flowState = .camera
                             }
                         }
                     }

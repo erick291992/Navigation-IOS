@@ -12,6 +12,7 @@ public struct UniversalMediaPicker: View {
     
     public init(
         configuration: MediaPickerConfiguration,
+        initialItems: [MediaItem] = [],
         onCompletion: @escaping ([MediaItem]) -> Void,
         onCancel: @escaping () -> Void,
         onGoBack: (() -> Void)? = nil
@@ -22,6 +23,7 @@ public struct UniversalMediaPicker: View {
         self.onGoBack = onGoBack
         self._viewModel = State(initialValue: MediaPickerViewModel(
             configuration: configuration,
+            initialItems: initialItems,
             onCompletion: onCompletion,
             onCancel: onCancel
         ))
