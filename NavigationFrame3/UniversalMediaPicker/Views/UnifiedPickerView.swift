@@ -3,7 +3,7 @@ import PhotosUI
 import AVFoundation
 
 /// The "Gold Standard" entry point for media creation.
-/// Merges a live camera preview with a quick-access library strip.
+/// Merges a live camera preview with a quick-access library strip and video recording.
 public struct UnifiedPickerView: View {
     let configuration: MediaPickerConfiguration
     let onCompletion: ([MediaItem]) -> Void
@@ -16,8 +16,10 @@ public struct UnifiedPickerView: View {
     // Internal States
     @State private var selection: [PhotosPickerItem] = []
     @State private var isShowingSystemPicker = false
-    @State private var capturedImage: UIImage?
     @State private var selectedMode: CreatorMode = .photo
+    @State private var isRecording = false
+    @State private var previewAsset: PHAsset?
+    @State private var previewImage: UIImage?
     
     enum CreatorMode {
         case library, photo, video
@@ -28,18 +30,31 @@ public struct UnifiedPickerView: View {
             Color.black.ignoresSafeArea()
             
             VStack(spacing: 0) {
-                // MARK: - Top 60%: Live Viewfinder
+                // MARK: - Top Viewfinder / Previewer
                 ZStack {
-                    if selectedMode == .photo || selectedMode == .video {
-                        CameraPreviewView()
+                    if selectedMode == .library {
+                        // Library Preview: Show the large version of the selected asset
+                        LibraryPreviewer(asset: previewAsset ?? photoKit.recentAssets.first)
                             .transition(.opacity)
                     } else {
-                        // Library mode: Show a blurred or dark background
-                        Color.black.overlay(
-                            Text("Select From Library")
-                                .font(.system(size: 14, weight: .bold, design: .rounded))
-                                .foregroundColor(.white.opacity(0.4))
-                        )
+                        // Camera Feed (Photo/Video)
+                        CameraPreviewView()
+                            .transition(.opacity)
+                    }
+                    
+                    // Mode Overlay (Recording indicator)
+                    if isRecording {
+                        VStack {
+                            HStack {
+                                Circle().fill(.red).frame(width: 8, height: 8)
+                                Text("REC").font(.caption.bold()).foregroundColor(.white)
+                            }
+                            .padding(8)
+                            .background(Color.black.opacity(0.4))
+                            .cornerRadius(8)
+                            .padding(.top, 20)
+                            Spacer()
+                        }
                     }
                     
                     // Exit Button
@@ -60,88 +75,98 @@ public struct UnifiedPickerView: View {
                 .background(Color.black)
                 .clipped()
                 
-                // MARK: - Bottom 40%: Controls & Library
-                VStack(spacing: 24) {
-                    // Recent Photos Strip
+                // MARK: - Bottom Control Panel
+                VStack(spacing: 20) {
+                    // Recent Assets Strip
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Text("RECENT")
-                                .font(.system(size: 12, weight: .black, design: .rounded))
-                                .foregroundColor(.white.opacity(0.6))
-                                .tracking(1.0)
+                                .font(.system(size: 11, weight: .black, design: .rounded))
+                                .foregroundColor(.white.opacity(0.5))
+                                .tracking(1.5)
                             Spacer()
                             Button("ALL PHOTOS") {
                                 isShowingSystemPicker = true
                             }
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.system(size: 11, weight: .bold))
                             .foregroundColor(.blue)
                         }
                         .padding(.horizontal, 20)
                         
                         ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
+                            HStack(spacing: 4) {
                                 ForEach(photoKit.recentAssets, id: \.localIdentifier) { asset in
                                     AssetThumbnailView(asset: asset) { image in
-                                        handleSelection(image)
+                                        if selectedMode == .library {
+                                            self.previewAsset = asset
+                                        } else {
+                                            handleSelection(image)
+                                        }
                                     }
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .stroke(Color.blue, lineWidth: previewAsset?.localIdentifier == asset.localIdentifier ? 3 : 0)
+                                    )
                                 }
                             }
                             .padding(.horizontal, 20)
                         }
-                        .frame(height: 80)
+                        .frame(height: 70)
                     }
-                    .padding(.top, 20)
+                    .padding(.top, 16)
                     
-                    // Shutter & Mode Bar
-                    VStack(spacing: 32) {
+                    // MAIN ACTION AREA
+                    VStack(spacing: 24) {
                         // Shutter
-                        Button(action: capturePhoto) {
-                            ZStack {
-                                Circle()
-                                    .stroke(Color.white, lineWidth: 4)
-                                    .frame(width: 80, height: 80)
-                                
-                                Circle()
-                                    .fill(Color.white)
-                                    .frame(width: 68, height: 68)
-                            }
+                        Button(action: onShutterTab) {
+                            shutterView
                         }
                         .buttonStyle(ScaleButtonStyle())
                         
                         // Mode Switcher
-                        HStack(spacing: 40) {
-                            ModeButton(title: "LIBRARY", isSelected: selectedMode == .library) {
-                                withAnimation { selectedMode = .library }
-                            }
-                            ModeButton(title: "PHOTO", isSelected: selectedMode == .photo) {
-                                withAnimation { selectedMode = .photo }
-                            }
-                            ModeButton(title: "VIDEO", isSelected: selectedMode == .video) {
-                                withAnimation { selectedMode = .video }
+                        HStack(spacing: 30) {
+                            ForEach([CreatorMode.library, .photo, .video], id: \.self) { mode in
+                                ModeButton(title: modeTitle(mode), isSelected: selectedMode == mode) {
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                        selectedMode = mode
+                                    }
+                                }
                             }
                         }
                         .padding(.bottom, 20)
                     }
                 }
                 .background(Color.black)
-                .frame(height: 380)
+                .frame(height: 340)
             }
         }
         .onAppear {
             photoKit.fetchRecentAssets()
-            if selectedMode != .library {
-                cameraService.setup()
-            }
+            cameraService.setup()
         }
         .photosPicker(isPresented: $isShowingSystemPicker, selection: $selection)
         .onChange(of: selection) { _, items in
             if !items.isEmpty {
                 Task {
-                    let processed = try? await MediaPickerManager.shared.process(items)
-                    if let results = processed {
+                    if let results = try? await MediaPickerManager.shared.process(items) {
                         onCompletion(results)
                     }
                 }
+            }
+        }
+    }
+    
+    // MARK: - Actions
+    
+    private func onShutterTab() {
+        switch selectedMode {
+        case .photo:
+            capturePhoto()
+        case .video:
+            toggleRecording()
+        case .library:
+            if let asset = previewAsset ?? photoKit.recentAssets.first {
+                handleAsset(asset)
             }
         }
     }
@@ -154,6 +179,11 @@ public struct UnifiedPickerView: View {
         }
     }
     
+    private func toggleRecording() {
+        isRecording.toggle()
+        // Here we would call cameraService.start/stopRecording()
+    }
+    
     private func handleSelection(_ image: UIImage) {
         Task {
             if let item = try? await MediaPickerManager.shared.process(image) {
@@ -161,58 +191,76 @@ public struct UnifiedPickerView: View {
             }
         }
     }
+    
+    private func handleAsset(_ asset: PHAsset) {
+        // Fetch high-res image and hand off to completion
+        PhotoKitService.shared.loadThumbnail(for: asset, size: CGSize(width: 2000, height: 2000)) { image in
+            if let image = image {
+                handleSelection(image)
+            }
+        }
+    }
+    
+    // MARK: - Components
+    
+    private var shutterView: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.white, lineWidth: 4)
+                .frame(width: 72, height: 72)
+            
+            if selectedMode == .video {
+                RoundedRectangle(cornerRadius: isRecording ? 4 : 30)
+                    .fill(Color.red)
+                    .frame(width: isRecording ? 30 : 60, height: isRecording ? 30 : 60)
+                    .animation(.spring(), value: isRecording)
+            } else {
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 60, height: 60)
+            }
+        }
+    }
+    
+    private func modeTitle(_ mode: CreatorMode) -> String {
+        switch mode {
+        case .library: return "LIBRARY"
+        case .photo: return "PHOTO"
+        case .video: return "VIDEO"
+        }
+    }
 }
 
-// MARK: - Helper Views
-
-struct AssetThumbnailView: View {
-    let asset: PHAsset
-    let onTap: (UIImage) -> Void
-    @State private var thumbnail: UIImage?
+// MARK: - Library Previewer
+struct LibraryPreviewer: View {
+    let asset: PHAsset?
+    @State private var image: UIImage?
     
     var body: some View {
-        Group {
-            if let thumbnail = thumbnail {
-                Image(uiImage: thumbnail)
+        ZStack {
+            if let image = image {
+                Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
-                    .frame(width: 80, height: 80)
-                    .cornerRadius(8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
-                    .onTapGesture { onTap(thumbnail) }
             } else {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.white.opacity(0.1))
-                    .frame(width: 80, height: 80)
+                Color.black
+                ProgressView().tint(.white)
             }
+        }
+        .onChange(of: asset) { _, newValue in
+            loadImage(for: newValue)
         }
         .onAppear {
-            PhotoKitService.shared.loadThumbnail(for: asset, size: CGSize(width: 200, height: 200)) { image in
-                self.thumbnail = image
-            }
+            loadImage(for: asset)
         }
     }
-}
-
-struct ModeButton: View {
-    let title: String
-    let isSelected: Bool
-    let action: () -> Void
     
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 13, weight: .black, design: .rounded))
-                .foregroundColor(isSelected ? .white : .white.opacity(0.4))
-                .tracking(1.5)
+    private func loadImage(for asset: PHAsset?) {
+        guard let asset = asset else { return }
+        PhotoKitService.shared.loadThumbnail(for: asset, size: CGSize(width: 1000, height: 1000)) { img in
+            self.image = img
         }
-    }
-}
-
-struct ScaleButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.9 : 1.0)
-            .animation(.spring(), value: configuration.isPressed)
     }
 }

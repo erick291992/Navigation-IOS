@@ -11,23 +11,36 @@ public class PhotoKitService: ObservableObject {
     private init() {}
     
     /// Requests permission and fetches the last X assets.
-    public func fetchRecentAssets(limit: Int = 20) {
-        PHPhotoLibrary.requestAuthorization(for: .readWrite) { [weak self] status in
-            guard status == .authorized || status == .limited else { return }
-            
-            let fetchOptions = PHFetchOptions()
-            fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-            fetchOptions.fetchLimit = limit
-            
-            let result = PHAsset.fetchAssets(with: .image, options: fetchOptions)
-            var assets: [PHAsset] = []
-            result.enumerateObjects { asset, _, _ in
-                assets.append(asset)
+    public func fetchRecentAssets(limit: Int = 30) {
+        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        
+        switch status {
+        case .authorized, .limited:
+            self.performFetch(limit: limit)
+        case .notDetermined:
+            PHPhotoLibrary.requestAuthorization(for: .readWrite) { newStatus in
+                if newStatus == .authorized || newStatus == .limited {
+                    self.performFetch(limit: limit)
+                }
             }
-            
-            DispatchQueue.main.async {
-                self?.recentAssets = assets
-            }
+        default:
+            print("⚠️ Photo Library access denied")
+        }
+    }
+    
+    private func performFetch(limit: Int) {
+        let fetchOptions = PHFetchOptions()
+        fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        fetchOptions.fetchLimit = limit
+        
+        let result = PHAsset.fetchAssets(with: .image, options: fetchOptions)
+        var assets: [PHAsset] = []
+        result.enumerateObjects { asset, _, _ in
+            assets.append(asset)
+        }
+        
+        DispatchQueue.main.async {
+            self.recentAssets = assets
         }
     }
     
