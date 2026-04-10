@@ -7,7 +7,7 @@ import Observation
 public enum MediaPickerAction {
     case didSelect([PhotosPickerItem])
     case didCapture(UIImage)
-    case didFinishCrop(MediaItem)
+    case didFinishCrop(item: MediaItem, index: Int)
     case didCancelCrop
     case requestCamera
     case requestLibrary
@@ -52,12 +52,10 @@ public class MediaPickerViewModel {
         case .didCapture(let image):
             handleCameraCapture(image)
             
-        case .didFinishCrop(let item):
-            if case .cropping(let index, _) = state.flowState {
-                state.croppedResults[index] = item.thumbnail
-                // Auto-advance to next uncropped or finish
-                moveToNextUncropped()
-            }
+        case .didFinishCrop(let item, let index):
+            state.croppedResults[index] = item.thumbnail
+            // Auto-advance to next uncropped or finish
+            moveToNextUncropped()
             
         case .requestCamera:
             state.flowState = .camera

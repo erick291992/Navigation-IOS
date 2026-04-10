@@ -27,12 +27,9 @@ public class MediaPickerManager {
         // Generate high-quality thumbnail
         let thumbnail = generateThumbnail(for: image)
         
-        return MediaItem(
-            data: data,
-            thumbnail: thumbnail,
-            contentType: .image,
-            originalURL: nil
-        )
+        let mediaItem = MediaItem(data: data, thumbnail: thumbnail, contentType: .image, originalURL: nil)
+        MediaHistoryManager.shared.addToHistory([mediaItem])
+        return mediaItem
     }
     
     /// Processes an array of PhotosPickerItems into MediaItems.
@@ -53,21 +50,14 @@ public class MediaPickerManager {
         
         let thumbnail = generateThumbnail(for: image)
         
-        return MediaItem(
-            data: data,
-            thumbnail: thumbnail,
-            contentType: .image,
-            originalURL: nil
-        )
+        let mediaItem = MediaItem(data: data, thumbnail: thumbnail, contentType: .image, originalURL: nil)
+        MediaHistoryManager.shared.addToHistory([mediaItem])
+        return mediaItem
     }
     
     // MARK: - Private Helpers
     
     private func processVideo(_ item: PhotosPickerItem) async throws -> MediaItem {
-        // For videos, we need the file URL to generate a thumbnail and get the data
-        // Note: In a production app, we'd use PHAsset to get the URL more reliably, 
-        // but loadTransferable(type: URL.self) works for the system picker results.
-        
         guard let movie = try await item.loadTransferable(type: VideoPickerTransferable.self) else {
             throw MediaPickerError.loadFailed
         }
@@ -83,12 +73,9 @@ public class MediaPickerManager {
         let cgImage = try imageGenerator.copyCGImage(at: .zero, actualTime: nil)
         let thumbnail = UIImage(cgImage: cgImage)
         
-        return MediaItem(
-            data: data,
-            thumbnail: thumbnail,
-            contentType: .video,
-            originalURL: url
-        )
+        let mediaItem = MediaItem(data: data, thumbnail: thumbnail, contentType: .video, originalURL: url)
+        MediaHistoryManager.shared.addToHistory([mediaItem])
+        return mediaItem
     }
     
     private func generateThumbnail(for image: UIImage) -> UIImage {

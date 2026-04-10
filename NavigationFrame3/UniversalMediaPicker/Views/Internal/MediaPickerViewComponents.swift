@@ -1,4 +1,5 @@
 import SwiftUI
+import Photos
 
 // These components are used across the UniversalMediaPicker demos and internal views.
 
@@ -126,5 +127,150 @@ struct MediaPickerNavCard: View {
             .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 5)
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - PhotoKit & Camera Helpers
+
+struct AssetThumbnailView: View {
+    let asset: PHAsset
+    var size: CGFloat = 70
+    var cornerRadius: CGFloat = 6
+    let onTap: (UIImage) -> Void
+    
+    @State private var thumbnail: UIImage?
+    
+    var body: some View {
+        ZStack {
+            if let thumbnail = thumbnail {
+                Image(uiImage: thumbnail)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: size, height: size)
+                    .cornerRadius(cornerRadius)
+                    .clipped()
+                    .onTapGesture { onTap(thumbnail) }
+            } else {
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .fill(Color.white.opacity(0.1))
+                    .frame(width: size, height: size)
+            }
+        }
+        .onAppear {
+            PhotoKitService.shared.loadThumbnail(for: asset, size: CGSize(width: size * 2, height: size * 2)) { image in
+                self.thumbnail = image
+            }
+        }
+    }
+}
+
+struct ScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.9 : 1.0)
+            .animation(.spring(), value: configuration.isPressed)
+    }
+}
+
+struct ModeButton: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Text(title)
+                    .font(.system(size: 11, weight: .black, design: .rounded))
+                    .foregroundColor(isSelected ? .white : .white.opacity(0.4))
+                    .tracking(1.2)
+                
+                Circle()
+                    .fill(isSelected ? Color.white : Color.clear)
+                    .frame(width: 4, height: 4)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct PermissionNeededView: View {
+    enum PermissionType { case library, camera }
+    let type: PermissionType
+    
+    var body: some View {
+        VStack(spacing: 24) {
+            Image(systemName: type == .library ? "photo.on.rectangle.angled" : "camera.shutter.button")
+                .font(.system(size: 80))
+                .foregroundStyle(.linearGradient(colors: [.purple, .orange, .yellow], startPoint: .topLeading, endPoint: .bottomTrailing))
+            
+            VStack(spacing: 8) {
+                Text(type == .library ? "Allow Access to Photos" : "Allow Access to Camera")
+                    .font(.title2.bold())
+                Text(type == .library ? "This lets you share photos from your library." : "This lets you take photos and record videos.")
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+            }
+            
+            Button("Open Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+            .font(.headline.bold())
+            .foregroundColor(.blue)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black)
+        .foregroundColor(.white)
+    }
+}
+
+struct LibraryPreviewer: View {
+    let asset: PHAsset?
+    @State private var image: UIImage?
+    
+    var body: some View {
+        ZStack {
+            if let image = image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+            } else {
+                Color.black
+                ProgressView().tint(.white)
+            }
+        }
+        .onChange(of: asset) { _, newValue in loadImage(for: newValue) }
+        .onAppear { loadImage(for: asset) }
+    }
+    
+    private func loadImage(for asset: PHAsset?) {
+        guard let asset = asset else { return }
+        PhotoKitService.shared.loadThumbnail(for: asset, size: CGSize(width: 1000, height: 1000)) { img in
+            self.image = img
+        }
+    }
+}
+
+struct HistoryPreviewer: View {
+    let item: MediaItem?
+    
+    var body: some View {
+        ZStack {
+            if let item = item {
+                Image(uiImage: item.thumbnail)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+            } else {
+                Color.black
+            }
+        }
     }
 }

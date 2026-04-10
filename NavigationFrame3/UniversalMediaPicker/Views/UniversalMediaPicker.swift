@@ -8,6 +8,9 @@ public struct UniversalMediaPicker: View {
     let onCancel: () -> Void
     let onGoBack: (() -> Void)? // Optional: Return to selection grid
     
+    // View state
+    @State private var containerSize: CGSize = .zero
+    @State private var isProcessing: Bool = false
     @State private var viewModel: MediaPickerViewModel
     
     public init(
@@ -79,7 +82,7 @@ public struct UniversalMediaPicker: View {
                                 do {
                                     let newItem = try await manager.process(croppedImage)
                                     await MainActor.run {
-                                        viewModel.trigger(.didFinishCrop(newItem))
+                                        viewModel.trigger(.didFinishCrop(item: newItem, index: index))
                                     }
                                 }
                             }
@@ -92,6 +95,7 @@ public struct UniversalMediaPicker: View {
                             }
                         }
                     )
+                    .id(index) // CRITICAL: Reset state for each index
                     .transition(.move(edge: .trailing))
                     .interactiveDismissDisabled()
                 }

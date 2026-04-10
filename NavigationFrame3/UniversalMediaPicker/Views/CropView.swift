@@ -27,6 +27,7 @@ public struct CropView: View {
     
     // View state
     @State private var containerSize: CGSize = .zero
+    @State private var isProcessing: Bool = false
     
     public init(
         item: MediaItem, 
@@ -73,11 +74,19 @@ public struct CropView: View {
                 }
                 
                 Spacer()
-                Button(croppedIndices.count == (thumbnails?.count ?? 1) ? "Done" : "Next") {
+                Button(action: {
+                    isProcessing = true
                     renderCroppedImage()
+                }) {
+                    if isProcessing {
+                        ProgressView().tint(style.accentColor)
+                    } else {
+                        Text(croppedIndices.count == (thumbnails?.count ?? 1) ? "Done" : "Next")
+                    }
                 }
                 .font(style.font.bold())
                 .foregroundColor(style.accentColor)
+                .disabled(isProcessing)
             }
             .padding()
             .background(style.toolbarColor)

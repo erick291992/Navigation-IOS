@@ -13,11 +13,41 @@ public struct MediaPickerStyle {
     public var cameraSubtitle: String
     public var doneButtonStyle: DoneButtonStyle
     public var font: Font
+    public var gridStyle: GridStyle
     
     public enum DoneButtonStyle {
         case capsule
         case text
         case filled
+    }
+
+    public struct GridStyle {
+        public var galleryMode: GalleryMode
+        public var columnCount: Int
+        public var spacing: CGFloat
+        public var cornerRadius: CGFloat
+        public var selectionIndicator: SelectionIndicator
+        public var showAlbumPicker: Bool
+        public var showVideoDuration: Bool
+
+        public enum GalleryMode {
+            case grid    // Option A: Custom PhotoKit grid (Instagram-style)
+            case native  // Option B: Apple's native PhotosPicker (lean)
+        }
+
+        public enum SelectionIndicator {
+            case numbered, checkmark, none
+        }
+
+        public static let `default` = GridStyle(
+            galleryMode: .grid,
+            columnCount: 4,
+            spacing: 1,
+            cornerRadius: 0,
+            selectionIndicator: .numbered,
+            showAlbumPicker: true,
+            showVideoDuration: true
+        )
     }
     
     public init(
@@ -31,7 +61,8 @@ public struct MediaPickerStyle {
         cameraLabel: String = "Take Photo",
         cameraSubtitle: String = "Capture a new moment",
         doneButtonStyle: DoneButtonStyle = .text,
-        font: Font = .body
+        font: Font = .body,
+        gridStyle: GridStyle = .default
     ) {
         self.accentColor = accentColor
         self.backgroundColor = backgroundColor
@@ -44,6 +75,7 @@ public struct MediaPickerStyle {
         self.cameraSubtitle = cameraSubtitle
         self.doneButtonStyle = doneButtonStyle
         self.font = font
+        self.gridStyle = gridStyle
     }
     
     public static let `default` = MediaPickerStyle()

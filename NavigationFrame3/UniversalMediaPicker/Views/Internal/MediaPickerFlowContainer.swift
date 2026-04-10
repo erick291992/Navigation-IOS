@@ -19,21 +19,23 @@ struct MediaPickerFlowContainer: View {
         ZStack {
             Color.black.ignoresSafeArea()
             
-            switch currentStage {
-            case .select:
-                UnifiedPickerView(
-                    configuration: configuration,
-                    onCompletion: { items in
-                        self.selectedItems = items
-                        withAnimation {
-                            self.currentStage = .crop
-                        }
-                    },
-                    onCancel: onCancel
-                )
-                .transition(.move(edge: .leading))
-                
-            case .crop:
+            // 1. Base Layer (Always alive to preserve selection & scroll state)
+            UnifiedPickerView(
+                configuration: configuration,
+                onCompletion: { items in
+                    self.selectedItems = items
+                    MediaHistoryManager.shared.addToHistory(items)
+                    withAnimation {
+                        self.currentStage = .crop
+                    }
+                },
+                onCancel: onCancel
+            )
+            // Optional optimization: hide layer accessibility when covered
+            .accessibilityHidden(currentStage == .crop)
+            
+            // 2. Crop Layer (Pushed on top, destroyed when dismissed to ensure fresh state next time)
+            if currentStage == .crop {
                 UniversalMediaPicker(
                     configuration: configuration,
                     initialItems: selectedItems,
@@ -42,10 +44,12 @@ struct MediaPickerFlowContainer: View {
                     onGoBack: {
                         withAnimation {
                             self.currentStage = .select
+                            self.selectedItems = [] // Clear so next trip is fresh
                         }
                     }
                 )
                 .transition(.move(edge: .trailing))
+                .zIndex(1) // Ensure it always animates on top
             }
         }
     }

@@ -7,25 +7,59 @@ public class PhotoKitService: ObservableObject {
     public static let shared = PhotoKitService()
     
     @Published public var recentAssets: [PHAsset] = []
+    @Published public var authStatus: PHAuthorizationStatus = .notDetermined
     
     private init() {}
+    
+    /// Silently updates the authorization status without requesting it.
+    public func updateAuthStatus() {
+        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        DispatchQueue.main.async {
+            self.authStatus = status
+        }
+    }
     
     /// Requests permission and fetches the last X assets.
     public func fetchRecentAssets(limit: Int = 30) {
         let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        
+        DispatchQueue.main.async {
+            self.authStatus = status
+            if status != .authorized && status != .limited {
+                self.recentAssets = []
+            }
+        }
         
         switch status {
         case .authorized, .limited:
             self.performFetch(limit: limit)
         case .notDetermined:
             PHPhotoLibrary.requestAuthorization(for: .readWrite) { newStatus in
+                DispatchQueue.main.async {
+                    self.authStatus = newStatus
+                }
                 if newStatus == .authorized || newStatus == .limited {
                     self.performFetch(limit: limit)
+                } else {
+                    DispatchQueue.main.async {
+                        self.recentAssets = []
+                    }
                 }
             }
         default:
             print("⚠️ Photo Library access denied")
+            DispatchQueue.main.async {
+                self.recentAssets = []
+            }
         }
+    }
+    
+    /// Opens the native Apple limited library picker.
+    public func openLimitedPicker() {
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let rootVC = windowScene.windows.first?.rootViewController else { return }
+        
+        PHPhotoLibrary.shared().presentLimitedLibraryPicker(from: rootVC)
     }
     
     private func performFetch(limit: Int) {

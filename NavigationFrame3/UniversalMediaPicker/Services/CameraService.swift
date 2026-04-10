@@ -8,6 +8,7 @@ public class CameraService: NSObject, ObservableObject {
     
     @Published public var session = AVCaptureSession()
     @Published public var isSessionRunning = false
+    @Published public var isSourceReady = false
     
     private let output = AVCapturePhotoOutput()
     private var completion: ((UIImage?) -> Void)?
@@ -18,6 +19,21 @@ public class CameraService: NSObject, ObservableObject {
     
     /// Sets up the capture session.
     public func setup() {
+        let status = AVCaptureDevice.authorizationStatus(for: .video)
+        
+        DispatchQueue.main.async {
+            self.isSourceReady = (status == .authorized)
+        }
+        
+        guard status == .authorized else {
+            if status == .notDetermined {
+                AVCaptureDevice.requestAccess(for: .video) { authorized in
+                    if authorized { self.setup() }
+                }
+            }
+            return
+        }
+        
         guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else { return }
         
         do {
@@ -47,6 +63,30 @@ public class CameraService: NSObject, ObservableObject {
         self.completion = completion
         let settings = AVCapturePhotoSettings()
         output.capturePhoto(with: settings, delegate: self)
+    }
+    
+    /// Flips between front and back camera.
+    public func flipCamera() {
+        guard !session.inputs.isEmpty else { return }
+        
+        session.beginConfiguration()
+        
+        if let currentInput = session.inputs.first as? AVCaptureDeviceInput {
+            session.removeInput(currentInput)
+            
+            let newPosition: AVCaptureDevice.Position = (currentInput.device.position == .back) ? .front : .back
+            if let newDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: newPosition),
+               let newInput = try? AVCaptureDeviceInput(device: newDevice) {
+                if session.canAddInput(newInput) {
+                    session.addInput(newInput)
+                }
+            } else {
+                // Fallback to original if something fails
+                session.addInput(currentInput)
+            }
+        }
+        
+        session.commitConfiguration()
     }
 }
 

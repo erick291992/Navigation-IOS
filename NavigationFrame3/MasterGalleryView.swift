@@ -46,23 +46,25 @@ struct MasterGalleryView: View {
                             .padding(.top, 16)
                         
                         HStack(spacing: 16) {
-                            PhotosPicker(
-                                selection: $vm.headlessSelection,
-                                maxSelectionCount: 3,
-                                matching: .images
-                            ) {
-                                MediaPickerNavCard(
-                                    title: "Custom Library",
-                                    subtitle: "Headless selection",
-                                    icon: "photo.on.rectangle",
-                                    color: .blue,
-                                    action: {} // Handled by PhotosPicker overlay
-                                )
-                            }
-                            .buttonStyle(.plain) // Prevent double-tap highlights
-                            .onChange(of: vm.headlessSelection) { _, newValue in
-                                vm.didSelectHeadless(newValue)
-                            }
+                            MediaPickerNavCard(
+                                title: "Custom Library",
+                                subtitle: "Headless selection",
+                                icon: "photo.on.rectangle",
+                                color: .blue,
+                                action: {} 
+                            )
+                            .overlay(
+                                PhotosPicker(
+                                    selection: $vm.headlessSelection,
+                                    maxSelectionCount: 3,
+                                    matching: .images
+                                ) {
+                                    Color.white.opacity(0.001) // Invisible tap target covering the card
+                                }
+                                .onChange(of: vm.headlessSelection) { _, newValue in
+                                    vm.didSelectHeadless(newValue)
+                                }
+                            )
                             
                             MediaPickerNavCard(
                                 title: "Custom Camera",
@@ -72,6 +74,33 @@ struct MasterGalleryView: View {
                             ) {
                                 vm.flowState = .camera
                             }
+                        }
+                        
+                        Divider().padding(.vertical, 8)
+                        
+                        Text("📚 Example Views")
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                            .foregroundColor(.secondary)
+                            .padding(.top, 8)
+                        
+                        // Tier 3: Full Custom Picker Example (isolated View + ViewModel)
+                        MediaPickerNavCard(
+                            title: "Tier 3 Example",
+                            subtitle: "Build your own UI",
+                            icon: "hammer.fill",
+                            color: .orange
+                        ) {
+                            navigationManager.push { CustomPickerExampleView() }
+                        }
+                        
+                        // Config Demo: All crop modes & multi-select
+                        MediaPickerNavCard(
+                            title: "Config Playground",
+                            subtitle: "Crop modes & limits",
+                            icon: "slider.horizontal.3",
+                            color: .purple
+                        ) {
+                            navigationManager.push { MediaPickerDemoView() }
                         }
                     }
                 }
