@@ -18,11 +18,11 @@ struct ContentView: View {
             .padding()
 
             TabView(selection: $selectedTab) {
-                NavigationCoordinator(rootView: ViewB(), key: "tab1")
+                NavigationCoordinator(rootView: ViewB(), customKey: "tab1")
                     .tabItem { Label("Tab 1", systemImage: "1.circle") }
                     .tag("tab1")
 
-                NavigationCoordinator(rootView: ViewB(), key: "tab2")
+                NavigationCoordinator(rootView: MasterGalleryView(), customKey: "tab2")
                     .tabItem { Label("Tab 2", systemImage: "2.circle") }
                     .tag("tab2")
             }
@@ -30,7 +30,7 @@ struct ContentView: View {
     }
 
     func routeToViewE() {
-        if let manager = NavigationManagerRegistry.shared.manager(for: "tab2") {
+        if let manager = NavigationManagerRegistry.shared.manager(forCustomKey: "tab2") {
             manager.presentSheet {
                 ViewE()
             }
