@@ -96,12 +96,33 @@ struct MasterGalleryView: View {
                         // Config Demo: All crop modes & multi-select
                         MediaPickerNavCard(
                             title: "Config Playground",
-                            subtitle: "Crop modes & limits",
+                            subtitle: "Engine settings",
                             icon: "slider.horizontal.3",
-                            color: .purple
-                        ) {
-                            navigationManager.push { MediaPickerDemoView() }
-                        }
+                            color: .orange,
+                            action: {
+                                navigationManager.push { MediaPickerDemoView() }
+                            }
+                        )
+                        
+                        MediaPickerNavCard(
+                            title: "Custom Grid Demo",
+                            subtitle: "Advanced styling",
+                            icon: "square.grid.3x3.topleft.filled",
+                            color: .green,
+                            action: {
+                                navigationManager.push { AdvancedPickerExampleView() }
+                            }
+                        )
+                        
+                        MediaPickerNavCard(
+                            title: "Elite Picker B",
+                            subtitle: "Full alternative UI",
+                            icon: "star.fill",
+                            color: .orange,
+                            action: {
+                                navigationManager.push { EliteStyleBPickerView(configuration: .init(selectionLimit: 5), onCompletion: { _ in }, onCancel: { navigationManager.dismiss() }) }
+                            }
+                        )
                     }
                 }
                 .padding(24)

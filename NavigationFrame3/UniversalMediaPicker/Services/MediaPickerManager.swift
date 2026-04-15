@@ -55,6 +55,33 @@ public class MediaPickerManager {
         return mediaItem
     }
     
+    /// Processes a single PHAsset into a MediaItem.
+    public func process(_ asset: PHAsset) async throws -> MediaItem {
+        let image = await withCheckedContinuation { continuation in
+            PhotoKitService.shared.loadThumbnail(for: asset, size: CGSize(width: 2000, height: 2000)) { img in
+                continuation.resume(returning: img)
+            }
+        }
+        
+        guard let image = image else {
+            throw MediaPickerError.loadFailed
+        }
+        
+        // Use the existing image processing pipeline
+        return try await process(image)
+    }
+    
+    /// Processes an array of PHAssets into MediaItems.
+    public func process(_ assets: [PHAsset]) async throws -> [MediaItem] {
+        var results: [MediaItem] = []
+        for asset in assets {
+            if let processed = try? await process(asset) {
+                results.append(processed)
+            }
+        }
+        return results
+    }
+    
     // MARK: - Private Helpers
     
     private func processVideo(_ item: PhotosPickerItem) async throws -> MediaItem {

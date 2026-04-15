@@ -524,19 +524,9 @@ public struct UnifiedPickerView: View {
     
     private func handleAssets(_ assets: [PHAsset]) {
         Task {
-            var processedItems: [MediaItem] = []
-            for asset in assets {
-                let image = await withCheckedContinuation { continuation in
-                    PhotoKitService.shared.loadThumbnail(for: asset, size: CGSize(width: 2000, height: 2000)) { img in
-                        continuation.resume(returning: img)
-                    }
-                }
-                if let image = image, let item = try? await MediaPickerManager.shared.process(image) {
-                    processedItems.append(item)
-                }
-            }
-            
-            if !processedItems.isEmpty {
+            // Dogfooding: The Elite picker relies entirely on the Tier 3 Engine
+            // to process raw PHAssets into MediaItems.
+            if let processedItems = try? await MediaPickerEngine.shared.process(assets), !processedItems.isEmpty {
                 await MainActor.run {
                     onCompletion(processedItems)
                 }
