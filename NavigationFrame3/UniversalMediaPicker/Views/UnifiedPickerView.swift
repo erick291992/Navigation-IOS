@@ -35,11 +35,9 @@ public struct UnifiedPickerView: View {
     @State private var isRecording = false
     @State private var previewAsset: PHAsset?
     @State private var previewHistoryItem: MediaItem?
-    
     enum CreatorMode {
-        case library, reuse, photo, video
+        case library, reuse, photo //, video
     }
-    
     public var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
@@ -118,9 +116,9 @@ public struct UnifiedPickerView: View {
     
     private var mainViewfinderContent: some View {
         ZStack {
-            if selectedMode == .video {
+            /* if selectedMode == .video {
                 videoComingSoonView
-            } else {
+            } else { */
                 switch selectedMode {
                 case .library:
                     if photoKit.authStatus == .denied || photoKit.authStatus == .restricted {
@@ -137,7 +135,7 @@ public struct UnifiedPickerView: View {
                         PermissionNeededView(type: .camera)
                     }
                 }
-            }
+            // }
             
             // Mode Overlay (Recording indicator)
             if isRecording {
@@ -427,7 +425,7 @@ public struct UnifiedPickerView: View {
                 
                 // Right slot: Flip camera OR invisible spacer (same width as left)
                 Group {
-                    if selectedMode == .photo || selectedMode == .video {
+                    if selectedMode == .photo { // || selectedMode == .video
                         Button(action: { cameraService.flipCamera() }) {
                             Circle().fill(.white.opacity(0.1)).frame(width: 44, height: 44)
                                 .overlay(Image(systemName: "arrow.triangle.2.circlepath").foregroundColor(.white))
@@ -442,7 +440,7 @@ public struct UnifiedPickerView: View {
             
             // Mode labels — centered HStack, no ScrollView needed for 4 labels
             HStack(spacing: 24) {
-                ForEach([CreatorMode.library, .reuse, .photo, .video], id: \.self) { mode in
+                ForEach([CreatorMode.library, .reuse, .photo /*, .video */], id: \.self) { mode in
                     ModeButton(title: modeTitle(mode), isSelected: selectedMode == mode) {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                             selectedMode = mode
@@ -461,12 +459,12 @@ public struct UnifiedPickerView: View {
                 .stroke(Color.white, lineWidth: 4)
                 .frame(width: 72, height: 72)
             
-            if selectedMode == .video {
+            /* if selectedMode == .video {
                 RoundedRectangle(cornerRadius: isRecording ? 4 : 30)
                     .fill(Color.red)
                     .frame(width: isRecording ? 30 : 60, height: isRecording ? 30 : 60)
                     .animation(.spring(), value: isRecording)
-            } else if selectedMode == .library || selectedMode == .reuse {
+            } else */ if selectedMode == .library || selectedMode == .reuse {
                 Image(systemName: "checkmark")
                     .font(.system(size: 24, weight: .bold))
                     .foregroundColor(.black)
@@ -486,7 +484,7 @@ public struct UnifiedPickerView: View {
     private func onShutterTab() {
         switch selectedMode {
         case .photo: capturePhoto()
-        case .video: toggleRecording()
+        // case .video: toggleRecording()
         case .library:
             if let asset = previewAsset ?? photoKit.recentAssets.first {
                 handleAsset(asset)
@@ -539,7 +537,7 @@ public struct UnifiedPickerView: View {
         case .library: return "LIBRARY"
         case .reuse: return "REUSE"
         case .photo: return "PHOTO"
-        case .video: return "VIDEO"
+        // case .video: return "VIDEO"
         }
     }
     
