@@ -120,7 +120,7 @@ struct MasterGalleryView: View {
                             icon: "star.fill",
                             color: .orange,
                             action: {
-                                navigationManager.push { EliteStyleBPickView(configuration: .init(selectionLimit: 5), onCompletion: { _ in }, onCancel: { navigationManager.dismiss() }) }
+                                navigationManager.push { EliteGeometricPickerView(configuration: .init(selectionLimit: 5), onCompletion: { _ in }, onCancel: { navigationManager.dismiss() }) }
                             }
                         )
                     }

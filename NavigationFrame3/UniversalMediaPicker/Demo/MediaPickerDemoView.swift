@@ -62,7 +62,7 @@ struct MediaPickerDemoView: View {
         }
         .navigationTitle("Media Picker Demo")
         .sheet(isPresented: $isPickerPresented) {
-            UniversalMediaPicker(
+            CropFlowView(
                 configuration: .init(
                     selectionLimit: selectionLimit,
                     allowedTypes: [.images, .videos],

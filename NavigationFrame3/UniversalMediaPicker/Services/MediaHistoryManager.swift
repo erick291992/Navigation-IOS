@@ -1,8 +1,10 @@
 import Foundation
 import SwiftUI
+import Observation
 
 /// A persistent manager to track media assets picked during the current app session.
 /// Enables the "Recents/History" feature in the Unified Creator.
+@MainActor
 @Observable
 public class MediaHistoryManager {
     public static let shared = MediaHistoryManager()

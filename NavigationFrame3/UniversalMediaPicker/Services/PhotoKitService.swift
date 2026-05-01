@@ -1,33 +1,33 @@
 import Foundation
 import Photos
 import UIKit
+import Observation
 
 /// A lightweight service to fetch recent assets from the user's photo library.
-public class PhotoKitService: ObservableObject {
+@MainActor
+@Observable
+public class PhotoKitService {
     public static let shared = PhotoKitService()
     
-    @Published public var recentAssets: [PHAsset] = []
-    @Published public var authStatus: PHAuthorizationStatus = .notDetermined
+    public var recentAssets: [PHAsset] = []
+    public var authStatus: PHAuthorizationStatus = .notDetermined
     
-    private init() {}
+    private init() {
+        self.authStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+    }
     
     /// Silently updates the authorization status without requesting it.
     public func updateAuthStatus() {
-        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-        DispatchQueue.main.async {
-            self.authStatus = status
-        }
+        self.authStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
     }
     
     /// Requests permission and fetches the last X assets.
     public func fetchRecentAssets(limit: Int = 30) {
         let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        self.authStatus = status
         
-        DispatchQueue.main.async {
-            self.authStatus = status
-            if status != .authorized && status != .limited {
-                self.recentAssets = []
-            }
+        if status != .authorized && status != .limited {
+            self.recentAssets = []
         }
         
         switch status {
@@ -35,22 +35,18 @@ public class PhotoKitService: ObservableObject {
             self.performFetch(limit: limit)
         case .notDetermined:
             PHPhotoLibrary.requestAuthorization(for: .readWrite) { newStatus in
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     self.authStatus = newStatus
-                }
-                if newStatus == .authorized || newStatus == .limited {
-                    self.performFetch(limit: limit)
-                } else {
-                    DispatchQueue.main.async {
+                    if newStatus == .authorized || newStatus == .limited {
+                        self.performFetch(limit: limit)
+                    } else {
                         self.recentAssets = []
                     }
                 }
             }
         default:
             print("⚠️ Photo Library access denied")
-            DispatchQueue.main.async {
-                self.recentAssets = []
-            }
+            self.recentAssets = []
         }
     }
     
@@ -72,10 +68,7 @@ public class PhotoKitService: ObservableObject {
         result.enumerateObjects { asset, _, _ in
             assets.append(asset)
         }
-        
-        DispatchQueue.main.async {
-            self.recentAssets = assets
-        }
+        self.recentAssets = assets
     }
     
     /// Loads a thumbnail for a given asset.

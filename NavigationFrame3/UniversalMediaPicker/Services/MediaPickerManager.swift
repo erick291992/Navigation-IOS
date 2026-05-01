@@ -3,6 +3,7 @@ import PhotosUI
 import AVFoundation
 
 /// Handles the low-level processing of media assets into Unified MediaItem objects.
+@MainActor
 public class MediaPickerManager {
     public static let shared = MediaPickerManager()
     
@@ -28,7 +29,7 @@ public class MediaPickerManager {
         let thumbnail = generateThumbnail(for: image)
         
         let mediaItem = MediaItem(data: data, thumbnail: thumbnail, contentType: .image, originalURL: nil)
-        MediaHistoryManager.shared.addToHistory([mediaItem])
+        // MediaHistoryManager.shared.addToHistory([mediaItem]) // REMOVED: Managed by Flow Controllers
         return mediaItem
     }
     
@@ -51,7 +52,7 @@ public class MediaPickerManager {
         let thumbnail = generateThumbnail(for: image)
         
         let mediaItem = MediaItem(data: data, thumbnail: thumbnail, contentType: .image, originalURL: nil)
-        MediaHistoryManager.shared.addToHistory([mediaItem])
+        // MediaHistoryManager.shared.addToHistory([mediaItem]) // REMOVED: Managed by Flow Controllers
         return mediaItem
     }
     
@@ -101,7 +102,7 @@ public class MediaPickerManager {
         let thumbnail = UIImage(cgImage: cgImage)
         
         let mediaItem = MediaItem(data: data, thumbnail: thumbnail, contentType: .video, originalURL: url)
-        MediaHistoryManager.shared.addToHistory([mediaItem])
+        // MediaHistoryManager.shared.addToHistory([mediaItem]) // REMOVED: Managed by Flow Controllers
         return mediaItem
     }
     
@@ -133,7 +134,7 @@ struct VideoPickerTransferable: Transferable {
         } importing: { received in
             let copy = FileManager.default.temporaryDirectory.appendingPathComponent(received.file.lastPathComponent)
             if FileManager.default.fileExists(atPath: copy.path) {
-                try FileManager.default.removeItem(at: copy)
+                try? FileManager.default.removeItem(at: copy)
             }
             try FileManager.default.copyItem(at: received.file, to: copy)
             return VideoPickerTransferable(url: copy)
@@ -141,7 +142,7 @@ struct VideoPickerTransferable: Transferable {
     }
 }
 
-enum MediaPickerError: Error {
+public enum MediaPickerError: Error {
     case loadFailed
     case invalidData
     case conversionFailed

@@ -2,103 +2,85 @@ import SwiftUI
 import PhotosUI
 import Photos
 import AVFoundation
-import Observation
 
 /// The "Gold Standard" entry point for media creation.
 /// Merges a live camera preview with a quick-access library strip, video recording, and session history (REUSE).
-public struct UnifiedPickerView: View {
-    let configuration: MediaPickerConfiguration
-    let onCompletion: ([MediaItem]) -> Void
-    let onCancel: () -> Void
+public struct UnifiedCreatorView: View {
+    @State private var viewModel: UnifiedCreatorViewModel
+    @Environment(\.scenePhase) private var scenePhase
     
     public init(
         configuration: MediaPickerConfiguration,
         onCompletion: @escaping ([MediaItem]) -> Void,
         onCancel: @escaping () -> Void
     ) {
-        self.configuration = configuration
-        self.onCompletion = onCompletion
-        self.onCancel = onCancel
+        self._viewModel = State(initialValue: UnifiedCreatorViewModel(
+            configuration: configuration,
+            onCompletion: onCompletion,
+            onCancel: onCancel
+        ))
     }
     
-    // Services
-    @StateObject private var cameraService = CameraService.shared
-    @StateObject private var photoKit = PhotoKitService.shared
-    private var historyManager = MediaHistoryManager.shared
-    
-    @Environment(\.scenePhase) private var scenePhase
-    
-    // Internal States
-    @State private var selection: [PhotosPickerItem] = []
-    @State private var isShowingSystemPicker = false
-    @State private var selectedMode: CreatorMode = .library
-    @State private var isRecording = false
-    @State private var previewAsset: PHAsset?
-    @State private var previewHistoryItem: MediaItem?
-    enum CreatorMode {
-        case library, reuse, photo //, video
-    }
     public var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
             
-            GeometryReader { proxy in
-                let viewWidth = proxy.size.width
-                // Force a perfectly square viewfinder on capable screens,
-                // but scale it down slightly on smaller phones to protect the bottom panel
-                let maxViewfinderHeight = proxy.size.height * 0.48
-                let viewfinderHeight = min(viewWidth, maxViewfinderHeight)
-                
-                // The bottom panel gets exactly whatever space is left
-                let bottomHeight = proxy.size.height - viewfinderHeight
-                
-                VStack(spacing: 0) {
-                    // MARK: - Top Viewfinder / Previewer
-                    viewfinderArea
-                        .frame(width: viewWidth, height: viewfinderHeight)
-                        .clipped()
+            if viewModel.authStatus == .denied || viewModel.authStatus == .restricted {
+                PermissionNeededView(type: .library)
+                    .transition(.opacity)
+            } else {
+                GeometryReader { proxy in
+                    let viewWidth = proxy.size.width
+                    let maxViewfinderHeight = proxy.size.height * 0.48
+                    let viewfinderHeight = min(viewWidth, maxViewfinderHeight)
+                    let bottomHeight = proxy.size.height - viewfinderHeight
                     
-                    // MARK: - Bottom Control Panel
-                    bottomPanel
-                        .frame(width: viewWidth, height: bottomHeight)
-                        .clipped()
+                    VStack(spacing: 0) {
+                        viewfinderArea
+                            .frame(width: viewWidth, height: viewfinderHeight)
+                            .clipped()
+                        
+                        bottomPanel
+                            .frame(width: viewWidth, height: bottomHeight)
+                            .clipped()
+                    }
                 }
+                .ignoresSafeArea(.container, edges: .top)
+                .transition(.opacity)
             }
-            .ignoresSafeArea(.container, edges: .top)
+            
+            // Exit Button (Always available to escape)
+            if viewModel.authStatus != .notDetermined {
+                exitButton
+            }
         }
         .background(Color.black)
         .onAppear {
-            photoKit.fetchRecentAssets()
-            cameraService.setup()
+            viewModel.setup()
         }
-        .onChange(of: scenePhase) { newPhase in
+        .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
-                photoKit.updateAuthStatus() // Silent refresh
-                if photoKit.authStatus == .authorized || photoKit.authStatus == .limited {
-                    photoKit.fetchRecentAssets()
-                }
+                viewModel.updateAuth()
             }
         }
-        .photosPicker(isPresented: $isShowingSystemPicker, selection: $selection)
-        .onChange(of: selection) { _, items in
-            if !items.isEmpty {
-                Task {
-                    if let results = try? await MediaPickerManager.shared.process(items) {
-                        onCompletion(results)
-                    }
-                }
+        .photosPicker(isPresented: $viewModel.isShowingSystemPicker, selection: $viewModel.selection)
+        .onChange(of: viewModel.recentAssets) { _, assets in
+            if viewModel.previewAsset == nil, let first = assets.first {
+                viewModel.setPreviewAsset(first)
             }
         }
+        .onChange(of: viewModel.selection) { _, items in
+            viewModel.handleSystemPickerSelection(items)
+        }
+        .animation(.spring(), value: viewModel.authStatus)
     }
     
-    // MARK: - Viewfinder Components
-    
-    // MARK: - Sub-Views
+    // MARK: - Viewfinder Area
     
     private var viewfinderArea: some View {
         ZStack {
             Group {
-                if photoKit.authStatus == .notDetermined {
+                if viewModel.authStatus == .notDetermined {
                     onboardingView
                 } else {
                     mainViewfinderContent
@@ -116,48 +98,26 @@ public struct UnifiedPickerView: View {
     
     private var mainViewfinderContent: some View {
         ZStack {
-            /* if selectedMode == .video {
-                videoComingSoonView
-            } else { */
-                switch selectedMode {
-                case .library:
-                    if photoKit.authStatus == .denied || photoKit.authStatus == .restricted {
-                        PermissionNeededView(type: .library)
-                    } else {
-                        libraryViewfinder
-                    }
-                case .reuse:
-                    historyViewfinder
-                default:
-                    if cameraService.isSourceReady {
-                        CameraPreviewView()
-                    } else {
-                        PermissionNeededView(type: .camera)
-                    }
+            switch viewModel.selectedMode {
+            case .library:
+                libraryViewfinder
+            case .reuse:
+                historyViewfinder
+            case .photo:
+                if viewModel.cameraService.isSourceReady {
+                    CameraPreviewView()
+                } else {
+                    // Fallback if camera specific permission is missing
+                    PermissionNeededView(type: .camera)
                 }
-            // }
+            }
             
             // Mode Overlay (Recording indicator)
-            if isRecording {
+            if viewModel.isRecording {
                 recordingIndicator
             }
         }
-        .animation(nil, value: selectedMode)
-    }
-    
-    private var videoComingSoonView: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "video.badge.plus")
-                .font(.system(size: 40))
-                .foregroundColor(.white.opacity(0.3))
-            Text("Video Recording")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundColor(.white.opacity(0.4))
-            Text("Coming Soon in V4 Elite")
-                .font(.system(size: 11, weight: .black))
-                .foregroundColor(.blue.opacity(0.8))
-                .tracking(1.0)
-        }
+        .animation(nil, value: viewModel.selectedMode)
     }
     
     private var onboardingView: some View {
@@ -177,8 +137,7 @@ public struct UnifiedPickerView: View {
             }
             
             Button(action: {
-                photoKit.fetchRecentAssets()
-                cameraService.setup()
+                viewModel.setup()
             }) {
                 Text("GET STARTED")
                     .font(.system(size: 14, weight: .black))
@@ -194,21 +153,21 @@ public struct UnifiedPickerView: View {
     
     private var libraryViewfinder: some View {
         Group {
-            if photoKit.recentAssets.isEmpty {
+            if viewModel.recentAssets.isEmpty {
                 emptyLibraryState
             } else {
-                LibraryPreviewer(asset: previewAsset ?? photoKit.recentAssets.first)
-                    .onTapGesture { isShowingSystemPicker = true }
+                LibraryPreviewer(asset: viewModel.previewAsset ?? viewModel.recentAssets.first)
+                    .onTapGesture { viewModel.toggleSystemPicker() }
             }
         }
     }
     
     private var historyViewfinder: some View {
         Group {
-            if historyManager.history.isEmpty {
+            if viewModel.history.isEmpty {
                 emptyHistoryState
             } else {
-                HistoryPreviewer(item: previewHistoryItem ?? historyManager.history.first)
+                HistoryPreviewer(item: viewModel.previewHistoryItem ?? viewModel.history.first)
             }
         }
     }
@@ -222,7 +181,7 @@ public struct UnifiedPickerView: View {
                 Text("No Recent Photos Found")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.white.opacity(0.4))
-                Button("Open Library") { isShowingSystemPicker = true }
+                Button("Open Library") { viewModel.toggleSystemPicker() }
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.blue)
             }
@@ -259,7 +218,7 @@ public struct UnifiedPickerView: View {
     private var exitButton: some View {
         VStack {
             HStack {
-                Button(action: onCancel) {
+                Button(action: { viewModel.onCancelAction() }) {
                     Image(systemName: "xmark")
                         .font(.system(size: 20, weight: .bold))
                         .foregroundColor(.white)
@@ -267,30 +226,26 @@ public struct UnifiedPickerView: View {
                 }
                 Spacer()
             }
-            .padding(.top, 40) // Add padding to avoid the notch/dynamic island
+            .padding(.top, 40)
             Spacer()
         }
     }
     
-    // MARK: - Bottom Panel Components
+    // MARK: - Bottom Panel Area
     
     private var bottomPanel: some View {
         VStack(spacing: 0) {
-            if photoKit.authStatus == .notDetermined {
+            if viewModel.authStatus == .notDetermined {
                 Color.black
-            } else if selectedMode == .library {
-                let status = photoKit.authStatus
-                if status == .denied || status == .restricted {
-                    PermissionNeededView(type: .library)
-                        .frame(maxHeight: .infinity)
-                } else if configuration.style.gridStyle.galleryMode == .grid {
+            } else if viewModel.selectedMode == .library {
+                if viewModel.configuration.style.gridStyle.galleryMode == .grid {
                     AssetGridView(
-                        configuration: configuration,
+                        configuration: viewModel.configuration,
                         onAssetTap: { asset in
-                            previewAsset = asset
+                            viewModel.setPreviewAsset(asset)
                         },
                         onSelectionComplete: { assets in
-                            handleAssets(assets)
+                            viewModel.handleAssets(assets)
                         }
                     )
                     .frame(maxHeight: .infinity)
@@ -298,16 +253,39 @@ public struct UnifiedPickerView: View {
                     nativeLibraryStrip
                         .padding(.top, 16)
                 }
-            } else if selectedMode == .reuse {
+            } else if viewModel.selectedMode == .photo {
+                ZStack(alignment: .top) {
+                    verticalLibraryGrid
+                        .opacity(0.6) // Content-filled background
+                    
+                    VStack(spacing: 0) {
+                        pullUpHandle
+                        
+                        stripHeader
+                            .padding(.top, 8)
+                        
+                        Spacer()
+                        
+                        zoomDial
+                            .padding(.bottom, 8)
+                    }
+                    .background(
+                        LinearGradient(
+                            colors: [.black.opacity(0.8), .black.opacity(0.2), .black.opacity(0.8)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                }
+            } else if viewModel.selectedMode == .reuse {
                 reuseHistoryStrip
             }
             
-            Spacer(minLength: 0) // Keeps the shutter bar pinned to the bottom
+            Spacer(minLength: 0)
             
-            // MAIN ACTION AREA
             shutterAndModeBar
                 .padding(.top, 8)
-                .padding(.bottom, 24) 
+                .padding(.bottom, 24)
         }
         .background(Color.black)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -335,12 +313,12 @@ public struct UnifiedPickerView: View {
     
     private var stripHeader: some View {
         HStack {
-            Text(selectedMode == .reuse ? "PICKED HISTORY" : "RECENT LIBRARY")
+            Text(viewModel.selectedMode == .reuse ? "PICKED HISTORY" : "RECENT LIBRARY")
                 .font(.system(size: 11, weight: .black, design: .rounded))
                 .foregroundColor(.white.opacity(0.5))
                 .tracking(1.5)
             Spacer()
-            if selectedMode == .library {
+            if viewModel.selectedMode == .library {
                 adaptiveLibraryButton
             }
         }
@@ -349,11 +327,11 @@ public struct UnifiedPickerView: View {
     
     private var adaptiveLibraryButton: some View {
         Group {
-            if photoKit.authStatus == .limited {
-                Button("MANAGE") { photoKit.openLimitedPicker() }
-            } else if photoKit.authStatus == .authorized {
-                Button("SELECT") { isShowingSystemPicker = true }
-            } else if photoKit.authStatus == .denied {
+            if viewModel.authStatus == .limited {
+                Button("MANAGE") { viewModel.openLimitedPicker() }
+            } else if viewModel.authStatus == .authorized {
+                Button("SELECT") { viewModel.toggleSystemPicker() }
+            } else if viewModel.authStatus == .denied {
                 Button("ENABLE ACCESS") {
                     if let url = URL(string: UIApplication.openSettingsURLString) {
                         UIApplication.shared.open(url)
@@ -368,7 +346,7 @@ public struct UnifiedPickerView: View {
     private var contentScrollView: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 4) {
-                if selectedMode == .reuse {
+                if viewModel.selectedMode == .reuse {
                     historyStrip
                 } else {
                     libraryStrip
@@ -379,30 +357,80 @@ public struct UnifiedPickerView: View {
         .frame(height: 70)
     }
     
+    private var pullUpHandle: some View {
+        Capsule()
+            .fill(Color.white.opacity(0.2))
+            .frame(width: 40, height: 4)
+            .padding(.top, 8)
+    }
+    
+    private var verticalLibraryGrid: some View {
+        ScrollView {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 2) {
+                ForEach(viewModel.recentAssets, id: \.localIdentifier) { asset in
+                    AssetThumbnailView(asset: asset) { _ in
+                        viewModel.setPreviewAsset(asset)
+                    }
+                    .frame(height: 120)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 0)
+                            .stroke(viewModel.configuration.style.accentColor, lineWidth: viewModel.previewAsset?.localIdentifier == asset.localIdentifier ? 3 : 0)
+                    )
+                }
+            }
+        }
+    }
+    
     private var libraryStrip: some View {
-        ForEach(photoKit.recentAssets, id: \.localIdentifier) { asset in
+        ForEach(viewModel.recentAssets, id: \.localIdentifier) { asset in
             AssetThumbnailView(asset: asset) { _ in
-                previewAsset = asset
+                viewModel.setPreviewAsset(asset)
             }
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
-                    .stroke(Color.blue, lineWidth: previewAsset?.localIdentifier == asset.localIdentifier ? 3 : 0)
+                    .stroke(viewModel.configuration.style.accentColor, lineWidth: viewModel.previewAsset?.localIdentifier == asset.localIdentifier ? 3 : 0)
             )
         }
     }
     
+    private var zoomDial: some View {
+        HStack(spacing: 12) {
+            ForEach(viewModel.cameraService.availableZoomFactors, id: \.self) { factor in
+                Button(action: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                        viewModel.cameraService.setZoom(factor)
+                    }
+                }) {
+                    Text(String(format: "%.1fx", factor))
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundColor(viewModel.cameraService.zoomFactor == factor ? .white : .white) // Keep white for premium look
+                        .frame(width: 36, height: 36)
+                        .background(
+                            Circle()
+                                .fill(viewModel.cameraService.zoomFactor == factor ? viewModel.configuration.style.accentColor : Color.white.opacity(0.15))
+                        )
+                        .overlay(
+                            Circle()
+                                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                        )
+                }
+            }
+        }
+        .padding(.vertical, 8)
+    }
+    
     private var historyStrip: some View {
-        ForEach(historyManager.history, id: \.id) { item in
+        ForEach(viewModel.history, id: \.id) { item in
             Image(uiImage: item.thumbnail)
                 .resizable()
                 .scaledToFill()
                 .frame(width: 70, height: 70)
                 .cornerRadius(6)
                 .clipped()
-                .onTapGesture { self.previewHistoryItem = item }
+                .onTapGesture { viewModel.setPreviewHistoryItem(item) }
                 .overlay(
                     RoundedRectangle(cornerRadius: 6)
-                        .stroke(Color.blue, lineWidth: previewHistoryItem?.id == item.id ? 3 : 0)
+                        .stroke(viewModel.configuration.style.accentColor, lineWidth: viewModel.previewHistoryItem?.id == item.id ? 3 : 0)
                 )
         }
     }
@@ -410,23 +438,21 @@ public struct UnifiedPickerView: View {
     private var shutterAndModeBar: some View {
         VStack(spacing: 20) {
             HStack {
-                // Left slot: Gallery Shortcut (fixed width for centering)
                 galleryShortcut
                     .frame(width: 48, height: 48)
                 
                 Spacer()
                 
-                Button(action: onShutterTab) {
+                Button(action: { viewModel.onShutterTab() }) {
                     shutterView
                 }
                 .buttonStyle(ScaleButtonStyle())
                 
                 Spacer()
                 
-                // Right slot: Flip camera OR invisible spacer (same width as left)
                 Group {
-                    if selectedMode == .photo { // || selectedMode == .video
-                        Button(action: { cameraService.flipCamera() }) {
+                    if viewModel.selectedMode == .photo {
+                        Button(action: { viewModel.flipCamera() }) {
                             Circle().fill(.white.opacity(0.1)).frame(width: 44, height: 44)
                                 .overlay(Image(systemName: "arrow.triangle.2.circlepath").foregroundColor(.white))
                         }
@@ -438,14 +464,14 @@ public struct UnifiedPickerView: View {
             }
             .padding(.horizontal, 30)
             
-            // Mode labels — centered HStack, no ScrollView needed for 4 labels
             HStack(spacing: 24) {
-                ForEach([CreatorMode.library, .reuse, .photo /*, .video */], id: \.self) { mode in
-                    ModeButton(title: modeTitle(mode), isSelected: selectedMode == mode) {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            selectedMode = mode
-                        }
-                    }
+                ForEach([UnifiedCreatorViewModel.CreatorMode.library, .reuse, .photo], id: \.self) { mode in
+                    ModeButton(
+                        title: viewModel.modeTitle(mode),
+                        isSelected: viewModel.selectedMode == mode,
+                        accentColor: viewModel.configuration.style.accentColor,
+                        action: { viewModel.selectMode(mode) }
+                    )
                 }
             }
             .frame(maxWidth: .infinity)
@@ -459,12 +485,7 @@ public struct UnifiedPickerView: View {
                 .stroke(Color.white, lineWidth: 4)
                 .frame(width: 72, height: 72)
             
-            /* if selectedMode == .video {
-                RoundedRectangle(cornerRadius: isRecording ? 4 : 30)
-                    .fill(Color.red)
-                    .frame(width: isRecording ? 30 : 60, height: isRecording ? 30 : 60)
-                    .animation(.spring(), value: isRecording)
-            } else */ if selectedMode == .library || selectedMode == .reuse {
+            if viewModel.selectedMode == .library || viewModel.selectedMode == .reuse {
                 Image(systemName: "checkmark")
                     .font(.system(size: 24, weight: .bold))
                     .foregroundColor(.black)
@@ -479,87 +500,22 @@ public struct UnifiedPickerView: View {
         }
     }
     
-    // MARK: - Actions
-    
-    private func onShutterTab() {
-        switch selectedMode {
-        case .photo: capturePhoto()
-        // case .video: toggleRecording()
-        case .library:
-            if let asset = previewAsset ?? photoKit.recentAssets.first {
-                handleAsset(asset)
-            }
-        case .reuse:
-            if let item = previewHistoryItem ?? historyManager.history.first {
-                onCompletion([item])
-            }
-        }
-    }
-    
-    private func capturePhoto() {
-        cameraService.capture { image in
-            if let image = image {
-                handleSelection(image)
-            }
-        }
-    }
-    
-    private func toggleRecording() {
-        // VIDEO is currently a placeholder
-    }
-    
-    private func handleSelection(_ image: UIImage) {
-        Task {
-            if let item = try? await MediaPickerManager.shared.process(image) {
-                onCompletion([item])
-            }
-        }
-    }
-    
-    private func handleAsset(_ asset: PHAsset) {
-        handleAssets([asset])
-    }
-    
-    private func handleAssets(_ assets: [PHAsset]) {
-        Task {
-            // Dogfooding: The Elite picker relies entirely on the Tier 3 Engine
-            // to process raw PHAssets into MediaItems.
-            if let processedItems = try? await MediaPickerEngine.shared.process(assets), !processedItems.isEmpty {
-                await MainActor.run {
-                    onCompletion(processedItems)
-                }
-            }
-        }
-    }
-    
-    private func modeTitle(_ mode: CreatorMode) -> String {
-        switch mode {
-        case .library: return "LIBRARY"
-        case .reuse: return "REUSE"
-        case .photo: return "PHOTO"
-        // case .video: return "VIDEO"
-        }
-    }
-    
     private var galleryShortcut: some View {
-        Button(action: galleryShortcutAction) {
+        Button(action: { viewModel.galleryShortcutAction() }) {
             ZStack {
-                if (photoKit.authStatus == .authorized || photoKit.authStatus == .limited), let firstAsset = photoKit.recentAssets.first {
-                    // Full/Limited: Show latest photo thumbnail
+                if (viewModel.authStatus == .authorized || viewModel.authStatus == .limited), let firstAsset = viewModel.recentAssets.first {
                     AssetThumbnailView(asset: firstAsset) { _ in }
                         .allowsHitTesting(false)
                         .frame(width: 48, height: 48)
                         .cornerRadius(10)
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.6), lineWidth: 2))
-                } else if photoKit.authStatus == .denied || photoKit.authStatus == .restricted {
-                    // Denied: Show lock icon — tapping opens Settings
+                } else if viewModel.authStatus == .denied || viewModel.authStatus == .restricted {
                     RoundedRectangle(cornerRadius: 10)
                         .fill(Color.white.opacity(0.1))
                         .frame(width: 48, height: 48)
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.3), lineWidth: 2))
                         .overlay(Image(systemName: "lock.fill").foregroundColor(.white.opacity(0.4)))
                 } else {
-                    // Not Determined / no photos: Placeholder icon
                     RoundedRectangle(cornerRadius: 10)
                         .fill(Color.white.opacity(0.1))
                         .frame(width: 48, height: 48)
@@ -568,19 +524,11 @@ public struct UnifiedPickerView: View {
                 }
             }
         }
-        .disabled(photoKit.authStatus == .notDetermined)
-    }
-    
-    private func galleryShortcutAction() {
-        switch photoKit.authStatus {
-        case .authorized, .limited:
-            isShowingSystemPicker = true
-        case .denied, .restricted:
-            if let url = URL(string: UIApplication.openSettingsURLString) {
-                UIApplication.shared.open(url)
-            }
-        default:
-            break
-        }
+        .disabled(viewModel.authStatus == .notDetermined)
     }
 }
+
+// Helpers from original code
+
+
+

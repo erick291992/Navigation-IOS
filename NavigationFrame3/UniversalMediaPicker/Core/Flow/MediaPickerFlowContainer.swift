@@ -20,11 +20,10 @@ struct MediaPickerFlowContainer: View {
             Color.black.ignoresSafeArea()
             
             // 1. Base Layer (Always alive to preserve selection & scroll state)
-            UnifiedPickerView(
+            UnifiedCreatorView(
                 configuration: configuration,
                 onCompletion: { items in
                     self.selectedItems = items
-                    MediaHistoryManager.shared.addToHistory(items)
                     withAnimation {
                         self.currentStage = .crop
                     }
@@ -36,7 +35,7 @@ struct MediaPickerFlowContainer: View {
             
             // 2. Crop Layer (Pushed on top, destroyed when dismissed to ensure fresh state next time)
             if currentStage == .crop {
-                UniversalMediaPicker(
+                CropFlowView(
                     configuration: configuration,
                     initialItems: selectedItems,
                     onCompletion: onCompletion,

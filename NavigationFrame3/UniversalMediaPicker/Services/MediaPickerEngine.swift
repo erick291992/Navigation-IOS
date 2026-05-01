@@ -3,6 +3,7 @@ import PhotosUI
 import Photos
 
 /// The Headless Engine (Tier 3) — provides raw media processing without UI components.
+@MainActor
 public class MediaPickerEngine {
     public static let shared = MediaPickerEngine()
     
@@ -17,12 +18,7 @@ public class MediaPickerEngine {
     
     /// Processes multiple PhotosPickerItems into MediaItems.
     public func process(_ items: [PhotosPickerItem]) async throws -> [MediaItem] {
-        var results: [MediaItem] = []
-        for item in items {
-            let processed = try await manager.process(item)
-            results.append(processed)
-        }
-        return results
+        return try await manager.process(items)
     }
     
     /// Processes a raw UIImage into a MediaItem.
@@ -39,5 +35,4 @@ public class MediaPickerEngine {
     public func process(_ assets: [PHAsset]) async throws -> [MediaItem] {
         return try await manager.process(assets)
     }
-
 }
