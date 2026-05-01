@@ -15,9 +15,12 @@ public class UnifiedCreatorViewModel {
     public let cameraService = CameraService.shared
     public let photoKit = PhotoKitService.shared
     private let historyManager = MediaHistoryManager.shared
+    private let pickerManager = MediaPickerManager.shared
+    private let pickerEngine = MediaPickerEngine.shared
     @ObservationIgnored private var tasks: [Task<Void, Never>] = []
     
     // MARK: - Internal State
+    public let gridViewModel: AssetGridViewModel
     public var selection: [PhotosPickerItem] = []
     public var isShowingSystemPicker = false
     public var selectedMode: CreatorMode = .library
@@ -37,12 +40,16 @@ public class UnifiedCreatorViewModel {
         self.configuration = configuration
         self.onCompletion = onCompletion
         self.onCancel = onCancel
+        self.gridViewModel = AssetGridViewModel(selectionLimit: configuration.selectionLimit)
+        
+        // Principal Move: Perform full setup (camera warm-up + photo fetch) 
+        // immediately during init to eliminate "first-frame" lag.
+        self.setup()
     }
     
     // MARK: - Computed State
     public var recentAssets: [PHAsset] { 
-        let assets = photoKit.recentAssets 
-        return assets
+        photoKit.recentAssets 
     }
     
     public var history: [MediaItem] { historyManager.history }
@@ -68,22 +75,30 @@ public class UnifiedCreatorViewModel {
     }
     
     public func selectMode(_ mode: CreatorMode) {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-            selectedMode = mode
+        // 1. Update state INSTANTLY for UI logic (Title, Buttons, etc.)
+        selectedMode = mode
+        
+        // 2. Swap data source (No animation for data)
+        if mode == .reuse {
+            gridViewModel.trigger(.loadHistory(history))
+        } else {
+            gridViewModel.trigger(.loadInitialData)
         }
     }
     
-    public func setPreviewAsset(_ asset: PHAsset?) {
-        self.previewAsset = asset
-    }
-    
-    public func setPreviewHistoryItem(_ item: MediaItem?) {
-        self.previewHistoryItem = item
+    public func setPreviewGridAsset(_ asset: GridAsset) {
+        if let phAsset = asset.phAsset {
+            self.previewAsset = phAsset
+            self.previewHistoryItem = nil
+        } else if let mediaItem = asset.mediaItem {
+            self.previewHistoryItem = mediaItem
+            self.previewAsset = nil
+        }
     }
     
     public func toggleSystemPicker() {
         photoKit.openSystemPicker(selectionLimit: configuration.selectionLimit) { [weak self] assets in
-            self?.handleAssets(assets)
+            self?.handleGridAssets(assets.map { .phAsset($0) })
         }
     }
     
@@ -100,16 +115,23 @@ public class UnifiedCreatorViewModel {
     }
     
     public func onShutterTab() {
+        let selected = gridViewModel.state.selectedAssets
+        if !selected.isEmpty {
+            handleGridAssets(selected)
+            return
+        }
+        
+        // Fallback to preview item
         switch selectedMode {
         case .photo:
             capturePhoto()
         case .library:
-            if let asset = previewAsset ?? recentAssets.first {
-                handleAsset(asset)
+            if let asset = previewAsset {
+                handleGridAssets([.phAsset(asset)])
             }
         case .reuse:
-            if let item = previewHistoryItem ?? history.first {
-                onCompletion([item])
+            if let item = previewHistoryItem {
+                handleGridAssets([.mediaItem(item)])
             }
         }
     }
@@ -118,7 +140,7 @@ public class UnifiedCreatorViewModel {
         cameraService.capture { [weak self] image in
             guard let self = self, let image = image else { return }
             let task = Task {
-                if let item = try? await MediaPickerManager.shared.process(image) {
+                if let item = try? await self.pickerManager.process(image) {
                     await MainActor.run {
                         self.onCompletion([item])
                     }
@@ -128,15 +150,25 @@ public class UnifiedCreatorViewModel {
         }
     }
     
-    public func handleAsset(_ asset: PHAsset) {
-        handleAssets([asset])
-    }
-    
-    public func handleAssets(_ assets: [PHAsset]) {
+    public func handleGridAssets(_ assets: [GridAsset]) {
         let task = Task {
-            if let processedItems = try? await MediaPickerEngine.shared.process(assets), !processedItems.isEmpty {
+            var finalItems: [MediaItem] = []
+            
+            // Separate phAssets from already processed mediaItems
+            let phAssets = assets.compactMap { $0.phAsset }
+            let existingItems = assets.compactMap { $0.mediaItem }
+            
+            // Process phAssets if any
+            if !phAssets.isEmpty, let processed = try? await self.pickerEngine.process(phAssets) {
+                finalItems.append(contentsOf: processed)
+            }
+            
+            // Add existing items
+            finalItems.append(contentsOf: existingItems)
+            
+            if !finalItems.isEmpty {
                 await MainActor.run {
-                    self.onCompletion(processedItems)
+                    self.onCompletion(finalItems)
                 }
             }
         }
@@ -146,7 +178,7 @@ public class UnifiedCreatorViewModel {
     public func handleSystemPickerSelection(_ items: [PhotosPickerItem]) {
         guard !items.isEmpty else { return }
         let task = Task {
-            if let results = try? await MediaPickerManager.shared.process(items) {
+            if let results = try? await self.pickerManager.process(items) {
                 await MainActor.run {
                     onCompletion(results)
                 }
@@ -159,7 +191,7 @@ public class UnifiedCreatorViewModel {
         switch authStatus {
         case .authorized:
             photoKit.openSystemPicker(selectionLimit: configuration.selectionLimit) { [weak self] assets in
-                self?.handleAssets(assets)
+                self?.handleGridAssets(assets.map { .phAsset($0) })
             }
         case .limited:
             openLimitedPicker()

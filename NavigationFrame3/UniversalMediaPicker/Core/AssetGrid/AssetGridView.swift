@@ -3,16 +3,43 @@ import Photos
 
 struct AssetGridView: View {
     let configuration: MediaPickerConfiguration
-    let onAssetTap: (PHAsset) -> Void
-    let onSelectionComplete: ([PHAsset]) -> Void
+    let onAssetTap: (GridAsset) -> Void
+    let onSelectionComplete: ([GridAsset]) -> Void
+    let showHeader: Bool
     
     @State private var vm: AssetGridViewModel
     
-    init(configuration: MediaPickerConfiguration, onAssetTap: @escaping (PHAsset) -> Void, onSelectionComplete: @escaping ([PHAsset]) -> Void) {
+    // ---------------------------------------------------------
+    // Initializer 1: STANDALONE (No ViewModel required)
+    // ---------------------------------------------------------
+    init(
+        configuration: MediaPickerConfiguration,
+        showHeader: Bool = true,
+        onAssetTap: @escaping (GridAsset) -> Void,
+        onSelectionComplete: @escaping ([GridAsset]) -> Void
+    ) {
         self.configuration = configuration
+        self.showHeader = showHeader
         self.onAssetTap = onAssetTap
         self.onSelectionComplete = onSelectionComplete
         self._vm = State(initialValue: AssetGridViewModel(selectionLimit: configuration.selectionLimit))
+    }
+    
+    // ---------------------------------------------------------
+    // Initializer 2: INJECTED (Pass a shared ViewModel)
+    // ---------------------------------------------------------
+    init(
+        configuration: MediaPickerConfiguration,
+        viewModel: AssetGridViewModel,
+        showHeader: Bool = true,
+        onAssetTap: @escaping (GridAsset) -> Void,
+        onSelectionComplete: @escaping ([GridAsset]) -> Void
+    ) {
+        self.configuration = configuration
+        self.showHeader = showHeader
+        self.onAssetTap = onAssetTap
+        self.onSelectionComplete = onSelectionComplete
+        self._vm = State(initialValue: viewModel)
     }
     
     private var gridStyle: MediaPickerStyle.GridStyle {
@@ -21,11 +48,13 @@ struct AssetGridView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            gridHeader
-                .padding(.horizontal, 20)
-                .padding(.vertical, 6)
-                .background(configuration.style.toolbarColor)
+            if showHeader {
+                // Header
+                gridHeader
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 6)
+                    .background(configuration.style.toolbarColor)
+            }
             
             // The Grid
             ScrollView {
@@ -33,32 +62,34 @@ struct AssetGridView: View {
                     columns: Array(repeating: GridItem(.flexible(), spacing: gridStyle.spacing), count: gridStyle.columnCount),
                     spacing: gridStyle.spacing
                 ) {
-                    ForEach(vm.state.assets, id: \.localIdentifier) { asset in
+                    ForEach(vm.state.assets, id: \.id) { asset in
                         AssetThumbnailCell(
-                            asset: asset,
+                            source: asset.phAsset != nil ? .phAsset(asset.phAsset!) : .mediaItem(asset.mediaItem!),
                             gridStyle: gridStyle,
                             selectionIndex: vm.selectionIndex(for: asset),
                             accentColor: configuration.style.accentColor
                         )
                         .contentShape(Rectangle())
                         .onTapGesture {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
                             vm.trigger(.selectAsset(asset))
                             onAssetTap(asset)
-                            
-                            // AUTO-FINISH ONLY if it's a double tap or single select + no preview mode
-                            // But for V3 Elite, we prefer explicit NEXT or tapping to preview.
-                            // So we remove the auto-finish here.
                         }
                     }
                 }
             }
         }
-        .onAppear { vm.trigger(.loadInitialData) }
+        .onAppear { 
+            // Only auto-load library if we're not already populated with history
+            if vm.state.assets.isEmpty {
+                vm.trigger(.loadInitialData) 
+            }
+        }
     }
     
     private var gridHeader: some View {
         HStack {
-            if gridStyle.showAlbumPicker {
+            if gridStyle.showAlbumPicker && vm.state.currentAlbum != nil {
                 AlbumDropdownMenu(viewModel: vm)
             } else {
                 Text(vm.state.currentAlbum?.title ?? "Recents")
@@ -79,7 +110,12 @@ struct AssetGridView: View {
     }
     
     private var nextButton: some View {
-        Button("NEXT\(vm.state.selectedAssets.count > 1 ? " (\(vm.state.selectedAssets.count))" : "")") {
+        let count = vm.state.selectedAssets.count
+        let limit = vm.selectionLimit
+        let label = count > 0 ? "NEXT (\(count)/\(limit))" : "NEXT"
+        
+        return Button(label) {
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             onSelectionComplete(vm.state.selectedAssets)
         }
         .font(.system(size: 11, weight: .bold))

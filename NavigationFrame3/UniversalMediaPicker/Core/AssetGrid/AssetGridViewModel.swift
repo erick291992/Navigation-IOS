@@ -5,10 +5,11 @@ import Observation
 // MARK: - Actions
 public enum AssetGridAction {
     case loadInitialData
+    case loadHistory([MediaItem])
     case selectAlbum(PhotoAlbumService.AlbumInfo)
-    case selectAsset(PHAsset)
+    case selectAsset(GridAsset)
     case toggleMultiSelect
-    case toggleAssetSelection(PHAsset)
+    case toggleAssetSelection(GridAsset)
     case clearSelection
 }
 
@@ -16,8 +17,8 @@ public enum AssetGridAction {
 public struct AssetGridState {
     public var albums: [PhotoAlbumService.AlbumInfo] = []
     public var currentAlbum: PhotoAlbumService.AlbumInfo?
-    public var assets: [PHAsset] = []
-    public var selectedAssets: [PHAsset] = [] // Ordered for numbered badges
+    public var assets: [GridAsset] = []
+    public var selectedAssets: [GridAsset] = [] // Ordered for numbered badges
     public var isMultiSelectActive: Bool = false
     public var isLoading: Bool = false
     public var errorMessage: String?
@@ -27,7 +28,7 @@ public struct AssetGridState {
 @Observable
 public final class AssetGridViewModel: NSObject, PHPhotoLibraryChangeObserver {
     private let albumService = PhotoAlbumService.shared
-    private let selectionLimit: Int
+    public let selectionLimit: Int
     
     // The Lens
     public var state = AssetGridState()
@@ -46,11 +47,23 @@ public final class AssetGridViewModel: NSObject, PHPhotoLibraryChangeObserver {
     public func trigger(_ action: AssetGridAction) {
         switch action {
         case .loadInitialData:
-            loadAlbums()
+            Task { await loadAlbums() }
+            
+        case .loadHistory(let items):
+            state.assets = [] // Clear instantly to prevent "Ghost Library" flashes
+            state.currentAlbum = nil // Indicates we are in history mode
+            Task {
+                let assets = await Task.detached(priority: .userInitiated) {
+                    items.map { GridAsset.mediaItem($0) }
+                }.value
+                await MainActor.run {
+                    self.state.assets = assets
+                }
+            }
             
         case .selectAlbum(let album):
             state.currentAlbum = album
-            loadAssets(for: album)
+            Task { await loadAssets(for: album) }
             
         case .selectAsset(let asset):
             if selectionLimit > 1 {
@@ -60,7 +73,6 @@ public final class AssetGridViewModel: NSObject, PHPhotoLibraryChangeObserver {
             }
             
         case .toggleMultiSelect:
-            // Deprecated: Frictionless multi-select handles this automatically
             break
             
         case .toggleAssetSelection(let asset):
@@ -73,25 +85,44 @@ public final class AssetGridViewModel: NSObject, PHPhotoLibraryChangeObserver {
     
     // MARK: - Private Logic
     
-    private func loadAlbums() {
+    private func loadAlbums() async {
         state.isLoading = true
-        let albums = albumService.fetchAlbums()
+        
+        // Principal Move: Yield the main thread to let the UI (pink dot) render first.
+        await Task.yield()
+        
+        // Move heavy PhotoKit work to background
+        let service = self.albumService
+        let albums = await Task.detached(priority: .userInitiated) {
+            service.fetchAlbums()
+        }.value
+        
         state.albums = albums
         
         if let first = albums.first {
             state.currentAlbum = first
-            loadAssets(for: first)
+            await loadAssets(for: first)
         }
         state.isLoading = false
     }
     
-    private func loadAssets(for album: PhotoAlbumService.AlbumInfo) {
+    private func loadAssets(for album: PhotoAlbumService.AlbumInfo) async {
         state.isLoading = true
-        state.assets = albumService.fetchAssets(in: album.collection)
+        
+        // Yield again to ensure smooth UI interaction
+        await Task.yield()
+        
+        // Move heavy PhotoKit work to background
+        let service = self.albumService
+        let phAssets = await Task.detached(priority: .userInitiated) {
+            service.fetchAssets(in: album.collection)
+        }.value
+        
+        state.assets = phAssets.map { .phAsset($0) }
         state.isLoading = false
     }
     
-    private func toggleAssetSelection(_ asset: PHAsset) {
+    private func toggleAssetSelection(_ asset: GridAsset) {
         if let index = state.selectedAssets.firstIndex(of: asset) {
             state.selectedAssets.remove(at: index)
         } else {
@@ -101,11 +132,11 @@ public final class AssetGridViewModel: NSObject, PHPhotoLibraryChangeObserver {
         }
     }
     
-    public func isSelected(_ asset: PHAsset) -> Bool {
+    public func isSelected(_ asset: GridAsset) -> Bool {
         state.selectedAssets.contains(asset)
     }
     
-    public func selectionIndex(for asset: PHAsset) -> Int? {
+    public func selectionIndex(for asset: GridAsset) -> Int? {
         if let index = state.selectedAssets.firstIndex(of: asset) {
             return index + 1 // 1-based index for badge
         }
@@ -115,9 +146,13 @@ public final class AssetGridViewModel: NSObject, PHPhotoLibraryChangeObserver {
     // MARK: - PHPhotoLibraryChangeObserver
     
     nonisolated public func photoLibraryDidChange(_ changeInstance: PHChange) {
-        // Trigger a reload when the library changes (e.g. from limited access picker)
+        // Trigger a reload when the library changes, but ONLY if we are currently 
+        // showing library assets (i.e. currentAlbum is not nil).
+        // If currentAlbum is nil, we are likely in history/reuse mode and should not overwrite.
         Task { @MainActor in
-            self.trigger(.loadInitialData)
+            if self.state.currentAlbum != nil {
+                self.trigger(.loadInitialData)
+            }
         }
     }
 }

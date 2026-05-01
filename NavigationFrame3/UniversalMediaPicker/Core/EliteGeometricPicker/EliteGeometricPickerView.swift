@@ -178,7 +178,7 @@ public struct EliteGeometricPickerView: View {
                     let selectionOffset = viewModel.selectedAssets.firstIndex(where: { $0.localIdentifier == asset.localIdentifier })
                     
                     ZStack(alignment: .topTrailing) {
-                        AsyncFlexibleAssetView(asset: asset)
+                        AsyncFlexibleAssetView(assetSource: .phAsset(asset))
                             .scaleEffect(isSelected ? 0.95 : 1.0)
                         
                         if viewModel.configuration.selectionLimit > 1 {

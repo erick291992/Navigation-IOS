@@ -132,13 +132,23 @@ struct MasterGalleryView: View {
         .mediaPicker(
             isPresented: $vm.showModifierPicker,
             configuration: .init(
-                selectionLimit: 2,
+                selectionLimit: 3,
                 crop: .square,
                 style: MediaPickerStyle(
                     accentColor: .pink,
                     onboardingTitle: "Meetsta Elite Creator",
                     doneButtonStyle: .capsule,
-                    font: .system(.body, design: .rounded)
+                    font: .system(.body, design: .rounded),
+                    gridStyle: .init(
+                        galleryMode: .grid,
+                        columnCount: 4,
+                        spacing: 1,
+                        cornerRadius: 0,
+                        selectionIndicator: .numbered,
+                        selectionBorderWidth: 3.0,
+                        showAlbumPicker: true,
+                        showVideoDuration: true
+                    )
                 )
             ),
             onCompletion: { items in

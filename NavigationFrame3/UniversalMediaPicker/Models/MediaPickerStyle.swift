@@ -28,24 +28,26 @@ public struct MediaPickerStyle {
         public var spacing: CGFloat
         public var cornerRadius: CGFloat
         public var selectionIndicator: SelectionIndicator
+        public var selectionBorderWidth: CGFloat
         public var showAlbumPicker: Bool
         public var showVideoDuration: Bool
-
+        
         public enum GalleryMode {
             case grid    // Option A: Custom PhotoKit grid (Instagram-style)
             case native  // Option B: Apple's native PhotosPicker (lean)
         }
-
+        
         public enum SelectionIndicator {
             case numbered, checkmark, none
         }
-
+        
         public static let `default` = GridStyle(
             galleryMode: .grid,
             columnCount: 4,
             spacing: 1,
             cornerRadius: 0,
             selectionIndicator: .numbered,
+            selectionBorderWidth: 3.0,
             showAlbumPicker: true,
             showVideoDuration: true
         )

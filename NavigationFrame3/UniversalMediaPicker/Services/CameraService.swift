@@ -98,25 +98,25 @@ public class CameraService: NSObject {
     private func updateZoomFactors(for device: AVCaptureDevice) {
         var factors: [CGFloat] = []
         
-        // Check for ultra-wide (usually 0.5x relative to wide)
-        // In a Triple/Dual Wide camera, virtual zoom factor 1.0 is the wide lens.
-        // The ultra-wide might be at a lower factor.
-        
-        if device.deviceType == .builtInTripleCamera || device.deviceType == .builtInDualWideCamera {
-            // These virtual devices usually have the ultra-wide as the starting point.
-            // But iOS maps 1.0 to the "Wide" lens. 
-            // We can check the switch points.
+        // Add 0.5x only if the device physically supports it (Ultra Wide lens)
+        if device.minAvailableVideoZoomFactor <= 0.5 {
             factors.append(0.5)
         }
         
+        // Always include 1.0x and 2.0x as standard
         factors.append(1.0)
-        factors.append(2.0)
+        
+        // Only include 2.0x and 5.0x if the device can actually reach them
+        if device.maxAvailableVideoZoomFactor >= 2.0 {
+            factors.append(2.0)
+        }
         
         if device.maxAvailableVideoZoomFactor >= 5.0 {
             factors.append(5.0)
         }
         
-        self.availableZoomFactors = factors.sorted()
+        // Ensure we don't have duplicates and they are sorted
+        self.availableZoomFactors = Array(Set(factors)).sorted()
     }
     
     /// Captures a high-resolution photo.

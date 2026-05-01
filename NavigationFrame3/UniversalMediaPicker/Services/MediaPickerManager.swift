@@ -107,19 +107,26 @@ public class MediaPickerManager {
     }
     
     private func generateThumbnail(for image: UIImage) -> UIImage {
-        let maxSide: CGFloat = 800
-        let ratio = image.size.width / image.size.height
+        let size: CGFloat = 600 // High quality but optimized
+        let imageSize = image.size
+        let side = min(imageSize.width, imageSize.height)
         
-        var newSize: CGSize
-        if ratio > 1 {
-            newSize = CGSize(width: maxSide, height: maxSide / ratio)
-        } else {
-            newSize = CGSize(width: maxSide * ratio, height: maxSide)
-        }
+        let rect = CGRect(
+            x: (imageSize.width - side) / 2,
+            y: (imageSize.height - side) / 2,
+            width: side,
+            height: side
+        )
         
-        let renderer = UIGraphicsImageRenderer(size: newSize)
+        // 1. Crop to square
+        guard let cgImage = image.cgImage?.cropping(to: rect) else { return image }
+        let croppedImage = UIImage(cgImage: cgImage, scale: image.scale, orientation: image.imageOrientation)
+        
+        // 2. Resize to target size
+        let targetSize = CGSize(width: size, height: size)
+        let renderer = UIGraphicsImageRenderer(size: targetSize)
         return renderer.image { _ in
-            image.draw(in: CGRect(origin: .zero, size: newSize))
+            croppedImage.draw(in: CGRect(origin: .zero, size: targetSize))
         }
     }
 }

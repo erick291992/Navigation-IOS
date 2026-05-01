@@ -39,7 +39,7 @@ class AdvancedPickerExampleViewModel {
     
     // MARK: - Actions
     
-    func selectAsset(_ asset: PHAsset) {
+    func selectAsset(_ asset: GridAsset) {
         gridModel.trigger(.toggleAssetSelection(asset))
     }
     
@@ -52,8 +52,11 @@ class AdvancedPickerExampleViewModel {
         
         Task {
             do {
+                // Extract PHAssets from GridAsset wrappers
+                let phAssets = assets.compactMap { $0.phAsset }
+                
                 // Pass raw PHAssets straight to the Tier 3 Engine!
-                let processed = try await engine.process(assets)
+                let processed = try await engine.process(phAssets)
                 
                 await MainActor.run {
                     self.itemsToCrop = processed

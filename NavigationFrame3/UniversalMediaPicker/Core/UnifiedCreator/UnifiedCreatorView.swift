@@ -7,6 +7,7 @@ import AVFoundation
 /// Merges a live camera preview with a quick-access library strip, video recording, and session history (REUSE).
 public struct UnifiedCreatorView: View {
     @State private var viewModel: UnifiedCreatorViewModel
+    @State private var isZoomExpanded = false
     @Environment(\.scenePhase) private var scenePhase
     
     public init(
@@ -21,54 +22,63 @@ public struct UnifiedCreatorView: View {
         ))
     }
     
+    private func calculateItemSize(for width: CGFloat) -> CGFloat {
+        let style = viewModel.configuration.style.gridStyle
+        let columns = CGFloat(style.columnCount)
+        let spacing = style.spacing
+        return (width - (spacing * (columns - 1))) / columns
+    }
+    
     public var body: some View {
+        rootContent
+            .onChange(of: scenePhase) { oldPhase, newPhase in
+                if newPhase == .active {
+                    viewModel.updateAuth()
+                }
+            }
+            .onChange(of: viewModel.recentAssets) { (oldValue: [PHAsset], newValue: [PHAsset]) in
+                if viewModel.previewAsset == nil, let first = newValue.first {
+                    viewModel.setPreviewGridAsset(.phAsset(first))
+                }
+            }
+            .animation(.spring(), value: viewModel.authStatus)
+    }
+
+    private var rootContent: some View {
         ZStack {
             Color.black.ignoresSafeArea()
             
             GeometryReader { proxy in
-                let viewWidth = proxy.size.width
-                let maxViewfinderHeight = proxy.size.height * 0.48
-                let viewfinderHeight = min(viewWidth, maxViewfinderHeight)
-                let bottomHeight = proxy.size.height - viewfinderHeight
-                
-                VStack(spacing: 0) {
-                    viewfinderArea
-                        .frame(width: viewWidth, height: viewfinderHeight)
-                        .clipped()
-                    
-                    bottomPanel
-                        .frame(width: viewWidth, height: bottomHeight)
-                        .clipped()
-                }
+                layoutContent(with: proxy)
             }
             .ignoresSafeArea(.container, edges: .top)
-            
-            // Exit Button (Always available to escape)
-            if viewModel.authStatus != .notDetermined {
-                exitButton
-            }
         }
         .background(Color.black)
-        .onAppear {
-            viewModel.setup()
-        }
-        .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .active {
-                viewModel.updateAuth()
-            }
-        }
-        .onChange(of: viewModel.recentAssets) { _, assets in
-            if viewModel.previewAsset == nil, let first = assets.first {
-                viewModel.setPreviewAsset(first)
-            }
-        }
-        .animation(.spring(), value: viewModel.authStatus)
     }
-    
+
+    @ViewBuilder
+    private func layoutContent(with proxy: GeometryProxy) -> some View {
+        let viewWidth = proxy.size.width
+        let maxViewfinderHeight = proxy.size.height * 0.48
+        let viewfinderHeight = min(viewWidth, maxViewfinderHeight)
+        let bottomHeight = proxy.size.height - viewfinderHeight
+        let panelItemSize = calculateItemSize(for: viewWidth)
+        
+        VStack(spacing: 0) {
+            viewfinderArea
+                .frame(width: viewWidth, height: viewfinderHeight)
+                .clipped()
+            
+            bottomPanel(itemSize: panelItemSize)
+                .frame(width: viewWidth, height: bottomHeight)
+                .clipped()
+        }
+    }
+
     // MARK: - Viewfinder Area
     
     private var viewfinderArea: some View {
-        ZStack {
+        ZStack(alignment: .topLeading) {
             Group {
                 if viewModel.authStatus == .notDetermined {
                     onboardingView
@@ -80,6 +90,7 @@ public struct UnifiedCreatorView: View {
             
             // Exit Button (Always available to escape)
             exitButton
+                .zIndex(99) // Ensure it's always on top
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black)
@@ -88,21 +99,31 @@ public struct UnifiedCreatorView: View {
     
     private var mainViewfinderContent: some View {
         ZStack {
-            switch viewModel.selectedMode {
-            case .library:
-                if viewModel.authStatus == .denied || viewModel.authStatus == .restricted {
-                    PermissionNeededView(type: .library, accentColor: viewModel.configuration.style.accentColor)
-                } else {
-                    libraryViewfinder
+            // 1. Photo Viewfinder (Persistent & Warm)
+            if viewModel.cameraService.isSourceReady {
+                CameraPreviewView()
+                    .opacity(viewModel.selectedMode == .photo ? 1 : 0)
+            } else {
+                PermissionNeededView(type: .camera, accentColor: viewModel.configuration.style.accentColor)
+                    .opacity(viewModel.selectedMode == .photo ? 1 : 0)
+            }
+            
+            // 2. Library Viewfinder
+            if viewModel.selectedMode == .library {
+                Group {
+                    if viewModel.authStatus == .denied || viewModel.authStatus == .restricted {
+                        PermissionNeededView(type: .library, accentColor: viewModel.configuration.style.accentColor)
+                    } else {
+                        libraryViewfinder
+                    }
                 }
-            case .reuse:
+                .transition(.opacity)
+            }
+            
+            // 3. Reuse Viewfinder
+            if viewModel.selectedMode == .reuse {
                 historyViewfinder
-            case .photo:
-                if viewModel.cameraService.isSourceReady {
-                    CameraPreviewView()
-                } else {
-                    PermissionNeededView(type: .camera, accentColor: viewModel.configuration.style.accentColor)
-                }
+                    .transition(.opacity)
             }
             
             // Mode Overlay (Recording indicator)
@@ -110,7 +131,7 @@ public struct UnifiedCreatorView: View {
                 recordingIndicator
             }
         }
-        .animation(nil, value: viewModel.selectedMode)
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: viewModel.selectedMode)
     }
     
     private var onboardingView: some View {
@@ -130,6 +151,7 @@ public struct UnifiedCreatorView: View {
             }
             
             Button(action: {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 viewModel.setup()
             }) {
                 Text("GET STARTED")
@@ -150,7 +172,10 @@ public struct UnifiedCreatorView: View {
                 emptyLibraryState
             } else {
                 LibraryPreviewer(asset: viewModel.previewAsset ?? viewModel.recentAssets.first)
-                    .onTapGesture { viewModel.toggleSystemPicker() }
+                    .onTapGesture { 
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        viewModel.toggleSystemPicker() 
+                    }
             }
         }
     }
@@ -174,7 +199,10 @@ public struct UnifiedCreatorView: View {
                 Text("No Recent Photos Found")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.white.opacity(0.4))
-                Button("Open Library") { viewModel.toggleSystemPicker() }
+                Button("Open Library") { 
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    viewModel.toggleSystemPicker() 
+                }
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.blue)
             }
@@ -211,7 +239,10 @@ public struct UnifiedCreatorView: View {
     private var exitButton: some View {
         VStack {
             HStack {
-                Button(action: { viewModel.onCancelAction() }) {
+                Button(action: { 
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    viewModel.onCancelAction() 
+                }) {
                     Image(systemName: "xmark")
                         .font(.system(size: 20, weight: .bold))
                         .foregroundColor(.white)
@@ -226,56 +257,26 @@ public struct UnifiedCreatorView: View {
     
     // MARK: - Bottom Panel Area
     
-    private var bottomPanel: some View {
+    @ViewBuilder
+    private func bottomPanel(itemSize: CGFloat) -> some View {
         VStack(spacing: 0) {
-            if viewModel.authStatus == .notDetermined {
+            if viewModel.authStatus != .notDetermined {
+                VStack(spacing: 0) {
+                    stripHeader
+                    mainContentArea
+                }
+            } else {
                 Color.black
-            } else if viewModel.selectedMode == .library {
-                if viewModel.authStatus == .denied || viewModel.authStatus == .restricted {
-                    PermissionNeededView(type: .library, accentColor: viewModel.configuration.style.accentColor)
-                        .frame(maxHeight: .infinity)
-                } else if viewModel.configuration.style.gridStyle.galleryMode == .grid {
-                    AssetGridView(
-                        configuration: viewModel.configuration,
-                        onAssetTap: { asset in
-                            viewModel.setPreviewAsset(asset)
-                        },
-                        onSelectionComplete: { assets in
-                            viewModel.handleAssets(assets)
-                        }
-                    )
-                    .frame(maxHeight: .infinity)
-                } else {
-                    nativeLibraryStrip
-                        .padding(.top, 16)
-                }
-            } else if viewModel.selectedMode == .photo {
-                ZStack(alignment: .top) {
-                    verticalLibraryGrid
-                        .opacity(0.6) // Content-filled background
-                    
-                    VStack(spacing: 0) {
-                        pullUpHandle
-                        
-                        stripHeader
-                            .padding(.top, 8)
-                        
-                        Spacer()
-                        
-                        zoomDial
-                            .padding(.bottom, 8)
-                    }
-                    .background(
-                        LinearGradient(
-                            colors: [.black.opacity(0.8), .black.opacity(0.2), .black.opacity(0.8)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                }
-            } else if viewModel.selectedMode == .reuse {
-                reuseHistoryStrip
             }
+        }
+        .background(Color.black)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var mainContentArea: some View {
+        VStack(spacing: 0) {
+            gridAndZoomArea
+                .background(Color.black)
             
             Spacer(minLength: 0)
             
@@ -283,196 +284,182 @@ public struct UnifiedCreatorView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 24)
         }
-        .background(Color.black)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    
-    private var nativeLibraryStrip: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            stripHeader
-            contentScrollView
-        }
-    }
-    
-    private var reuseHistoryStrip: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            stripHeader
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
-                    historyStrip
+
+    private var gridAndZoomArea: some View {
+        ZStack(alignment: .bottom) {
+            AssetGridView(
+                configuration: viewModel.configuration,
+                viewModel: viewModel.gridViewModel,
+                showHeader: false,
+                onAssetTap: { asset in
+                    viewModel.setPreviewGridAsset(asset)
+                },
+                onSelectionComplete: { assets in
+                    viewModel.handleGridAssets(assets)
                 }
-                .padding(.horizontal, 20)
+            )
+            // No opacity toggle - keep grid as a persistent base layer for a unified feel
+            
+            if viewModel.selectedMode == .photo {
+                zoomDial
+                    .padding(.bottom, 8)
+                    .transition(.scale.combined(with: .opacity))
             }
-            .frame(height: 70)
         }
     }
     
     private var stripHeader: some View {
         HStack {
-            Text(viewModel.selectedMode == .reuse ? "PICKED HISTORY" : "RECENT LIBRARY")
-                .font(.system(size: 11, weight: .black, design: .rounded))
-                .foregroundColor(.white.opacity(0.5))
-                .tracking(1.5)
+            headerTitle
             Spacer()
-            if viewModel.selectedMode == .library {
-                adaptiveLibraryButton
-            }
+            nextButton
         }
+        .frame(height: 44) // Fixed height to prevent vertical "bounce" during mode switches
         .padding(.horizontal, 20)
+        .background(viewModel.configuration.style.toolbarColor)
     }
-    
-    private var adaptiveLibraryButton: some View {
+
+    @ViewBuilder
+    private var headerTitle: some View {
+        if viewModel.selectedMode == .reuse {
+            Text("History")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(.white)
+        } else {
+            if viewModel.configuration.style.gridStyle.showAlbumPicker && viewModel.gridViewModel.state.currentAlbum != nil {
+                AlbumDropdownMenu(viewModel: viewModel.gridViewModel)
+            } else {
+                Text(viewModel.gridViewModel.state.currentAlbum?.title ?? "Recents")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.white)
+            }
+        }
+    }
+
+    private var nextButton: some View {
         Group {
-            if viewModel.authStatus == .limited {
-                Button("MANAGE") { viewModel.openLimitedPicker() }
-            } else if viewModel.authStatus == .authorized {
-                Button("SELECT") { viewModel.toggleSystemPicker() }
-            } else if viewModel.authStatus == .denied {
-                Button("ENABLE ACCESS") {
-                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                        UIApplication.shared.open(url)
-                    }
-                }
+            let count = viewModel.gridViewModel.state.selectedAssets.count
+            let limit = viewModel.gridViewModel.selectionLimit
+            let label = count > 0 ? "NEXT (\(count)/\(limit))" : "NEXT"
+            
+            Button(label) {
+                viewModel.handleGridAssets(viewModel.gridViewModel.state.selectedAssets)
             }
-        }
-        .font(.system(size: 11, weight: .bold))
-        .foregroundColor(.blue)
-    }
-    
-    private var contentScrollView: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 4) {
-                if viewModel.selectedMode == .reuse {
-                    historyStrip
-                } else {
-                    libraryStrip
-                }
-            }
-            .padding(.horizontal, 20)
-        }
-        .frame(height: 70)
-    }
-    
-    private var pullUpHandle: some View {
-        Capsule()
-            .fill(Color.white.opacity(0.2))
-            .frame(width: 40, height: 4)
-            .padding(.top, 8)
-    }
-    
-    private var verticalLibraryGrid: some View {
-        ScrollView {
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 2) {
-                ForEach(viewModel.recentAssets, id: \.localIdentifier) { asset in
-                    AssetThumbnailView(asset: asset) { _ in
-                        viewModel.setPreviewAsset(asset)
-                    }
-                    .frame(height: 120)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 0)
-                            .stroke(viewModel.configuration.style.accentColor, lineWidth: viewModel.previewAsset?.localIdentifier == asset.localIdentifier ? 3 : 0)
-                    )
-                }
-            }
-        }
-    }
-    
-    private var libraryStrip: some View {
-        ForEach(viewModel.recentAssets, id: \.localIdentifier) { asset in
-            AssetThumbnailView(asset: asset) { _ in
-                viewModel.setPreviewAsset(asset)
-            }
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(viewModel.configuration.style.accentColor, lineWidth: viewModel.previewAsset?.localIdentifier == asset.localIdentifier ? 3 : 0)
-            )
+            .font(.system(size: 11, weight: .bold))
+            .foregroundColor(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(viewModel.configuration.style.accentColor)
+            .cornerRadius(12)
+            .disabled(count == 0)
+            .opacity(count == 0 ? 0.3 : 1.0)
+            .animation(.spring(), value: count)
         }
     }
     
     private var zoomDial: some View {
-        HStack(spacing: 12) {
-            ForEach(viewModel.cameraService.availableZoomFactors, id: \.self) { factor in
-                Button(action: {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+        HStack(spacing: 6) {
+            if isZoomExpanded {
+                ForEach(viewModel.cameraService.availableZoomFactors, id: \.self) { factor in
+                    Button(action: { 
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         viewModel.cameraService.setZoom(factor)
+                        isZoomExpanded = false
+                    }) {
+                        Text(String(format: "%.1fx", factor))
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundColor(viewModel.cameraService.zoomFactor == factor ? viewModel.configuration.style.accentColor : .white)
+                            .frame(width: 38, height: 38)
+                            .background(Circle().fill(viewModel.cameraService.zoomFactor == factor ? .white.opacity(0.2) : .clear))
+                    }
+                }
+            } else {
+                Button(action: {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        isZoomExpanded = true
                     }
                 }) {
-                    Text(String(format: "%.1fx", factor))
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .foregroundColor(viewModel.cameraService.zoomFactor == factor ? .white : .white) // Keep white for premium look
-                        .frame(width: 36, height: 36)
-                        .background(
-                            Circle()
-                                .fill(viewModel.cameraService.zoomFactor == factor ? viewModel.configuration.style.accentColor : Color.white.opacity(0.15))
-                        )
-                        .overlay(
-                            Circle()
-                                .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                        )
+                    Text(String(format: "%.1f", viewModel.cameraService.zoomFactor))
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundColor(viewModel.configuration.style.accentColor)
+                        .frame(width: 44, height: 44)
                 }
             }
         }
-        .padding(.vertical, 8)
+        .padding(isZoomExpanded ? 4 : 0)
+        .background(
+            Capsule()
+                .fill(.ultraThinMaterial)
+                .overlay(Capsule().stroke(.white.opacity(0.2), lineWidth: 1))
+        )
+        .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isZoomExpanded)
     }
     
-    private var historyStrip: some View {
-        ForEach(viewModel.history, id: \.id) { item in
-            Image(uiImage: item.thumbnail)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 70, height: 70)
-                .cornerRadius(6)
-                .clipped()
-                .onTapGesture { viewModel.setPreviewHistoryItem(item) }
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(viewModel.configuration.style.accentColor, lineWidth: viewModel.previewHistoryItem?.id == item.id ? 3 : 0)
-                )
+    @ViewBuilder
+    private var shutterAndModeBar: some View {
+        VStack(spacing: 20) {
+            shutterRow
+            modeRow
         }
     }
     
-    private var shutterAndModeBar: some View {
-        VStack(spacing: 20) {
+    private var shutterRow: some View {
+        ZStack {
+            // 1. Gallery Shortcut (Left)
             HStack {
                 galleryShortcut
                     .frame(width: 48, height: 48)
-                
                 Spacer()
-                
-                Button(action: { viewModel.onShutterTab() }) {
-                    shutterView
-                }
-                .buttonStyle(ScaleButtonStyle())
-                
-                Spacer()
-                
-                Group {
-                    if viewModel.selectedMode == .photo {
-                        Button(action: { viewModel.flipCamera() }) {
-                            Circle().fill(.white.opacity(0.1)).frame(width: 44, height: 44)
-                                .overlay(Image(systemName: "arrow.triangle.2.circlepath").foregroundColor(.white))
-                        }
-                    } else {
-                        Color.clear
-                    }
-                }
-                .frame(width: 48, height: 48)
             }
-            .padding(.horizontal, 30)
             
-            HStack(spacing: 24) {
-                ForEach([UnifiedCreatorViewModel.CreatorMode.library, .reuse, .photo], id: \.self) { mode in
-                    ModeButton(
-                        title: viewModel.modeTitle(mode),
-                        isSelected: viewModel.selectedMode == mode,
-                        accentColor: viewModel.configuration.style.accentColor,
-                        action: { viewModel.selectMode(mode) }
-                    )
+            // 2. Shutter Button (Dead Center)
+            Button(action: { 
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                viewModel.onShutterTab() 
+            }) {
+                shutterView
+            }
+            .buttonStyle(ScaleButtonStyle())
+            
+            // 3. Flip Camera (Right)
+            HStack {
+                Spacer()
+                if viewModel.selectedMode == .photo {
+                    Button(action: { 
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        viewModel.flipCamera() 
+                    }) {
+                        Circle().fill(.white.opacity(0.1)).frame(width: 44, height: 44)
+                            .overlay(Image(systemName: "arrow.triangle.2.circlepath").foregroundColor(.white))
+                    }
+                    .frame(width: 48, height: 48)
+                } else {
+                    Color.clear.frame(width: 48, height: 48)
                 }
             }
-            .frame(maxWidth: .infinity)
-            .padding(.bottom, 4)
         }
+        .padding(.horizontal, 30)
+    }
+    
+    private var modeRow: some View {
+        HStack(spacing: 24) {
+            ForEach([UnifiedCreatorViewModel.CreatorMode.library, .reuse, .photo], id: \.self) { mode in
+                ModeButton(
+                    title: viewModel.modeTitle(mode),
+                    isSelected: viewModel.selectedMode == mode,
+                    accentColor: viewModel.configuration.style.accentColor,
+                    action: { 
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        viewModel.selectMode(mode) 
+                    }
+                )
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.bottom, 4)
     }
     
     private var shutterView: some View {
@@ -497,7 +484,10 @@ public struct UnifiedCreatorView: View {
     }
     
     private var galleryShortcut: some View {
-        Button(action: { viewModel.galleryShortcutAction() }) {
+        Button(action: { 
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            viewModel.galleryShortcutAction() 
+        }) {
             ZStack {
                 if (viewModel.authStatus == .authorized || viewModel.authStatus == .limited), let firstAsset = viewModel.recentAssets.first {
                     AssetThumbnailView(asset: firstAsset) { _ in }
