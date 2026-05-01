@@ -131,7 +131,16 @@ struct MasterGalleryView: View {
         // 🧪 ELITE FLOW: Frictionless Modifier (Handles Selection -> Crop sequence)
         .mediaPicker(
             isPresented: $vm.showModifierPicker,
-            configuration: .init(crop: .square, style: .pinkSleek),
+            configuration: .init(
+                selectionLimit: 2,
+                crop: .square,
+                style: MediaPickerStyle(
+                    accentColor: .pink,
+                    onboardingTitle: "Meetsta Elite Creator",
+                    doneButtonStyle: .capsule,
+                    font: .system(.body, design: .rounded)
+                )
+            ),
             onCompletion: { items in
                 vm.handlePickerResult(items)
             }

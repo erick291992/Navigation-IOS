@@ -82,7 +82,9 @@ public class UnifiedCreatorViewModel {
     }
     
     public func toggleSystemPicker() {
-        isShowingSystemPicker.toggle()
+        photoKit.openSystemPicker(selectionLimit: configuration.selectionLimit) { [weak self] assets in
+            self?.handleAssets(assets)
+        }
     }
     
     public func openLimitedPicker() {
@@ -155,8 +157,12 @@ public class UnifiedCreatorViewModel {
     
     public func galleryShortcutAction() {
         switch authStatus {
-        case .authorized, .limited:
-            isShowingSystemPicker = true
+        case .authorized:
+            photoKit.openSystemPicker(selectionLimit: configuration.selectionLimit) { [weak self] assets in
+                self?.handleAssets(assets)
+            }
+        case .limited:
+            openLimitedPicker()
         case .denied, .restricted:
             if let url = URL(string: UIApplication.openSettingsURLString) {
                 UIApplication.shared.open(url)

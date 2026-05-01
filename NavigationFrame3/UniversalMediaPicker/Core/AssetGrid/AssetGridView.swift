@@ -69,25 +69,12 @@ struct AssetGridView: View {
             Spacer()
             
             HStack(spacing: 16) {
-                // If not multi-select, and user has ONE asset selected, show NEXT
-                if !vm.state.isMultiSelectActive && !vm.state.selectedAssets.isEmpty {
-                    nextButton
-                }
-                
-                if configuration.selectionLimit > 1 {
-                    Button(vm.state.isMultiSelectActive ? "CANCEL" : "SELECT") {
-                        vm.trigger(.toggleMultiSelect)
-                    }
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(vm.state.isMultiSelectActive ? .red : .blue)
-                }
-                
-                if vm.state.isMultiSelectActive && !vm.state.selectedAssets.isEmpty {
-                    nextButton
-                }
+                nextButton
+                    .disabled(vm.state.selectedAssets.isEmpty)
+                    .opacity(vm.state.selectedAssets.isEmpty ? 0.3 : 1.0)
             }
         }
-        .frame(minHeight: 32) // Prevent layout shift when NEXT button appears/disappears
+        .frame(minHeight: 32) // Prevent layout shift
         .animation(nil, value: vm.state.selectedAssets.count)
     }
     

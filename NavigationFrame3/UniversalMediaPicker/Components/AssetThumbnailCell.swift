@@ -62,7 +62,7 @@ struct AssetThumbnailCell: View {
         case .numbered:
             Text("\(index)")
                 .font(.system(size: 11, weight: .bold))
-                .foregroundColor(.black)
+                .foregroundColor(.white)
                 .frame(width: 22, height: 22)
                 .background(accentColor)
                 .clipShape(Circle())

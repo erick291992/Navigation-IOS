@@ -25,29 +25,23 @@ public struct UnifiedCreatorView: View {
         ZStack {
             Color.black.ignoresSafeArea()
             
-            if viewModel.authStatus == .denied || viewModel.authStatus == .restricted {
-                PermissionNeededView(type: .library)
-                    .transition(.opacity)
-            } else {
-                GeometryReader { proxy in
-                    let viewWidth = proxy.size.width
-                    let maxViewfinderHeight = proxy.size.height * 0.48
-                    let viewfinderHeight = min(viewWidth, maxViewfinderHeight)
-                    let bottomHeight = proxy.size.height - viewfinderHeight
+            GeometryReader { proxy in
+                let viewWidth = proxy.size.width
+                let maxViewfinderHeight = proxy.size.height * 0.48
+                let viewfinderHeight = min(viewWidth, maxViewfinderHeight)
+                let bottomHeight = proxy.size.height - viewfinderHeight
+                
+                VStack(spacing: 0) {
+                    viewfinderArea
+                        .frame(width: viewWidth, height: viewfinderHeight)
+                        .clipped()
                     
-                    VStack(spacing: 0) {
-                        viewfinderArea
-                            .frame(width: viewWidth, height: viewfinderHeight)
-                            .clipped()
-                        
-                        bottomPanel
-                            .frame(width: viewWidth, height: bottomHeight)
-                            .clipped()
-                    }
+                    bottomPanel
+                        .frame(width: viewWidth, height: bottomHeight)
+                        .clipped()
                 }
-                .ignoresSafeArea(.container, edges: .top)
-                .transition(.opacity)
             }
+            .ignoresSafeArea(.container, edges: .top)
             
             // Exit Button (Always available to escape)
             if viewModel.authStatus != .notDetermined {
@@ -63,14 +57,10 @@ public struct UnifiedCreatorView: View {
                 viewModel.updateAuth()
             }
         }
-        .photosPicker(isPresented: $viewModel.isShowingSystemPicker, selection: $viewModel.selection)
         .onChange(of: viewModel.recentAssets) { _, assets in
             if viewModel.previewAsset == nil, let first = assets.first {
                 viewModel.setPreviewAsset(first)
             }
-        }
-        .onChange(of: viewModel.selection) { _, items in
-            viewModel.handleSystemPickerSelection(items)
         }
         .animation(.spring(), value: viewModel.authStatus)
     }
@@ -100,15 +90,18 @@ public struct UnifiedCreatorView: View {
         ZStack {
             switch viewModel.selectedMode {
             case .library:
-                libraryViewfinder
+                if viewModel.authStatus == .denied || viewModel.authStatus == .restricted {
+                    PermissionNeededView(type: .library, accentColor: viewModel.configuration.style.accentColor)
+                } else {
+                    libraryViewfinder
+                }
             case .reuse:
                 historyViewfinder
             case .photo:
                 if viewModel.cameraService.isSourceReady {
                     CameraPreviewView()
                 } else {
-                    // Fallback if camera specific permission is missing
-                    PermissionNeededView(type: .camera)
+                    PermissionNeededView(type: .camera, accentColor: viewModel.configuration.style.accentColor)
                 }
             }
             
@@ -124,10 +117,10 @@ public struct UnifiedCreatorView: View {
         VStack(spacing: 30) {
             Image(systemName: "sparkles")
                 .font(.system(size: 60))
-                .foregroundColor(.yellow)
+                .foregroundColor(viewModel.configuration.style.accentColor)
             
             VStack(spacing: 12) {
-                Text("Unified Creator V3")
+                Text(viewModel.configuration.style.onboardingTitle)
                     .font(.title.bold())
                 Text("To start creating elite content, we need access to your library and camera.")
                     .font(.subheadline)
@@ -141,10 +134,10 @@ public struct UnifiedCreatorView: View {
             }) {
                 Text("GET STARTED")
                     .font(.system(size: 14, weight: .black))
-                    .foregroundColor(.black)
+                    .foregroundColor(.white)
                     .padding(.horizontal, 40)
                     .padding(.vertical, 16)
-                    .background(Color.white)
+                    .background(viewModel.configuration.style.accentColor)
                     .cornerRadius(30)
             }
         }
@@ -238,7 +231,10 @@ public struct UnifiedCreatorView: View {
             if viewModel.authStatus == .notDetermined {
                 Color.black
             } else if viewModel.selectedMode == .library {
-                if viewModel.configuration.style.gridStyle.galleryMode == .grid {
+                if viewModel.authStatus == .denied || viewModel.authStatus == .restricted {
+                    PermissionNeededView(type: .library, accentColor: viewModel.configuration.style.accentColor)
+                        .frame(maxHeight: .infinity)
+                } else if viewModel.configuration.style.gridStyle.galleryMode == .grid {
                     AssetGridView(
                         configuration: viewModel.configuration,
                         onAssetTap: { asset in

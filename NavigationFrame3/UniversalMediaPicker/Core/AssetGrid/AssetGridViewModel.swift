@@ -25,7 +25,7 @@ public struct AssetGridState {
 
 // MARK: - ViewModel
 @Observable
-public final class AssetGridViewModel {
+public final class AssetGridViewModel: NSObject, PHPhotoLibraryChangeObserver {
     private let albumService = PhotoAlbumService.shared
     private let selectionLimit: Int
     
@@ -34,6 +34,12 @@ public final class AssetGridViewModel {
     
     public init(selectionLimit: Int = 1) {
         self.selectionLimit = selectionLimit
+        super.init()
+        PHPhotoLibrary.shared().register(self)
+    }
+    
+    deinit {
+        PHPhotoLibrary.shared().unregisterChangeObserver(self)
     }
     
     // The Trigger
@@ -47,17 +53,15 @@ public final class AssetGridViewModel {
             loadAssets(for: album)
             
         case .selectAsset(let asset):
-            if state.isMultiSelectActive {
+            if selectionLimit > 1 {
                 toggleAssetSelection(asset)
             } else {
                 state.selectedAssets = [asset]
             }
             
         case .toggleMultiSelect:
-            state.isMultiSelectActive.toggle()
-            if !state.isMultiSelectActive {
-                state.selectedAssets = []
-            }
+            // Deprecated: Frictionless multi-select handles this automatically
+            break
             
         case .toggleAssetSelection(let asset):
             toggleAssetSelection(asset)
@@ -102,6 +106,18 @@ public final class AssetGridViewModel {
     }
     
     public func selectionIndex(for asset: PHAsset) -> Int? {
-        state.selectedAssets.firstIndex(of: asset).map { $0 + 1 }
+        if let index = state.selectedAssets.firstIndex(of: asset) {
+            return index + 1 // 1-based index for badge
+        }
+        return nil
+    }
+    
+    // MARK: - PHPhotoLibraryChangeObserver
+    
+    nonisolated public func photoLibraryDidChange(_ changeInstance: PHChange) {
+        // Trigger a reload when the library changes (e.g. from limited access picker)
+        Task { @MainActor in
+            self.trigger(.loadInitialData)
+        }
     }
 }
