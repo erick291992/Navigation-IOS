@@ -71,13 +71,13 @@ struct AdvancedPickerExampleView: View {
                 // MARK: - Premium Grid
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: 1) {
-                        ForEach(vm.gridModel.state.assets, id: \.localIdentifier) { asset in
+                        ForEach(vm.gridModel.state.assets, id: \.id) { asset in
                             let isSelected = vm.gridModel.state.selectedAssets.contains(asset)
                             let selectionIndex = vm.gridModel.state.selectedAssets.firstIndex(of: asset)
                             
                             ZStack(alignment: .topTrailing) {
                                 // Image with scale-down bounce when selected
-                                AsyncFlexibleAssetView(asset: asset)
+                                AsyncFlexibleAssetView(assetSource: asset)
                                     .scaleEffect(isSelected ? 0.95 : 1.0)
                                 
                                 // Sleek selection badges
@@ -185,7 +185,7 @@ struct AdvancedPickerExampleView: View {
 /// A simple, flexible thumbnail loader designed specifically for edge-to-edge grid layouts.
 /// Leaves scaling strictly to the parent views so columns remain perfectly balanced.
 struct AsyncFlexibleAssetView: View {
-    let asset: PHAsset
+    let assetSource: GridAsset
     @State private var thumbnail: UIImage?
     
     var body: some View {
@@ -202,6 +202,13 @@ struct AsyncFlexibleAssetView: View {
             }
         }
         .onAppear {
+            if let item = assetSource.mediaItem {
+                self.thumbnail = item.thumbnail
+                return
+            }
+            
+            guard let asset = assetSource.phAsset else { return }
+            
             // Load a 500x500 high-res thumbnail purely to guarantee sharpness
             PhotoKitService.shared.loadThumbnail(for: asset, size: CGSize(width: 500, height: 500)) { img in
                 self.thumbnail = img

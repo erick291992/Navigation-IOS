@@ -3,7 +3,7 @@ import AVFoundation
 
 /// A high-performance preview layer for the live camera session.
 public struct CameraPreviewView: UIViewRepresentable {
-    @ObservedObject var cameraService = CameraService.shared
+    private var cameraService = CameraService.shared
     
     public func makeUIView(context: Context) -> VideoPreviewUIView {
         let view = VideoPreviewUIView()
@@ -18,7 +18,10 @@ public struct CameraPreviewView: UIViewRepresentable {
     }
     
     public func updateUIView(_ uiView: VideoPreviewUIView, context: Context) {
-        // The UIView naturally handles layout updates through its custom layerClass
+        // Update session if it changed (e.g. flip camera)
+        if uiView.videoPreviewLayer.session != cameraService.session {
+            uiView.videoPreviewLayer.session = cameraService.session
+        }
     }
 }
 

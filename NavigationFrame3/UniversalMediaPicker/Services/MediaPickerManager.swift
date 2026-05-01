@@ -3,6 +3,7 @@ import PhotosUI
 import AVFoundation
 
 /// Handles the low-level processing of media assets into Unified MediaItem objects.
+@MainActor
 public class MediaPickerManager {
     public static let shared = MediaPickerManager()
     
@@ -28,7 +29,7 @@ public class MediaPickerManager {
         let thumbnail = generateThumbnail(for: image)
         
         let mediaItem = MediaItem(data: data, thumbnail: thumbnail, contentType: .image, originalURL: nil)
-        MediaHistoryManager.shared.addToHistory([mediaItem])
+        // MediaHistoryManager.shared.addToHistory([mediaItem]) // REMOVED: Managed by Flow Controllers
         return mediaItem
     }
     
@@ -51,7 +52,7 @@ public class MediaPickerManager {
         let thumbnail = generateThumbnail(for: image)
         
         let mediaItem = MediaItem(data: data, thumbnail: thumbnail, contentType: .image, originalURL: nil)
-        MediaHistoryManager.shared.addToHistory([mediaItem])
+        // MediaHistoryManager.shared.addToHistory([mediaItem]) // REMOVED: Managed by Flow Controllers
         return mediaItem
     }
     
@@ -101,24 +102,31 @@ public class MediaPickerManager {
         let thumbnail = UIImage(cgImage: cgImage)
         
         let mediaItem = MediaItem(data: data, thumbnail: thumbnail, contentType: .video, originalURL: url)
-        MediaHistoryManager.shared.addToHistory([mediaItem])
+        // MediaHistoryManager.shared.addToHistory([mediaItem]) // REMOVED: Managed by Flow Controllers
         return mediaItem
     }
     
     private func generateThumbnail(for image: UIImage) -> UIImage {
-        let maxSide: CGFloat = 800
-        let ratio = image.size.width / image.size.height
+        let size: CGFloat = 600 // High quality but optimized
+        let imageSize = image.size
+        let side = min(imageSize.width, imageSize.height)
         
-        var newSize: CGSize
-        if ratio > 1 {
-            newSize = CGSize(width: maxSide, height: maxSide / ratio)
-        } else {
-            newSize = CGSize(width: maxSide * ratio, height: maxSide)
-        }
+        let rect = CGRect(
+            x: (imageSize.width - side) / 2,
+            y: (imageSize.height - side) / 2,
+            width: side,
+            height: side
+        )
         
-        let renderer = UIGraphicsImageRenderer(size: newSize)
+        // 1. Crop to square
+        guard let cgImage = image.cgImage?.cropping(to: rect) else { return image }
+        let croppedImage = UIImage(cgImage: cgImage, scale: image.scale, orientation: image.imageOrientation)
+        
+        // 2. Resize to target size
+        let targetSize = CGSize(width: size, height: size)
+        let renderer = UIGraphicsImageRenderer(size: targetSize)
         return renderer.image { _ in
-            image.draw(in: CGRect(origin: .zero, size: newSize))
+            croppedImage.draw(in: CGRect(origin: .zero, size: targetSize))
         }
     }
 }
@@ -133,7 +141,7 @@ struct VideoPickerTransferable: Transferable {
         } importing: { received in
             let copy = FileManager.default.temporaryDirectory.appendingPathComponent(received.file.lastPathComponent)
             if FileManager.default.fileExists(atPath: copy.path) {
-                try FileManager.default.removeItem(at: copy)
+                try? FileManager.default.removeItem(at: copy)
             }
             try FileManager.default.copyItem(at: received.file, to: copy)
             return VideoPickerTransferable(url: copy)
@@ -141,7 +149,7 @@ struct VideoPickerTransferable: Transferable {
     }
 }
 
-enum MediaPickerError: Error {
+public enum MediaPickerError: Error {
     case loadFailed
     case invalidData
     case conversionFailed

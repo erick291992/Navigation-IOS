@@ -2,46 +2,24 @@ import SwiftUI
 import PhotosUI
 import Photos
 
-/// "Elite Picker Style B"
+/// "Elite Geometric Picker" (Style B)
 /// A gorgeous, distinct alternative to the primary Elite Picker.
 /// Features a unique geometric layout (modes strictly under the viewfinder),
 /// an Instagram-styled edge-to-edge 1px grid, and high-contrast green accents.
-public struct EliteStyleBPickerView: View {
-    let configuration: MediaPickerConfiguration
-    let onCompletion: ([MediaItem]) -> Void
-    let onCancel: () -> Void
-    
-    // Services
-    @StateObject private var cameraService = CameraService.shared
-    @StateObject private var photoKit = PhotoKitService.shared
-    private var historyManager = MediaHistoryManager.shared
-    
+public struct EliteGeometricPickerView: View {
+    @State private var viewModel: EliteGeometricPickerViewModel
     @Environment(\.scenePhase) private var scenePhase
-    
-    // Internal States
-    @State private var selection: [PhotosPickerItem] = []
-    @State private var selectedAssets: [PHAsset] = []
-    @State private var isShowingSystemPicker = false
-    @State private var selectedMode: CreatorMode = .library
-    @State private var isRecording = false
-    @State private var previewAsset: PHAsset?
-    @State private var previewHistoryItem: MediaItem?
-    
-    enum CreatorMode: String, CaseIterable {
-        case library = "LIBRARY"
-        case reuse = "REUSE"
-        case photo = "PHOTO"
-        case video = "VIDEO"
-    }
     
     public init(
         configuration: MediaPickerConfiguration,
         onCompletion: @escaping ([MediaItem]) -> Void,
         onCancel: @escaping () -> Void
     ) {
-        self.configuration = configuration
-        self.onCompletion = onCompletion
-        self.onCancel = onCancel
+        self._viewModel = State(initialValue: EliteGeometricPickerViewModel(
+            configuration: configuration,
+            onCompletion: onCompletion,
+            onCancel: onCancel
+        ))
     }
     
     public var body: some View {
@@ -56,7 +34,7 @@ public struct EliteStyleBPickerView: View {
                 VStack(spacing: 0) {
                     // MARK: - Premium Navbar
                     HStack {
-                        Button(action: onCancel) {
+                        Button(action: { viewModel.onCancelAction() }) {
                             Image(systemName: "xmark")
                                 .font(.system(size: 20, weight: .bold))
                                 .foregroundColor(.white)
@@ -71,12 +49,12 @@ public struct EliteStyleBPickerView: View {
                         
                         Spacer()
                         
-                        Button(action: handleNext) {
+                        Button(action: { viewModel.handleNext() }) {
                             Text("Next")
                                 .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(canProceed ? .green : .gray)
+                                .foregroundColor(viewModel.canProceed ? .green : .gray)
                         }
-                        .disabled(!canProceed)
+                        .disabled(!viewModel.canProceed)
                         .frame(width: 60, alignment: .trailing)
                     }
                     .padding(.horizontal, 8)
@@ -100,45 +78,21 @@ public struct EliteStyleBPickerView: View {
             }
         }
         .onAppear {
-            photoKit.fetchRecentAssets()
-            cameraService.setup()
+            viewModel.setup()
         }
-        .onChange(of: scenePhase) { newPhase in
+        .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
-                photoKit.updateAuthStatus()
-                if photoKit.authStatus == .authorized || photoKit.authStatus == .limited {
-                    photoKit.fetchRecentAssets()
-                }
+                viewModel.updateAuth()
             }
         }
-        .photosPicker(isPresented: $isShowingSystemPicker, selection: $selection)
-        .onChange(of: selection) { _, items in
-            if !items.isEmpty {
-                Task {
-                    if let results = try? await MediaPickerManager.shared.process(items) {
-                        onCompletion(results)
-                    }
-                }
+        .photosPicker(isPresented: $viewModel.isShowingSystemPicker, selection: $viewModel.selection)
+        .onChange(of: viewModel.recentAssets) { _, assets in
+            if viewModel.previewAsset == nil, let first = assets.first {
+                viewModel.toggleAsset(first)
             }
         }
-    }
-    
-    private var canProceed: Bool {
-        if selectedMode == .library { return previewAsset != nil || !selectedAssets.isEmpty }
-        if selectedMode == .reuse { return previewHistoryItem != nil }
-        return false // Camera proceeds immediately on capture
-    }
-    
-    private func handleNext() {
-        if selectedMode == .reuse, let item = previewHistoryItem {
-            onCompletion([item])
-        } else if selectedMode == .library {
-            let assetsToProcess = selectedAssets.isEmpty ? (previewAsset.map { [$0] } ?? []) : Array(selectedAssets)
-            Task {
-                if let processed = try? await MediaPickerEngine.shared.process(assetsToProcess) {
-                    onCompletion(processed)
-                }
-            }
+        .onChange(of: viewModel.selection) { _, items in
+            viewModel.handleSystemPickerSelection(items)
         }
     }
     
@@ -147,19 +101,17 @@ public struct EliteStyleBPickerView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 24) {
                 Spacer().frame(width: 8)
-                ForEach(CreatorMode.allCases, id: \.self) { mode in
+                ForEach(EliteGeometricPickerViewModel.CreatorMode.allCases, id: \.self) { mode in
                     Button(action: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            selectedMode = mode
-                        }
+                        viewModel.selectMode(mode)
                     }) {
                         Text(mode.rawValue)
-                            .font(.system(size: 13, weight: selectedMode == mode ? .black : .bold))
-                            .foregroundColor(selectedMode == mode ? .white : .gray)
+                            .font(.system(size: 13, weight: viewModel.selectedMode == mode ? .black : .bold))
+                            .foregroundColor(viewModel.selectedMode == mode ? .white : .gray)
                             .padding(.vertical, 8)
                             .overlay(
                                 Rectangle()
-                                    .fill(selectedMode == mode ? Color.green : Color.clear)
+                                    .fill(viewModel.selectedMode == mode ? Color.green : Color.clear)
                                     .frame(height: 2),
                                 alignment: .bottom
                             )
@@ -173,9 +125,9 @@ public struct EliteStyleBPickerView: View {
     // MARK: - Viewfinder Area
     @ViewBuilder
     private var viewfinderArea: some View {
-        switch selectedMode {
+        switch viewModel.selectedMode {
         case .library:
-            if let asset = previewAsset ?? photoKit.recentAssets.first {
+            if let asset = viewModel.previewAsset ?? viewModel.recentAssets.first {
                 GeometryReader { geo in
                     AssetThumbnailView(asset: asset, size: geo.size.width, cornerRadius: 0) { _ in }
                         .frame(width: geo.size.width, height: geo.size.height)
@@ -185,7 +137,7 @@ public struct EliteStyleBPickerView: View {
                 CameraPreviewView()
             }
         case .reuse:
-            if let item = previewHistoryItem ?? historyManager.history.first {
+            if let item = viewModel.previewHistoryItem ?? viewModel.history.first {
                 Image(uiImage: item.thumbnail)
                     .resizable()
                     .scaledToFill()
@@ -201,7 +153,7 @@ public struct EliteStyleBPickerView: View {
     // MARK: - Bottom Area
     @ViewBuilder
     private var bottomArea: some View {
-        switch selectedMode {
+        switch viewModel.selectedMode {
         case .library:
             libraryGrid
         case .reuse:
@@ -221,15 +173,15 @@ public struct EliteStyleBPickerView: View {
         
         return ScrollView {
             LazyVGrid(columns: columns, spacing: 1) {
-                ForEach(photoKit.recentAssets, id: \.localIdentifier) { (asset: PHAsset) in
-                    let isSelected = selectedAssets.contains(where: { $0.localIdentifier == asset.localIdentifier })
-                    let selectionOffset = selectedAssets.firstIndex(where: { $0.localIdentifier == asset.localIdentifier })
+                ForEach(viewModel.recentAssets, id: \.localIdentifier) { (asset: PHAsset) in
+                    let isSelected = viewModel.selectedAssets.contains(where: { $0.localIdentifier == asset.localIdentifier })
+                    let selectionOffset = viewModel.selectedAssets.firstIndex(where: { $0.localIdentifier == asset.localIdentifier })
                     
                     ZStack(alignment: .topTrailing) {
-                        AsyncFlexibleAssetView(asset: asset)
+                        AsyncFlexibleAssetView(assetSource: .phAsset(asset))
                             .scaleEffect(isSelected ? 0.95 : 1.0)
                         
-                        if configuration.selectionLimit > 1 {
+                        if viewModel.configuration.selectionLimit > 1 {
                             if let idx = selectionOffset {
                                 Circle()
                                     .fill(Color.green)
@@ -250,23 +202,7 @@ public struct EliteStyleBPickerView: View {
                     .onTapGesture {
                         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                         withAnimation {
-                            if configuration.selectionLimit > 1 {
-                                if isSelected {
-                                    selectedAssets.removeAll { $0.localIdentifier == asset.localIdentifier }
-                                    if previewAsset?.localIdentifier == asset.localIdentifier { 
-                                        previewAsset = selectedAssets.last 
-                                    }
-                                } else {
-                                    if selectedAssets.count < configuration.selectionLimit {
-                                        selectedAssets.append(asset)
-                                        previewAsset = asset
-                                    } else {
-                                        UINotificationFeedbackGenerator().notificationOccurred(.error)
-                                    }
-                                }
-                            } else {
-                                previewAsset = asset
-                            }
+                            viewModel.toggleAsset(asset)
                         }
                     }
                 }
@@ -282,8 +218,8 @@ public struct EliteStyleBPickerView: View {
         ]
         return ScrollView {
             LazyVGrid(columns: columns, spacing: 2) {
-                ForEach(historyManager.history, id: \.id) { item in
-                    let isSelected = previewHistoryItem == item
+                ForEach(viewModel.history, id: \.id) { item in
+                    let isSelected = viewModel.previewHistoryItem == item
                     Image(uiImage: item.thumbnail)
                         .resizable()
                         .scaledToFill()
@@ -291,7 +227,7 @@ public struct EliteStyleBPickerView: View {
                         .clipped()
                         .border(Color.green, width: isSelected ? 3 : 0)
                         .onTapGesture {
-                            withAnimation { previewHistoryItem = item }
+                            viewModel.setPreviewHistoryItem(item)
                         }
                 }
             }
@@ -305,7 +241,7 @@ public struct EliteStyleBPickerView: View {
             Spacer()
             HStack(spacing: 60) {
                 Button(action: {
-                    isShowingSystemPicker = true
+                    viewModel.toggleSystemPicker()
                 }) {
                     Image(systemName: "photo.on.rectangle")
                         .font(.system(size: 24))
@@ -314,34 +250,21 @@ public struct EliteStyleBPickerView: View {
                 }
                 
                 Button(action: {
-                    if selectedMode == .video {
-                        print("Video recording not implemented in tier 3 demo yet")
-                    } else {
-                        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
-                        cameraService.capture { image in
-                            if let image = image {
-                                Task {
-                                    if let processed = try? await MediaPickerEngine.shared.process(image) {
-                                        await MainActor.run { onCompletion([processed]) }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    viewModel.onShutterTab()
                 }) {
                     Circle()
                         .strokeBorder(Color.white, lineWidth: 4)
                         .frame(width: 76, height: 76)
                         .overlay(
                             Circle()
-                                .fill(isRecording ? Color.red : (selectedMode == .video ? Color.red.opacity(0.8) : Color.white))
-                                .frame(width: isRecording ? 32 : 64, height: isRecording ? 32 : 64)
-                                .cornerRadius(isRecording ? 8 : 32)
+                                .fill(viewModel.isRecording ? Color.red : (viewModel.selectedMode == .video ? Color.red.opacity(0.8) : Color.white))
+                                .frame(width: viewModel.isRecording ? 32 : 64, height: viewModel.isRecording ? 32 : 64)
+                                .cornerRadius(viewModel.isRecording ? 8 : 32)
                         )
                 }
                 
                 Button(action: {
-                    cameraService.flipCamera()
+                    viewModel.flipCamera()
                 }) {
                     Image(systemName: "arrow.triangle.2.circlepath")
                         .font(.system(size: 24))

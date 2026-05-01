@@ -1,17 +1,14 @@
 import SwiftUI
 import PhotosUI
 
-/// The main entry point for the Universal Media Picker (Crop Engine).
-public struct UniversalMediaPicker: View {
+/// The orchestrator for the multi-item cropping flow.
+public struct CropFlowView: View {
     let configuration: MediaPickerConfiguration
     let onCompletion: ([MediaItem]) -> Void
     let onCancel: () -> Void
-    let onGoBack: (() -> Void)? // Optional: Return to selection grid
+    let onGoBack: (() -> Void)?
     
-    // View state
-    @State private var containerSize: CGSize = .zero
-    @State private var isProcessing: Bool = false
-    @State private var viewModel: MediaPickerViewModel
+    @State private var viewModel: CropFlowViewModel
     
     public init(
         configuration: MediaPickerConfiguration,
@@ -24,7 +21,7 @@ public struct UniversalMediaPicker: View {
         self.onCompletion = onCompletion
         self.onCancel = onCancel
         self.onGoBack = onGoBack
-        self._viewModel = State(initialValue: MediaPickerViewModel(
+        self._viewModel = State(initialValue: CropFlowViewModel(
             configuration: configuration,
             initialItems: initialItems,
             onCompletion: onCompletion,
@@ -36,17 +33,9 @@ public struct UniversalMediaPicker: View {
         ZStack {
             Color(.systemBackground).ignoresSafeArea()
             
-            switch viewModel.state.flowState {
+            switch viewModel.flowState {
             case .idle:
-                // If items are already present, we should transition to processing
-                // This is handled by the initial selection trigger in the parent/modifier
                 Color.clear
-                .onAppear {
-                    // Logic to handle items if they were passed in (Headless mode)
-                    if !viewModel.state.items.isEmpty && viewModel.state.flowState == .idle {
-                        // Handled by VM logic usually
-                    }
-                }
                 
             case .processing:
                 ProcessingOverlay()
@@ -54,25 +43,25 @@ public struct UniversalMediaPicker: View {
             case .camera:
                 CameraPicker(
                     onCapture: { image in
-                        viewModel.trigger(.didCapture(image))
+                        viewModel.handleCapture(image)
                     },
                     onCancel: {
-                        viewModel.trigger(.didCancelCrop)
+                        viewModel.cancelCrop()
                     }
                 )
                 .ignoresSafeArea()
                 
             case .cropping(let index, let total):
-                if index < viewModel.state.items.count {
-                    let item = viewModel.state.items[index]
+                if index < viewModel.items.count {
+                    let item = viewModel.items[index]
                     CropView(
                         item: item,
                         crop: configuration.crop,
                         style: configuration.style,
                         subtitle: "\(index + 1) of \(total)",
-                        thumbnails: viewModel.state.items.map { $0.thumbnail },
+                        thumbnails: viewModel.items.map { $0.thumbnail },
                         activeIndex: index,
-                        croppedIndices: Set(viewModel.state.croppedResults.keys),
+                        croppedIndices: Set(viewModel.croppedResults.keys),
                         onJump: { targetIndex in
                             viewModel.jumpTo(index: targetIndex)
                         },
@@ -82,7 +71,7 @@ public struct UniversalMediaPicker: View {
                                 do {
                                     let newItem = try await manager.process(croppedImage)
                                     await MainActor.run {
-                                        viewModel.trigger(.didFinishCrop(item: newItem, index: index))
+                                        viewModel.finishCrop(item: newItem, index: index)
                                     }
                                 }
                             }
@@ -95,7 +84,7 @@ public struct UniversalMediaPicker: View {
                             }
                         }
                     )
-                    .id(index) // CRITICAL: Reset state for each index
+                    .id(index)
                     .transition(.move(edge: .trailing))
                     .interactiveDismissDisabled()
                 }
@@ -103,10 +92,6 @@ public struct UniversalMediaPicker: View {
             case .finished:
                 Color.clear
             }
-        }
-        .onAppear {
-            // If items are passed to the VM (from Tier 3 or Headless), 
-            // the VM should already have them in state.
         }
     }
 }

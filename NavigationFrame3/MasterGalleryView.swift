@@ -120,7 +120,7 @@ struct MasterGalleryView: View {
                             icon: "star.fill",
                             color: .orange,
                             action: {
-                                navigationManager.push { EliteStyleBPickView(configuration: .init(selectionLimit: 5), onCompletion: { _ in }, onCancel: { navigationManager.dismiss() }) }
+                                navigationManager.push { EliteGeometricPickerView(configuration: .init(selectionLimit: 5), onCompletion: { _ in }, onCancel: { navigationManager.dismiss() }) }
                             }
                         )
                     }
@@ -131,7 +131,26 @@ struct MasterGalleryView: View {
         // 🧪 ELITE FLOW: Frictionless Modifier (Handles Selection -> Crop sequence)
         .mediaPicker(
             isPresented: $vm.showModifierPicker,
-            configuration: .init(crop: .square, style: .pinkSleek),
+            configuration: .init(
+                selectionLimit: 3,
+                crop: .square,
+                style: MediaPickerStyle(
+                    accentColor: .pink,
+                    onboardingTitle: "Meetsta Elite Creator",
+                    doneButtonStyle: .capsule,
+                    font: .system(.body, design: .rounded),
+                    gridStyle: .init(
+                        galleryMode: .grid,
+                        columnCount: 4,
+                        spacing: 1,
+                        cornerRadius: 0,
+                        selectionIndicator: .numbered,
+                        selectionBorderWidth: 3.0,
+                        showAlbumPicker: true,
+                        showVideoDuration: true
+                    )
+                )
+            ),
             onCompletion: { items in
                 vm.handlePickerResult(items)
             }

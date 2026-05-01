@@ -175,6 +175,7 @@ struct ScaleButtonStyle: ButtonStyle {
 struct ModeButton: View {
     let title: String
     let isSelected: Bool
+    var accentColor: Color = .white
     let action: () -> Void
     
     var body: some View {
@@ -186,7 +187,7 @@ struct ModeButton: View {
                     .tracking(1.2)
                 
                 Circle()
-                    .fill(isSelected ? Color.white : Color.clear)
+                    .fill(isSelected ? accentColor : Color.clear)
                     .frame(width: 4, height: 4)
             }
         }
@@ -197,12 +198,13 @@ struct ModeButton: View {
 struct PermissionNeededView: View {
     enum PermissionType { case library, camera }
     let type: PermissionType
+    var accentColor: Color = .blue
     
     var body: some View {
         VStack(spacing: 24) {
             Image(systemName: type == .library ? "photo.on.rectangle.angled" : "camera.shutter.button")
                 .font(.system(size: 80))
-                .foregroundStyle(.linearGradient(colors: [.purple, .orange, .yellow], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .foregroundStyle(accentColor)
             
             VStack(spacing: 8) {
                 Text(type == .library ? "Allow Access to Photos" : "Allow Access to Camera")
@@ -220,7 +222,7 @@ struct PermissionNeededView: View {
                 }
             }
             .font(.headline.bold())
-            .foregroundColor(.blue)
+            .foregroundColor(accentColor)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black)
