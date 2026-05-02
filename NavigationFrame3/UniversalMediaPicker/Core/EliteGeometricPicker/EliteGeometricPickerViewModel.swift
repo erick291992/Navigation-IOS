@@ -25,6 +25,8 @@ public class EliteGeometricPickerViewModel {
     public var isRecording = false
     public var previewAsset: PHAsset?
     public var previewHistoryItem: MediaItem?
+    public var zoomFactor: CGFloat { cameraService.zoomFactor }
+    public var availableZoomFactors: [CGFloat] { cameraService.availableZoomFactors }
     
     public enum CreatorMode: String, CaseIterable {
         case library = "LIBRARY"
@@ -108,6 +110,10 @@ public class EliteGeometricPickerViewModel {
     
     public func flipCamera() {
         cameraService.flipCamera()
+    }
+    
+    public func setZoom(_ factor: CGFloat) {
+        cameraService.setZoom(factor)
     }
     
     public func onCancelAction() {

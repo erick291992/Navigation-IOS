@@ -120,7 +120,7 @@ struct MasterGalleryView: View {
                             icon: "star.fill",
                             color: .orange,
                             action: {
-                                navigationManager.push { EliteGeometricPickerView(configuration: .init(selectionLimit: 5), onCompletion: { _ in }, onCancel: { navigationManager.dismiss() }) }
+                                vm.showGeometricPicker = true
                             }
                         )
                     }
@@ -193,6 +193,18 @@ struct MasterGalleryView: View {
                 }
             )
             .ignoresSafeArea()
+        }
+        .fullScreenCover(isPresented: $vm.showGeometricPicker) {
+            EliteGeometricPickerView(
+                configuration: .init(selectionLimit: 5),
+                onCompletion: { items in
+                    vm.handlePickerResult(items)
+                    vm.showGeometricPicker = false
+                },
+                onCancel: {
+                    vm.showGeometricPicker = false
+                }
+            )
         }
     }
 }

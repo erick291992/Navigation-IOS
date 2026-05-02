@@ -16,6 +16,9 @@ class MasterGalleryViewModel {
     var headlessItems: [MediaItem] = []
     var headlessResults: [Int: UIImage] = [:]
     
+    // Style B: Geometric Picker (Testing)
+    var showGeometricPicker = false
+    
     func openPicker(crop: MediaCrop, limit: Int = 1) {
         self.cropMode = crop
         self.selectionLimit = limit
