@@ -52,6 +52,10 @@ public struct UnifiedCreatorView: View {
                 layoutContent(with: proxy)
             }
             .ignoresSafeArea(.container, edges: .top)
+            
+            // 🛡️ Sovereign Layer: Always on Top
+            exitButton
+                .zIndex(100)
         }
         .background(Color.black)
     }
@@ -87,10 +91,6 @@ public struct UnifiedCreatorView: View {
                 }
             }
             .transition(.opacity)
-            
-            // Exit Button (Always available to escape)
-            exitButton
-                .zIndex(99) // Ensure it's always on top
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black)
@@ -246,11 +246,17 @@ public struct UnifiedCreatorView: View {
                     Image(systemName: "xmark")
                         .font(.system(size: 20, weight: .bold))
                         .foregroundColor(.white)
-                        .padding(20)
+                        .padding(12)
+                        .background(Color.black.opacity(0.3)) // Subtle background for contrast
+                        .clipShape(Circle())
+                        .shadow(color: .black.opacity(0.5), radius: 10) // 🛡️ Visible on any background
                 }
+                .padding(20)
+                .contentShape(Rectangle())
+                
                 Spacer()
             }
-            .padding(.top, 40)
+            .padding(.top, 44) // Align with modern iPhone status bars
             Spacer()
         }
     }

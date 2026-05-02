@@ -9,6 +9,7 @@ import Photos
 public struct EliteGeometricPickerView: View {
     @State private var viewModel: EliteGeometricPickerViewModel
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dismiss) private var dismiss
     
     public init(
         configuration: MediaPickerConfiguration,
@@ -32,40 +33,8 @@ public struct EliteGeometricPickerView: View {
                 let viewfinderHeight = min(viewWidth, maxViewfinderHeight)
                 
                 VStack(spacing: 0) {
-                    // MARK: - Premium Navbar
-                    ZStack {
-                        HStack {
-                            Button(action: { 
-                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                viewModel.onCancelAction() 
-                            }) {
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 20, weight: .bold))
-                                    .foregroundColor(.white)
-                            }
-                            .frame(width: 44, height: 44)
-                            
-                            Spacer()
-                            
-                            Button(action: { 
-                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                viewModel.handleNext() 
-                            }) {
-                                Text("Next")
-                                    .font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(viewModel.canProceed ? .green : .gray)
-                            }
-                            .disabled(!viewModel.canProceed)
-                            .frame(width: 60, alignment: .trailing)
-                        }
-                        .padding(.horizontal, 16)
-                        
-                        Text("New Post")
-                            .font(.system(size: 16, weight: .black))
-                            .foregroundColor(.white)
-                    }
-                    .frame(height: 54)
-                    .background(Color.black)
+                    // Spacer to preserve layout while Navbar is an overlay
+                    Color.clear.frame(height: 54)
                     
                     // MARK: - Viewfinder
                     viewfinderArea
@@ -82,6 +51,45 @@ public struct EliteGeometricPickerView: View {
                         .frame(maxHeight: .infinity)
                 }
             }
+        }
+        .overlay(alignment: .top) {
+            // MARK: - Premium Navbar (Layer Hardened)
+            ZStack {
+                HStack {
+                    Button(action: { 
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        viewModel.onCancelAction() 
+                        dismiss()
+                    }) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle()) // 📐 Expand hit-target
+                    
+                    Spacer()
+                    
+                    Button(action: { 
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        viewModel.handleNext() 
+                    }) {
+                        Text("Next")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(viewModel.canProceed ? .green : .gray)
+                    }
+                    .disabled(!viewModel.canProceed)
+                    .frame(width: 60, alignment: .trailing)
+                }
+                .padding(.horizontal, 16)
+                
+                Text("New Post")
+                    .font(.system(size: 16, weight: .black))
+                    .foregroundColor(.white)
+            }
+            .frame(height: 54)
+            .background(Color.black)
+            .zIndex(100) // 🛡️ Absolute top priority
         }
         .onAppear {
             viewModel.setup()
