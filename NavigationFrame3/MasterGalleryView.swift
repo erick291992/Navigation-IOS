@@ -198,7 +198,7 @@ struct MasterGalleryView: View {
             EliteGeometricPickerView(
                 configuration: .init(selectionLimit: 5),
                 onCompletion: { items in
-                    vm.handlePickerResult(items)
+                    vm.startGeometricFlow(items)
                     vm.showGeometricPicker = false
                 },
                 onCancel: {

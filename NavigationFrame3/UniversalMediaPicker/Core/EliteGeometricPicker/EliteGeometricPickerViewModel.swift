@@ -169,4 +169,11 @@ public class EliteGeometricPickerViewModel {
         }
         tasks.append(task)
     }
+    
+    public func openLimitedPicker() {
+        photoKit.openLimitedPicker { [weak self] assets in
+            // Handle new assets if needed, or just let PhotoKitService update authStatus
+            self?.photoKit.fetchRecentAssets()
+        }
+    }
 }

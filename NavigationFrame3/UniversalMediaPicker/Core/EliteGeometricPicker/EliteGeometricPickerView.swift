@@ -53,7 +53,7 @@ public struct EliteGeometricPickerView: View {
             }
         }
         .overlay(alignment: .top) {
-            // MARK: - Premium Navbar (Layer Hardened)
+            // MARK: - Premium Navbar (Pro Max Hardened)
             ZStack {
                 HStack {
                     Button(action: { 
@@ -64,9 +64,13 @@ public struct EliteGeometricPickerView: View {
                         Image(systemName: "xmark")
                             .font(.system(size: 20, weight: .bold))
                             .foregroundColor(.white)
+                            .padding(10)
+                            .background(Color.black.opacity(0.3)) // Contrast backing
+                            .clipShape(Circle())
+                            .shadow(color: .black.opacity(0.3), radius: 10)
                     }
                     .frame(width: 44, height: 44)
-                    .contentShape(Rectangle()) // 📐 Expand hit-target
+                    .contentShape(Rectangle()) 
                     
                     Spacer()
                     
@@ -77,9 +81,13 @@ public struct EliteGeometricPickerView: View {
                         Text("Next")
                             .font(.system(size: 16, weight: .bold))
                             .foregroundColor(viewModel.canProceed ? .green : .gray)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(viewModel.canProceed ? Color.green.opacity(0.1) : Color.clear)
+                            .cornerRadius(12)
                     }
                     .disabled(!viewModel.canProceed)
-                    .frame(width: 60, alignment: .trailing)
+                    .frame(width: 80, alignment: .trailing)
                 }
                 .padding(.horizontal, 16)
                 
@@ -87,9 +95,10 @@ public struct EliteGeometricPickerView: View {
                     .font(.system(size: 16, weight: .black))
                     .foregroundColor(.white)
             }
-            .frame(height: 54)
+            .padding(.top, 44) // 🛡️ Dynamic Island / StatusBar Clearance
+            .frame(height: 100, alignment: .bottom) // Combined height for nav
             .background(Color.black)
-            .zIndex(100) // 🛡️ Absolute top priority
+            .zIndex(100)
         }
         .onAppear {
             viewModel.setup()
@@ -148,7 +157,9 @@ public struct EliteGeometricPickerView: View {
             // 2. Library Preview (Overlay)
             if viewModel.selectedMode == .library {
                 Group {
-                    if let asset = viewModel.previewAsset ?? viewModel.recentAssets.first {
+                    if viewModel.authStatus == .denied || viewModel.authStatus == .restricted {
+                        PermissionNeededView(type: .library, accentColor: viewModel.configuration.style.accentColor)
+                    } else if let asset = viewModel.previewAsset ?? viewModel.recentAssets.first {
                         LibraryPreviewer(asset: asset)
                             .id(asset.localIdentifier)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -271,6 +282,30 @@ public struct EliteGeometricPickerView: View {
                             viewModel.toggleAsset(asset)
                         }
                     }
+                }
+            }
+            
+            // MARK: - Limited Access Footer
+            if viewModel.authStatus == .limited {
+                Button(action: {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    viewModel.openLimitedPicker()
+                }) {
+                    VStack(spacing: 4) {
+                        Divider().background(Color.white.opacity(0.1))
+                        HStack {
+                            Image(systemName: "photo.badge.plus")
+                            Text("Manage Selection")
+                                .font(.system(size: 13, weight: .bold))
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10, weight: .bold))
+                        }
+                        .foregroundColor(.green)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                    }
+                    .background(Color.black)
                 }
             }
         }

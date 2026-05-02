@@ -124,4 +124,11 @@ class MasterGalleryViewModel {
             }
         }
     }
+
+    func startGeometricFlow(_ items: [MediaItem]) {
+        print("💎 Style B bridging to Cropping Flow...")
+        self.headlessItems = items
+        self.headlessResults = [:]
+        self.processNextHeadless()
+    }
 }
