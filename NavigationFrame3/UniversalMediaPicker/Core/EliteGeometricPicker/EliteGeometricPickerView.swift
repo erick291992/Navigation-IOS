@@ -27,78 +27,103 @@ public struct EliteGeometricPickerView: View {
         ZStack {
             Color.black.ignoresSafeArea()
             
-            GeometryReader { proxy in
-                let viewWidth = proxy.size.width
-                let maxViewfinderHeight = proxy.size.height * 0.48
-                let viewfinderHeight = min(viewWidth, maxViewfinderHeight)
-                
-                VStack(spacing: 0) {
-                    // Spacer to preserve layout while Navbar is an overlay
-                    Color.clear.frame(height: 54)
+            if viewModel.currentStage == .select {
+                GeometryReader { proxy in
+                    let viewWidth = proxy.size.width
+                    let maxViewfinderHeight = proxy.size.height * 0.48
+                    let viewfinderHeight = min(viewWidth, maxViewfinderHeight)
                     
-                    // MARK: - Viewfinder
-                    viewfinderArea
-                        .frame(width: viewWidth, height: viewfinderHeight)
-                        .clipped()
-                    
-                    // MARK: - Mode Strip (Unique to Style B)
-                    modeStrip
-                        .frame(height: 50)
-                        .background(Color(uiColor: .systemGray6).opacity(0.1))
-                    
-                    // MARK: - Dynamic Bottom Area
-                    bottomArea
-                        .frame(maxHeight: .infinity)
+                    VStack(spacing: 0) {
+                        // Spacer to preserve layout while Navbar is an overlay
+                        Color.clear.frame(height: 54)
+                        
+                        // MARK: - Viewfinder
+                        viewfinderArea
+                            .frame(width: viewWidth, height: viewfinderHeight)
+                            .clipped()
+                        
+                        // MARK: - Mode Strip (Unique to Style B)
+                        modeStrip
+                            .frame(height: 50)
+                            .background(Color(uiColor: .systemGray6).opacity(0.1))
+                        
+                        // MARK: - Dynamic Bottom Area
+                        bottomArea
+                            .frame(maxHeight: .infinity)
+                    }
                 }
+                .transition(.opacity)
+            }
+            
+            if viewModel.currentStage == .crop {
+                CropFlowView(
+                    configuration: viewModel.configuration,
+                    initialItems: viewModel.processedItems,
+                    onCompletion: { items in
+                        viewModel.finalizeFlow(items: items)
+                        dismiss()
+                    },
+                    onCancel: {
+                        viewModel.cancelCrop()
+                    },
+                    onGoBack: {
+                        viewModel.cancelCrop()
+                    }
+                )
+                .transition(.move(edge: .trailing))
+                .zIndex(1)
             }
         }
         .overlay(alignment: .top) {
-            // MARK: - Premium Navbar (Pro Max Hardened)
-            ZStack {
-                HStack {
-                    Button(action: { 
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        viewModel.onCancelAction() 
-                        dismiss()
-                    }) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 20, weight: .bold))
-                            .foregroundColor(.white)
-                            .padding(10)
-                            .background(Color.black.opacity(0.3)) // Contrast backing
-                            .clipShape(Circle())
-                            .shadow(color: .black.opacity(0.3), radius: 10)
+            if viewModel.currentStage == .select {
+                // MARK: - Premium Navbar (Pro Max Hardened)
+                ZStack {
+                    HStack {
+                        Button(action: { 
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            viewModel.onCancelAction() 
+                            dismiss()
+                        }) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding(10)
+                                .background(Color.black.opacity(0.3)) // Contrast backing
+                                .clipShape(Circle())
+                                .shadow(color: .black.opacity(0.3), radius: 10)
+                        }
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle()) 
+                        
+                        Spacer()
+                        
+                        Button(action: { 
+                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                            viewModel.handleNext() 
+                        }) {
+                            Text("Next")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(viewModel.canProceed ? .green : .gray)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(viewModel.canProceed ? Color.green.opacity(0.1) : Color.clear)
+                                .cornerRadius(12)
+                        }
+                        .disabled(!viewModel.canProceed)
+                        .frame(width: 80, alignment: .trailing)
                     }
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle()) 
+                    .padding(.horizontal, 16)
                     
-                    Spacer()
-                    
-                    Button(action: { 
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                        viewModel.handleNext() 
-                    }) {
-                        Text("Next")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(viewModel.canProceed ? .green : .gray)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(viewModel.canProceed ? Color.green.opacity(0.1) : Color.clear)
-                            .cornerRadius(12)
-                    }
-                    .disabled(!viewModel.canProceed)
-                    .frame(width: 80, alignment: .trailing)
+                    Text("New Post")
+                        .font(.system(size: 16, weight: .black))
+                        .foregroundColor(.white)
                 }
-                .padding(.horizontal, 16)
-                
-                Text("New Post")
-                    .font(.system(size: 16, weight: .black))
-                    .foregroundColor(.white)
+                .padding(.top, 44) // 🛡️ Dynamic Island / StatusBar Clearance
+                .frame(height: 100, alignment: .bottom) // Combined height for nav
+                .background(Color.black)
+                .zIndex(100)
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
-            .padding(.top, 44) // 🛡️ Dynamic Island / StatusBar Clearance
-            .frame(height: 100, alignment: .bottom) // Combined height for nav
-            .background(Color.black)
-            .zIndex(100)
         }
         .onAppear {
             viewModel.setup()

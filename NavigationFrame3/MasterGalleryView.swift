@@ -134,22 +134,7 @@ struct MasterGalleryView: View {
             configuration: .init(
                 selectionLimit: 3,
                 crop: .square,
-                style: MediaPickerStyle(
-                    accentColor: .pink,
-                    onboardingTitle: "Meetsta Elite Creator",
-                    doneButtonStyle: .capsule,
-                    font: .system(.body, design: .rounded),
-                    gridStyle: .init(
-                        galleryMode: .grid,
-                        columnCount: 4,
-                        spacing: 1,
-                        cornerRadius: 0,
-                        selectionIndicator: .numbered,
-                        selectionBorderWidth: 3.0,
-                        showAlbumPicker: true,
-                        showVideoDuration: true
-                    )
-                )
+                style: .tealSleek
             ),
             onCompletion: { items in
                 vm.handlePickerResult(items)
@@ -198,7 +183,7 @@ struct MasterGalleryView: View {
             EliteGeometricPickerView(
                 configuration: .init(selectionLimit: 5),
                 onCompletion: { items in
-                    vm.startGeometricFlow(items)
+                    vm.handlePickerResult(items)
                     vm.showGeometricPicker = false
                 },
                 onCancel: {
