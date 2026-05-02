@@ -73,6 +73,12 @@ public struct CropFlowView: View {
                                     await MainActor.run {
                                         viewModel.finishCrop(item: newItem, index: index)
                                     }
+                                } catch {
+                                    print("⚠️ Crop processing failed: \(error)")
+                                    await MainActor.run {
+                                        // Reset the view's internal processing state is handled by re-appear
+                                        // but we could add a local alert here if needed
+                                    }
                                 }
                             }
                         },

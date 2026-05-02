@@ -158,6 +158,7 @@ public struct CropView: View {
                 .onAppear {
                     containerSize = size
                     currentRatio = crop
+                    isProcessing = false // 🛡️ Ensure state reset on new item load
                 }
             }
         }
