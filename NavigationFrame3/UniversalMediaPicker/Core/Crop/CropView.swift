@@ -158,6 +158,16 @@ public struct CropView: View {
                 .onAppear {
                     containerSize = size
                     currentRatio = crop
+                    isProcessing = false 
+                }
+                .onChange(of: item) { _, _ in
+                    // 🛡️ Ironclad Reset: Force spinner OFF the moment the data swaps
+                    isProcessing = false
+                    scale = 1.0
+                    lastScale = 1.0
+                    offset = .zero
+                    lastOffset = .zero
+                    freeformArea = nil
                 }
             }
         }

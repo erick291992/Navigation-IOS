@@ -87,8 +87,59 @@ public struct MediaPickerStyle {
     
     public static let pinkSleek = MediaPickerStyle(
         accentColor: .pink,
-        onboardingTitle: "Unified Creator V3",
+        onboardingTitle: "Meetsta Elite Creator",
         doneButtonStyle: .capsule,
-        font: .system(.body, design: .rounded)
+        font: .system(.body, design: .rounded),
+        gridStyle: .init(
+            galleryMode: .grid,
+            columnCount: 4,
+            spacing: 1,
+            cornerRadius: 0,
+            selectionIndicator: .numbered,
+            selectionBorderWidth: 3.0,
+            showAlbumPicker: true,
+            showVideoDuration: true
+        )
     )
+    
+    public static let tealSleek = MediaPickerStyle(
+        accentColor: Color(red: 11/255, green: 188/255, blue: 178/255),
+        onboardingTitle: "Meetsta Elite Creator",
+        doneButtonStyle: .capsule,
+        font: .system(.body, design: .rounded),
+        gridStyle: .init(
+            galleryMode: .grid,
+            columnCount: 4,
+            spacing: 1,
+            cornerRadius: 0,
+            selectionIndicator: .numbered,
+            selectionBorderWidth: 3.0,
+            showAlbumPicker: true,
+            showVideoDuration: true
+        )
+    )
+    
+    /// Factory for a branded style with custom branding.
+    /// Default color is #0BBCB2 (11, 188, 178).
+    public static func custom(
+        color: Color = Color(red: 11/255, green: 188/255, blue: 178/255),
+        title: String = "Custom Picker"
+    ) -> MediaPickerStyle {
+        MediaPickerStyle(
+            accentColor: color,
+            onboardingTitle: title,
+            doneButtonStyle: .capsule,
+            font: .system(.body, design: .rounded),
+            gridStyle: .init(
+                galleryMode: .grid,
+                columnCount: 4,
+                spacing: 1,
+                cornerRadius: 0,
+                selectionIndicator: .numbered,
+                selectionBorderWidth: 3.0,
+                showAlbumPicker: true,
+                showVideoDuration: true
+            )
+        )
+    }
 }

@@ -195,12 +195,17 @@ struct ModeButton: View {
     }
 }
 
-struct PermissionNeededView: View {
-    enum PermissionType { case library, camera }
-    let type: PermissionType
-    var accentColor: Color = .blue
+public struct PermissionNeededView: View {
+    public enum PermissionType { case library, camera }
+    public let type: PermissionType
+    public var accentColor: Color
     
-    var body: some View {
+    public init(type: PermissionType, accentColor: Color = .blue) {
+        self.type = type
+        self.accentColor = accentColor
+    }
+    
+    public var body: some View {
         VStack(spacing: 24) {
             Image(systemName: type == .library ? "photo.on.rectangle.angled" : "camera.shutter.button")
                 .font(.system(size: 80))

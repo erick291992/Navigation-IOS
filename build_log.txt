@@ -1,0 +1,475 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild build -project NavigationFrame3.xcodeproj -scheme NavigationFrame3 -configuration Debug -sdk iphonesimulator
+
+Build settings from command line:
+    SDKROOT = iphonesimulator26.2
+
+2026-05-01 21:18:59.980 xcodebuild[61919:2476347] [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.
+--- xcodebuild: WARNING: Using the first of multiple matching destinations:
+{ platform:iOS Simulator, id:dvtdevice-DVTiOSDeviceSimulatorPlaceholder-iphonesimulator:placeholder, name:Any iOS Simulator Device }
+{ platform:iOS Simulator, arch:arm64, id:0491F303-DA76-456D-8217-B700E17658D8, OS:26.0, name:iPad (A16) }
+{ platform:iOS Simulator, arch:arm64, id:0C3F483E-0EB9-4679-B510-997E8FEB34D4, OS:26.2, name:iPad (A16) }
+{ platform:iOS Simulator, arch:arm64, id:DA9A74C7-4634-4F40-9A7D-C5F18E13BEB7, OS:26.0, name:iPad Air 11-inch (M3) }
+{ platform:iOS Simulator, arch:arm64, id:A621BB85-9F58-41DD-8A9B-890922034D7D, OS:26.2, name:iPad Air 11-inch (M3) }
+{ platform:iOS Simulator, arch:arm64, id:3669866E-045E-4B61-87C5-F3961C584226, OS:26.0, name:iPad Air 13-inch (M3) }
+{ platform:iOS Simulator, arch:arm64, id:CB613365-BE59-4E65-AF7A-8BFA2A162F32, OS:26.2, name:iPad Air 13-inch (M3) }
+{ platform:iOS Simulator, arch:arm64, id:B2C8263F-6B04-4BBE-9200-6F002E7E4B12, OS:26.0, name:iPad Pro 11-inch (M4) }
+{ platform:iOS Simulator, arch:arm64, id:927133B8-48FE-4894-A2F5-1986049B6C3C, OS:26.0, name:iPad Pro 11-inch (M5) }
+{ platform:iOS Simulator, arch:arm64, id:98B63016-5B35-4668-A85F-686EEBD03887, OS:26.2, name:iPad Pro 11-inch (M5) }
+{ platform:iOS Simulator, arch:arm64, id:8EAE2E73-411F-4685-B759-98C277C21C75, OS:26.0, name:iPad Pro 13-inch (M4) }
+{ platform:iOS Simulator, arch:arm64, id:147117F7-5A30-4A53-87AC-626DB1EEB04C, OS:26.0, name:iPad Pro 13-inch (M5) }
+{ platform:iOS Simulator, arch:arm64, id:BB6358D4-DEF5-465C-9615-3C933D2722EE, OS:26.2, name:iPad Pro 13-inch (M5) }
+{ platform:iOS Simulator, arch:arm64, id:5984401F-4C0D-4FE3-8E07-5DB05420C15A, OS:26.0, name:iPad mini (A17 Pro) }
+{ platform:iOS Simulator, arch:arm64, id:0AEB5274-C8B1-4112-8B8C-2893EF2589F4, OS:26.2, name:iPad mini (A17 Pro) }
+{ platform:iOS Simulator, arch:arm64, id:7E7472F5-A179-4509-9DEC-56DC3D90B93C, OS:26.0, name:iPhone 16e }
+{ platform:iOS Simulator, arch:arm64, id:6B3EE363-229C-4C16-B788-B258AFECDCA7, OS:26.2, name:iPhone 16e }
+{ platform:iOS Simulator, arch:arm64, id:4BF57BE7-FDC9-44CE-BFE3-7E21B839A126, OS:26.0, name:iPhone 17 }
+{ platform:iOS Simulator, arch:arm64, id:483A3983-BDD1-4A56-A074-E82031F9F2DF, OS:26.2, name:iPhone 17 }
+{ platform:iOS Simulator, arch:arm64, id:9DA65E25-BA85-4044-B783-B8DF45A7DFF6, OS:26.0, name:iPhone 17 Pro }
+{ platform:iOS Simulator, arch:arm64, id:FB467F4F-2BC1-417C-A468-B1F7AC30E9D3, OS:26.2, name:iPhone 17 Pro }
+{ platform:iOS Simulator, arch:arm64, id:A159BB75-812B-4AF0-9332-59BFBB6B1904, OS:26.0, name:iPhone 17 Pro Max }
+{ platform:iOS Simulator, arch:arm64, id:B2CAF2AE-6809-4899-B8F2-8504286801DC, OS:26.2, name:iPhone 17 Pro Max }
+{ platform:iOS Simulator, arch:arm64, id:E0D90837-B599-4774-AB43-D7B75983BAA0, OS:26.0, name:iPhone Air }
+{ platform:iOS Simulator, arch:arm64, id:149CD8F9-9CC1-4D01-8E0A-07CE41864DAD, OS:26.2, name:iPhone Air }
+{ platform:iOS, id:dvtdevice-DVTiPhonePlaceholder-iphoneos:placeholder, name:Any iOS Device }
+{ platform:iOS, arch:arm64, id:00008101-001538613669003A, name:iPhone (4) }
+ComputePackagePrebuildTargetDependencyGraph
+
+Prepare packages
+
+CreateBuildRequest
+
+SendProjectDescription
+
+CreateBuildOperation
+
+ComputeTargetDependencyGraph
+note: Building targets in dependency order
+note: Target dependency graph (1 target)
+    Target 'NavigationFrame3' in project 'NavigationFrame3' (no dependencies)
+
+GatherProvisioningInputs
+
+CreateBuildDescription
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.2.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --print-asset-tag-combinations --output-format xml1 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Preview Content/Preview Assets.xcassets /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Assets.xcassets
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --version --output-format xml1
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
+
+Build description signature: c05fd13a7c1efd086e90e82dcd33e6c7
+Build description path: /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/XCBuildData/c05fd13a7c1efd086e90e82dcd33e6c7.xcbuilddata
+ClangStatCache /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.2.sdk /Users/erickmanrique/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator26.2-23C57-7d00a8b37fbd7999ea79df8ebc024bf0.sdkstatcache
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3.xcodeproj
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.2.sdk -o /Users/erickmanrique/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator26.2-23C57-7d00a8b37fbd7999ea79df8ebc024bf0.sdkstatcache
+
+ProcessProductPackaging /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/NavigationFrame3.entitlements /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/NavigationFrame3.app-Simulated.xcent (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+    Entitlements:
+    
+    {
+    "application-identifier" = "8R3688592C.com.meetsta.NavigationFrame3";
+}
+    
+    builtin-productPackagingUtility /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/NavigationFrame3.entitlements -entitlements -format xml -o /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/NavigationFrame3.app-Simulated.xcent
+
+ProcessProductPackaging /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/NavigationFrame3.entitlements /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/NavigationFrame3.app.xcent (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+    Entitlements:
+    
+    {
+}
+    
+    builtin-productPackagingUtility /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/NavigationFrame3.entitlements -entitlements -format xml -o /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/NavigationFrame3.app.xcent
+
+ProcessProductPackagingDER /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/NavigationFrame3.app.xcent /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/NavigationFrame3.app.xcent.der (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    /usr/bin/derq query -f xml -i /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/NavigationFrame3.app.xcent -o /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/NavigationFrame3.app.xcent.der --raw
+
+ProcessProductPackagingDER /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/NavigationFrame3.app-Simulated.xcent /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/NavigationFrame3.app-Simulated.xcent.der (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    /usr/bin/derq query -f xml -i /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/NavigationFrame3.app-Simulated.xcent -o /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/NavigationFrame3.app-Simulated.xcent.der --raw
+
+ProcessInfoPlistFile /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Products/Debug-iphonesimulator/NavigationFrame3.app/Info.plist /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/empty-NavigationFrame3.plist (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    builtin-infoPlistUtility /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/empty-NavigationFrame3.plist -producttype com.apple.product-type.application -genpkginfo /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Products/Debug-iphonesimulator/NavigationFrame3.app/PkgInfo -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/assetcatalog_generated_info.plist -o /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Products/Debug-iphonesimulator/NavigationFrame3.app/Info.plist
+
+SwiftDriver NavigationFrame3 normal x86_64 com.apple.xcode.tools.swift.compiler (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name NavigationFrame3 -Onone -enforce-exclusivity\=checked @/Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/Objects-normal/x86_64/NavigationFrame3.SwiftFileList -DDEBUG -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.2.sdk -target x86_64-apple-ios26.0-simulator -g -module-cache-path /Users/erickmanrique/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -profile-coverage-mapping -profile-generate -enable-testing -index-store-path /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Products/Debug-iphonesimulator -F /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Products/Debug-iphonesimulator -emit-localized-strings -emit-localized-strings-path /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/Objects-normal/x86_64 -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /Users/erickmanrique/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator26.2-23C57-7d00a8b37fbd7999ea79df8ebc024bf0.sdkstatcache -output-file-map /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/Objects-normal/x86_64/NavigationFrame3-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /Users/erickmanrique/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -sdk-module-cache-path /Users/erickmanrique/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/Objects-normal/x86_64/NavigationFrame3.swiftmodule -validate-clang-modules-once -clang-build-session-file /Users/erickmanrique/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -I/Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/Objects-normal/x86_64/NavigationFrame3_const_extract_protocols.json -Xcc -iquote -Xcc /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/NavigationFrame3-generated-files.hmap -Xcc -I/Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/NavigationFrame3-own-target-headers.hmap -Xcc -I/Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/NavigationFrame3-all-target-headers.hmap -Xcc -iquote -Xcc /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/NavigationFrame3-project-headers.hmap -Xcc -I/Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Products/Debug-iphonesimulator/include -Xcc -I/Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/DerivedSources-normal/x86_64 -Xcc -I/Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/DerivedSources/x86_64 -Xcc -I/Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/Objects-normal/x86_64/NavigationFrame3-Swift.h -working-directory /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3 -experimental-emit-module-separately -disable-cmo
+
+SwiftDriver NavigationFrame3 normal arm64 com.apple.xcode.tools.swift.compiler (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name NavigationFrame3 -Onone -enforce-exclusivity\=checked @/Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/Objects-normal/arm64/NavigationFrame3.SwiftFileList -DDEBUG -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.2.sdk -target arm64-apple-ios26.0-simulator -g -module-cache-path /Users/erickmanrique/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -profile-coverage-mapping -profile-generate -enable-testing -index-store-path /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Products/Debug-iphonesimulator -F /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Products/Debug-iphonesimulator -emit-localized-strings -emit-localized-strings-path /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/Objects-normal/arm64 -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /Users/erickmanrique/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator26.2-23C57-7d00a8b37fbd7999ea79df8ebc024bf0.sdkstatcache -output-file-map /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/Objects-normal/arm64/NavigationFrame3-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /Users/erickmanrique/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -sdk-module-cache-path /Users/erickmanrique/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/Objects-normal/arm64/NavigationFrame3.swiftmodule -validate-clang-modules-once -clang-build-session-file /Users/erickmanrique/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -I/Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/Objects-normal/arm64/NavigationFrame3_const_extract_protocols.json -Xcc -iquote -Xcc /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/NavigationFrame3-generated-files.hmap -Xcc -I/Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/NavigationFrame3-own-target-headers.hmap -Xcc -I/Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/NavigationFrame3-all-target-headers.hmap -Xcc -iquote -Xcc /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/NavigationFrame3-project-headers.hmap -Xcc -I/Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Products/Debug-iphonesimulator/include -Xcc -I/Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/DerivedSources-normal/arm64 -Xcc -I/Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/DerivedSources/arm64 -Xcc -I/Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/Objects-normal/arm64/NavigationFrame3-Swift.h -working-directory /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3 -experimental-emit-module-separately -disable-cmo
+
+SwiftCompile normal arm64 Compiling\ PhotoAlbumService.swift,\ PhotoKitService.swift,\ ContentView.swift,\ MasterGalleryView.swift,\ MasterGalleryViewModel.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/PhotoAlbumService.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/PhotoKitService.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/ContentView.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/MasterGalleryView.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/MasterGalleryViewModel.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/PhotoAlbumService.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/PhotoKitService.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/ContentView.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/MasterGalleryView.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/MasterGalleryViewModel.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+/Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/MasterGalleryViewModel.swift:71:46: warning: main actor-isolated static property 'shared' cannot be accessed from outside of the actor; this is an error in the Swift 6 language mode
+            let manager = MediaPickerManager.shared
+                          ~~~~~~~~~~~~~~~~~~~^~~~~~
+                          await 
+
+SwiftEmitModule normal arm64 Emitting\ module\ for\ NavigationFrame3 (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+EmitSwiftModule normal arm64 (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+/Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/Crop/CropFlowViewModel.swift:31:40: warning: main actor-isolated static property 'shared' can not be referenced from a nonisolated context; this is an error in the Swift 6 language mode
+        manager: MediaPickerManager = .shared,
+                                       ^
+/Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/MediaPickerManager.swift:8:23: note: static property declared here
+    public static let shared = MediaPickerManager()
+                      ^
+/Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Demo/AdvancedPickerExampleViewModel.swift:13:44: warning: main actor-isolated static property 'shared' can not be referenced from a nonisolated context; this is an error in the Swift 6 language mode
+    private let engine = MediaPickerEngine.shared
+                                           ^
+/Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/MediaPickerEngine.swift:8:23: note: static property declared here
+    public static let shared = MediaPickerEngine()
+                      ^
+
+SwiftCompile normal arm64 Compiling\ ViewD.swift,\ ViewE.swift,\ ViewF.swift,\ GeneratedAssetSymbols.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/ViewD.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/ViewE.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/ViewF.swift /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/DerivedSources/GeneratedAssetSymbols.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/ViewD.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/ViewE.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/ViewF.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/DerivedSources/GeneratedAssetSymbols.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 Compiling\ NavigationManagerRegistry.swift,\ PushContext.swift,\ SheetNavigationContainer.swift,\ AlbumDropdownMenu.swift,\ AssetThumbnailCell.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/NavigationManagerRegistry.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/PushContext.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/SheetNavigationContainer.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Components/AlbumDropdownMenu.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Components/AssetThumbnailCell.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/NavigationManagerRegistry.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/PushContext.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/SheetNavigationContainer.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Components/AlbumDropdownMenu.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Components/AssetThumbnailCell.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 Compiling\ ModalContext.swift,\ NavigationCoordinator.swift,\ NavigationEnvironment.swift,\ NavigationItem.swift,\ NavigationManager.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/ModalContext.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/NavigationCoordinator.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/NavigationEnvironment.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/NavigationItem.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/NavigationManager.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/ModalContext.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/NavigationCoordinator.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/NavigationEnvironment.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/NavigationItem.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/NavigationManager.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 Compiling\ CustomPickerExampleView.swift,\ CustomPickerExampleViewModel.swift,\ MediaPickerDemoView.swift,\ MediaPickerModifier.swift,\ MediaModels.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Demo/CustomPickerExampleView.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Demo/CustomPickerExampleViewModel.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Demo/MediaPickerDemoView.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Entry/MediaPickerModifier.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Models/MediaModels.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Demo/CustomPickerExampleView.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Demo/CustomPickerExampleViewModel.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Demo/MediaPickerDemoView.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Entry/MediaPickerModifier.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Models/MediaModels.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 Compiling\ CameraPicker.swift,\ CameraPreviewView.swift,\ MediaPickerViewComponents.swift,\ AssetGridView.swift,\ AssetGridViewModel.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Components/CameraPicker.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Components/CameraPreviewView.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Components/MediaPickerViewComponents.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/AssetGrid/AssetGridView.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/AssetGrid/AssetGridViewModel.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Components/CameraPicker.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Components/CameraPreviewView.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Components/MediaPickerViewComponents.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/AssetGrid/AssetGridView.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/AssetGrid/AssetGridViewModel.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 Compiling\ MediaPickerStyle.swift,\ CameraService.swift,\ MediaHistoryManager.swift,\ MediaPickerEngine.swift,\ MediaPickerManager.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Models/MediaPickerStyle.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/CameraService.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/MediaHistoryManager.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/MediaPickerEngine.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/MediaPickerManager.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Models/MediaPickerStyle.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+/Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/MediaPickerManager.swift:97:21: warning: 'init(url:)' was deprecated in iOS 18.0: Use AVURLAsset(url:) instead
+        let asset = AVAsset(url: url)
+                    ^
+/Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/MediaPickerManager.swift:101:42: warning: 'copyCGImage(at:actualTime:)' was deprecated in iOS 18.0: Use generateCGImageAsynchronouslyForTime:completionHandler: instead
+        let cgImage = try imageGenerator.copyCGImage(at: .zero, actualTime: nil)
+                                         ^
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/CameraService.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+/Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/MediaPickerManager.swift:97:21: warning: 'init(url:)' was deprecated in iOS 18.0: Use AVURLAsset(url:) instead
+        let asset = AVAsset(url: url)
+                    ^
+/Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/MediaPickerManager.swift:101:42: warning: 'copyCGImage(at:actualTime:)' was deprecated in iOS 18.0: Use generateCGImageAsynchronouslyForTime:completionHandler: instead
+        let cgImage = try imageGenerator.copyCGImage(at: .zero, actualTime: nil)
+                                         ^
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/MediaHistoryManager.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+/Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/MediaPickerManager.swift:97:21: warning: 'init(url:)' was deprecated in iOS 18.0: Use AVURLAsset(url:) instead
+        let asset = AVAsset(url: url)
+                    ^
+/Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/MediaPickerManager.swift:101:42: warning: 'copyCGImage(at:actualTime:)' was deprecated in iOS 18.0: Use generateCGImageAsynchronouslyForTime:completionHandler: instead
+        let cgImage = try imageGenerator.copyCGImage(at: .zero, actualTime: nil)
+                                         ^
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/MediaPickerEngine.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+/Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/MediaPickerManager.swift:97:21: warning: 'init(url:)' was deprecated in iOS 18.0: Use AVURLAsset(url:) instead
+        let asset = AVAsset(url: url)
+                    ^
+/Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/MediaPickerManager.swift:101:42: warning: 'copyCGImage(at:actualTime:)' was deprecated in iOS 18.0: Use generateCGImageAsynchronouslyForTime:completionHandler: instead
+        let cgImage = try imageGenerator.copyCGImage(at: .zero, actualTime: nil)
+                                         ^
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/MediaPickerManager.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+/Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/MediaPickerManager.swift:97:21: warning: 'init(url:)' was deprecated in iOS 18.0: Use AVURLAsset(url:) instead
+        let asset = AVAsset(url: url)
+                    ^
+/Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/MediaPickerManager.swift:101:42: warning: 'copyCGImage(at:actualTime:)' was deprecated in iOS 18.0: Use generateCGImageAsynchronouslyForTime:completionHandler: instead
+        let cgImage = try imageGenerator.copyCGImage(at: .zero, actualTime: nil)
+                                         ^
+
+SwiftCompile normal arm64 Compiling\ MediaPickerFlowContainer.swift,\ UnifiedCreatorView.swift,\ UnifiedCreatorViewModel.swift,\ AdvancedPickerExampleView.swift,\ AdvancedPickerExampleViewModel.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/Flow/MediaPickerFlowContainer.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/UnifiedCreator/UnifiedCreatorView.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/UnifiedCreator/UnifiedCreatorViewModel.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Demo/AdvancedPickerExampleView.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Demo/AdvancedPickerExampleViewModel.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/Flow/MediaPickerFlowContainer.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/UnifiedCreator/UnifiedCreatorView.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/UnifiedCreator/UnifiedCreatorViewModel.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Demo/AdvancedPickerExampleView.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Demo/AdvancedPickerExampleViewModel.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 Compiling\ NavigationFrame3App.swift,\ SheetViewC.swift,\ TestNativeNavigation.swift,\ ViewB.swift,\ ViewBViewModel.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/NavigationFrame3App.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/SheetViewC.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/TestNativeNavigation.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/ViewB.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/ViewBViewModel.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/NavigationFrame3App.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/SheetViewC.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+/Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/SheetViewC.swift:81:10: warning: 'onChange(of:perform:)' was deprecated in iOS 17.0: Use `onChange` with a two or zero parameter action closure instead.
+        .onChange(of: navigationManager.modalPushPaths) { _ in
+         ^
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/TestNativeNavigation.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/ViewB.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftCompile normal arm64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/ViewBViewModel.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftEmitModule normal x86_64 Emitting\ module\ for\ NavigationFrame3 (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+EmitSwiftModule normal x86_64 (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftDriverJobDiscovery normal arm64 Compiling ViewD.swift, ViewE.swift, ViewF.swift, GeneratedAssetSymbols.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal x86_64 Compiling\ CropView.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/Crop/CropView.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal x86_64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/Crop/CropView.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftDriverJobDiscovery normal arm64 Compiling MediaPickerStyle.swift, CameraService.swift, MediaHistoryManager.swift, MediaPickerEngine.swift, MediaPickerManager.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal x86_64 Compiling\ CropFlowViewModel.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/Crop/CropFlowViewModel.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal x86_64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/Crop/CropFlowViewModel.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+/Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/Crop/CropFlowViewModel.swift:31:40: warning: main actor-isolated static property 'shared' can not be referenced from a nonisolated context; this is an error in the Swift 6 language mode
+        manager: MediaPickerManager = .shared,
+                                       ^
+/Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/MediaPickerManager.swift:8:23: note: static property declared here
+    public static let shared = MediaPickerManager()
+                      ^
+
+SwiftDriverJobDiscovery normal arm64 Compiling NavigationManagerRegistry.swift, PushContext.swift, SheetNavigationContainer.swift, AlbumDropdownMenu.swift, AssetThumbnailCell.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal x86_64 Compiling\ MediaPickerFlowContainer.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/Flow/MediaPickerFlowContainer.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal x86_64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/Flow/MediaPickerFlowContainer.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftDriverJobDiscovery normal arm64 Compiling NavigationFrame3App.swift, SheetViewC.swift, TestNativeNavigation.swift, ViewB.swift, ViewBViewModel.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal x86_64 Compiling\ EliteGeometricPickerViewModel.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/EliteGeometricPicker/EliteGeometricPickerViewModel.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+Failed frontend command:
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-frontend -frontend -c /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/ModalContext.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/NavigationCoordinator.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/NavigationEnvironment.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/NavigationItem.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/NavigationManager.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/NavigationManagerRegistry.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/PushContext.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/Navigation/SheetNavigationContainer.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Components/AlbumDropdownMenu.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Components/AssetThumbnailCell.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Components/CameraPicker.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Components/CameraPreviewView.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Components/MediaPickerViewComponents.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/AssetGrid/AssetGridView.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/AssetGrid/AssetGridViewModel.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/Crop/CropFlowView.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/Crop/CropFlowViewModel.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/Crop/CropView.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/EliteGeometricPicker/EliteGeometricPickerView.swift -primary-file /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/EliteGeometricPicker/EliteGeometricPickerViewModel.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/Flow/MediaPickerFlowContainer.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/UnifiedCreator/UnifiedCreatorView.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/UnifiedCreator/UnifiedCreatorViewModel.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Demo/AdvancedPickerExampleView.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Demo/AdvancedPickerExampleViewModel.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Demo/CustomPickerExampleView.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Demo/CustomPickerExampleViewModel.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Demo/MediaPickerDemoView.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Entry/MediaPickerModifier.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Models/MediaModels.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Models/MediaPickerStyle.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/CameraService.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/MediaHistoryManager.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/MediaPickerEngine.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/MediaPickerManager.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/PhotoAlbumService.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Services/PhotoKitService.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/ContentView.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/MasterGalleryView.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/MasterGalleryViewModel.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/NavigationFrame3App.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/SheetViewC.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/TestNativeNavigation.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/ViewB.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/ViewBViewModel.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/ViewD.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/ViewE.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/ViewF.swift /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/DerivedSources/GeneratedAssetSymbols.swift -emit-dependencies-path /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/Objects-normal/x86_64/EliteGeometricPickerViewModel.d -emit-const-values-path /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/Objects-normal/x86_64/EliteGeometricPickerViewModel.swiftconstvalues -emit-reference-dependencies-path /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/Objects-normal/x86_64/EliteGeometricPickerViewModel.swiftdeps -serialize-diagnostics-path /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/Objects-normal/x86_64/EliteGeometricPickerViewModel.dia -emit-localized-strings -emit-localized-strings-path /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/Objects-normal/x86_64 -target x86_64-apple-ios26.0-simulator -module-can-import-version DeveloperToolsSupport 23.0.4 23.0.4 -module-can-import-version SwiftUI 7.2.5.1 7.2.5 -module-can-import-version UIKit 9126.2.4.1 9126.2.4 -disable-cross-import-overlay-search -swift-module-cross-import PhotosUI /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/System/Library/Frameworks/PhotosUI.framework/Modules/PhotosUI.swiftcrossimport/SwiftUI.swiftoverlay -swift-module-cross-import PhotosUI /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/System/Library/Frameworks/PhotosUI.framework/Modules/PhotosUI.swiftcrossimport/WidgetKit.swiftoverlay -swift-module-cross-import PhotosUI /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.2.sdk/System/Library/Frameworks/PhotosUI.framework/Modules/PhotosUI.swiftcrossimport/SwiftUI.swiftoverlay -swift-module-cross-import PhotosUI /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.2.sdk/System/Library/Frameworks/PhotosUI.framework/Modules/PhotosUI.swiftcrossimport/WidgetKit.swiftoverlay -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/lib/swift/host/plugins/libFoundationMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/swift-plugin-server\#FoundationMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/lib/swift/host/plugins/libObservationMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/swift-plugin-server\#ObservationMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/lib/swift/host/plugins/libPreviewsMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/swift-plugin-server\#PreviewsMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/lib/swift/host/plugins/libSwiftMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/swift-plugin-server\#SwiftMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/lib/swift/host/plugins/libSwiftUIMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/swift-plugin-server\#SwiftUIMacros -disable-implicit-swift-modules -Xcc -fno-implicit-modules -Xcc -fno-implicit-module-maps -explicit-swift-module-map-file /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/Objects-normal/x86_64/NavigationFrame3-dependencies-2.json -enable-objc-interop -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.2.sdk -I /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Products/Debug-iphonesimulator -F /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Products/Debug-iphonesimulator -no-color-diagnostics -Xcc -fno-color-diagnostics -enable-testing -g -debug-info-format\=dwarf -dwarf-version\=5 -module-cache-path /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -profile-generate -profile-coverage-mapping -swift-version 5 -enforce-exclusivity\=checked -Onone -D DEBUG -serialize-debugging-options -const-gather-protocols-file /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/Objects-normal/x86_64/NavigationFrame3_const_extract_protocols.json -enable-experimental-feature DebugDescriptionMacro -enable-bare-slash-regex -empty-abi-descriptor -validate-clang-modules-once -clang-build-session-file /Users/erickmanrique/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -working-directory -Xcc /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3 -enable-anonymous-context-mangled-names -file-compilation-dir /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3 -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -Xcc -ivfsstatcache -Xcc /Users/erickmanrique/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator26.2-23C57-7d00a8b37fbd7999ea79df8ebc024bf0.sdkstatcache -Xcc -I/Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/swift-overrides.hmap -Xcc -iquote -Xcc /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/NavigationFrame3-generated-files.hmap -Xcc -I/Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/NavigationFrame3-own-target-headers.hmap -Xcc -I/Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/NavigationFrame3-all-target-headers.hmap -Xcc -iquote -Xcc /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/NavigationFrame3-project-headers.hmap -Xcc -I/Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Products/Debug-iphonesimulator/include -Xcc -I/Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/DerivedSources-normal/x86_64 -Xcc -I/Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/DerivedSources/x86_64 -Xcc -I/Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/DerivedSources -Xcc -DDEBUG\=1 -no-auto-bridging-header-chaining -module-name NavigationFrame3 -frontend-parseable-output -disable-clang-spi -target-sdk-version 26.2 -target-sdk-name iphonesimulator26.2 -clang-target x86_64-apple-ios26.2-simulator -in-process-plugin-server-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/libSwiftInProcPluginServer.dylib -o /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Build/Intermediates.noindex/NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/Objects-normal/x86_64/EliteGeometricPickerViewModel.o -index-unit-output-path /NavigationFrame3.build/Debug-iphonesimulator/NavigationFrame3.build/Objects-normal/x86_64/EliteGeometricPickerViewModel.o -index-store-path /Users/erickmanrique/Library/Developer/Xcode/DerivedData/NavigationFrame3-chbufwywarfpalfxbihstqnthbub/Index.noindex/DataStore -index-system-modules
+
+SwiftCompile normal x86_64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/EliteGeometricPicker/EliteGeometricPickerViewModel.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+/Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/EliteGeometricPicker/EliteGeometricPickerViewModel.swift:174:36: error: extra trailing closure passed in call
+        photoKit.openLimitedPicker { [weak self] assets in
+                                   ^~~~~~~~~~~~~~~~~~~~~~~
+/Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/EliteGeometricPicker/EliteGeometricPickerViewModel.swift:174:50: error: cannot infer type of closure parameter 'assets' without a type annotation
+        photoKit.openLimitedPicker { [weak self] assets in
+                                                 ^
+
+SwiftCompile normal x86_64 Compiling\ AdvancedPickerExampleView.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Demo/AdvancedPickerExampleView.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal x86_64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Demo/AdvancedPickerExampleView.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftDriverJobDiscovery normal x86_64 Compiling MediaPickerFlowContainer.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal x86_64 Compiling\ MediaPickerModifier.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Entry/MediaPickerModifier.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal x86_64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Entry/MediaPickerModifier.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftDriverJobDiscovery normal arm64 Compiling ModalContext.swift, NavigationCoordinator.swift, NavigationEnvironment.swift, NavigationItem.swift, NavigationManager.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal x86_64 Compiling\ AdvancedPickerExampleViewModel.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Demo/AdvancedPickerExampleViewModel.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal x86_64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Demo/AdvancedPickerExampleViewModel.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftDriverJobDiscovery normal arm64 Compiling PhotoAlbumService.swift, PhotoKitService.swift, ContentView.swift, MasterGalleryView.swift, MasterGalleryViewModel.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal x86_64 Compiling\ CropFlowView.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/Crop/CropFlowView.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal x86_64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/Crop/CropFlowView.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftDriverJobDiscovery normal arm64 Compiling CustomPickerExampleView.swift, CustomPickerExampleViewModel.swift, MediaPickerDemoView.swift, MediaPickerModifier.swift, MediaModels.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal x86_64 Compiling\ UnifiedCreatorView.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/UnifiedCreator/UnifiedCreatorView.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal x86_64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/UnifiedCreator/UnifiedCreatorView.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftDriverJobDiscovery normal arm64 Compiling CameraPicker.swift, CameraPreviewView.swift, MediaPickerViewComponents.swift, AssetGridView.swift, AssetGridViewModel.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal x86_64 Compiling\ UnifiedCreatorViewModel.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/UnifiedCreator/UnifiedCreatorViewModel.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal x86_64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/UnifiedCreator/UnifiedCreatorViewModel.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftDriverJobDiscovery normal x86_64 Compiling CropFlowViewModel.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal x86_64 Compiling\ MediaPickerDemoView.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Demo/MediaPickerDemoView.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal x86_64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Demo/MediaPickerDemoView.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+    cd /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3
+    
+
+SwiftDriverJobDiscovery normal x86_64 Compiling MediaPickerModifier.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+SwiftCompile normal x86_64 Compiling\ EliteGeometricPickerView.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/EliteGeometricPicker/EliteGeometricPickerView.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+
+** BUILD FAILED **
+
+
+The following build commands failed:
+	SwiftCompile normal x86_64 Compiling\ EliteGeometricPickerViewModel.swift /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/EliteGeometricPicker/EliteGeometricPickerViewModel.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+	SwiftCompile normal x86_64 /Users/erickmanrique/Documents/Meetsta/IOS/NavigationFrame3/NavigationFrame3/UniversalMediaPicker/Core/EliteGeometricPicker/EliteGeometricPickerViewModel.swift (in target 'NavigationFrame3' from project 'NavigationFrame3')
+	Building project NavigationFrame3 with scheme NavigationFrame3 and configuration Debug
+(3 failures)

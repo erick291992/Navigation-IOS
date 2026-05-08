@@ -25,12 +25,23 @@ public class EliteGeometricPickerViewModel {
     public var isRecording = false
     public var previewAsset: PHAsset?
     public var previewHistoryItem: MediaItem?
+    public var zoomFactor: CGFloat { cameraService.zoomFactor }
+    public var availableZoomFactors: [CGFloat] { cameraService.availableZoomFactors }
+    
+    // Flow Management
+    public var currentStage: FlowStage = .select
+    public var processedItems: [MediaItem] = []
     
     public enum CreatorMode: String, CaseIterable {
         case library = "LIBRARY"
         case reuse = "REUSE"
         case photo = "PHOTO"
         case video = "VIDEO"
+    }
+
+    public enum FlowStage: Equatable {
+        case select
+        case crop
     }
     
     public init(
@@ -110,23 +121,45 @@ public class EliteGeometricPickerViewModel {
         cameraService.flipCamera()
     }
     
+    public func setZoom(_ factor: CGFloat) {
+        cameraService.setZoom(factor)
+    }
+    
     public func onCancelAction() {
         onCancel()
     }
     
     public func handleNext() {
         if selectedMode == .reuse, let item = previewHistoryItem {
-            onCompletion([item])
+            // Bridge directly to crop stage
+            self.processedItems = [item]
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                self.currentStage = .crop
+            }
         } else if selectedMode == .library {
             let assetsToProcess = selectedAssets.isEmpty ? (previewAsset.map { [$0] } ?? []) : Array(selectedAssets)
             let task = Task {
                 if let processed = try? await MediaPickerEngine.shared.process(assetsToProcess) {
                     await MainActor.run {
-                        onCompletion(processed)
+                        self.processedItems = processed
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                            self.currentStage = .crop
+                        }
                     }
                 }
             }
             tasks.append(task)
+        }
+    }
+    
+    public func finalizeFlow(items: [MediaItem]) {
+        onCompletion(items)
+    }
+    
+    public func cancelCrop() {
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            currentStage = .select
+            processedItems = []
         }
     }
     
@@ -144,7 +177,10 @@ public class EliteGeometricPickerViewModel {
             let task = Task {
                 if let processed = try? await MediaPickerManager.shared.process(image) {
                     await MainActor.run {
-                        self.onCompletion([processed])
+                        self.processedItems = [processed]
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                            self.currentStage = .crop
+                        }
                     }
                 }
             }
@@ -162,5 +198,9 @@ public class EliteGeometricPickerViewModel {
             }
         }
         tasks.append(task)
+    }
+    
+    public func openLimitedPicker() {
+        photoKit.openLimitedPicker()
     }
 }
