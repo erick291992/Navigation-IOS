@@ -24,7 +24,7 @@ struct AssetGridView: View {
         self.onSelectionComplete = onSelectionComplete
         self._vm = State(initialValue: AssetGridViewModel(selectionLimit: configuration.selectionLimit))
     }
-    
+
     // ---------------------------------------------------------
     // Initializer 2: INJECTED (Pass a shared ViewModel)
     // ---------------------------------------------------------

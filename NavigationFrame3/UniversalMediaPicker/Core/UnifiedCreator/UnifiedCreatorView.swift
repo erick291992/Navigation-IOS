@@ -31,7 +31,7 @@ public struct UnifiedCreatorView: View {
     
     public var body: some View {
         rootContent
-            .onChange(of: scenePhase) { oldPhase, newPhase in
+            .onChange(of: scenePhase) { _, newPhase in
                 if newPhase == .active {
                     viewModel.updateAuth()
                 }
@@ -41,7 +41,10 @@ public struct UnifiedCreatorView: View {
                     viewModel.setPreviewGridAsset(.phAsset(first))
                 }
             }
-            .animation(.spring(), value: viewModel.authStatus)
+        // Note: `.animation(value: authStatus)` previously lived here on the
+        // whole body, which prepared animation contexts for every subtree on
+        // every body re-eval. It's now scoped onto `viewfinderArea`'s inner
+        // Group where the auth-driven content swap actually happens.
     }
 
     private var rootContent: some View {
@@ -91,6 +94,7 @@ public struct UnifiedCreatorView: View {
                 }
             }
             .transition(.opacity)
+            .animation(.spring(), value: viewModel.authStatus)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black)
@@ -172,9 +176,9 @@ public struct UnifiedCreatorView: View {
                 emptyLibraryState
             } else {
                 LibraryPreviewer(asset: viewModel.previewAsset ?? viewModel.recentAssets.first)
-                    .onTapGesture { 
+                    .onTapGesture {
                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        viewModel.toggleSystemPicker() 
+                        viewModel.toggleSystemPicker()
                     }
             }
         }
@@ -199,7 +203,7 @@ public struct UnifiedCreatorView: View {
                 Text("No Recent Photos Found")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.white.opacity(0.4))
-                Button("Open Library") { 
+                Button("Open Library") {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     if viewModel.authStatus == .limited {
                         viewModel.openLimitedPicker()
@@ -243,9 +247,9 @@ public struct UnifiedCreatorView: View {
     private var exitButton: some View {
         VStack {
             HStack {
-                Button(action: { 
+                Button(action: {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    viewModel.onCancelAction() 
+                    viewModel.onCancelAction()
                 }) {
                     Image(systemName: "xmark")
                         .font(.system(size: 20, weight: .bold))
@@ -372,7 +376,7 @@ public struct UnifiedCreatorView: View {
         HStack(spacing: 6) {
             if isZoomExpanded {
                 ForEach(viewModel.cameraService.availableZoomFactors, id: \.self) { factor in
-                    Button(action: { 
+                    Button(action: {
                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         viewModel.cameraService.setZoom(factor)
                         isZoomExpanded = false
@@ -426,9 +430,9 @@ public struct UnifiedCreatorView: View {
             }
             
             // 2. Shutter Button (Dead Center)
-            Button(action: { 
+            Button(action: {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                viewModel.onShutterTab() 
+                viewModel.onShutterTab()
             }) {
                 shutterView
             }
@@ -438,9 +442,9 @@ public struct UnifiedCreatorView: View {
             HStack {
                 Spacer()
                 if viewModel.selectedMode == .photo {
-                    Button(action: { 
+                    Button(action: {
                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        viewModel.flipCamera() 
+                        viewModel.flipCamera()
                     }) {
                         Circle().fill(.white.opacity(0.1)).frame(width: 44, height: 44)
                             .overlay(Image(systemName: "arrow.triangle.2.circlepath").foregroundColor(.white))
@@ -461,9 +465,9 @@ public struct UnifiedCreatorView: View {
                     title: viewModel.modeTitle(mode),
                     isSelected: viewModel.selectedMode == mode,
                     accentColor: viewModel.configuration.style.accentColor,
-                    action: { 
+                    action: {
                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        viewModel.selectMode(mode) 
+                        viewModel.selectMode(mode)
                     }
                 )
             }
@@ -494,9 +498,9 @@ public struct UnifiedCreatorView: View {
     }
     
     private var galleryShortcut: some View {
-        Button(action: { 
+        Button(action: {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            viewModel.galleryShortcutAction() 
+            viewModel.galleryShortcutAction()
         }) {
             ZStack {
                 if (viewModel.authStatus == .authorized || viewModel.authStatus == .limited), let firstAsset = viewModel.recentAssets.first {
