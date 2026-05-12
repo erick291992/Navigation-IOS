@@ -201,7 +201,11 @@ public struct UnifiedCreatorView: View {
                     .foregroundColor(.white.opacity(0.4))
                 Button("Open Library") { 
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    viewModel.toggleSystemPicker() 
+                    if viewModel.authStatus == .limited {
+                        viewModel.openLimitedPicker()
+                    } else {
+                        viewModel.toggleSystemPicker()
+                    }
                 }
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.blue)

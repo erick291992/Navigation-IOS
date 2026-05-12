@@ -26,7 +26,9 @@ public class PhotoKitService: NSObject, PHPhotoLibraryChangeObserver {
     
     /// Silently updates the authorization status without requesting it.
     public func updateAuthStatus() {
-        self.authStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        let newStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        guard newStatus != authStatus else { return }
+        authStatus = newStatus
     }
     
     /// Requests permission and fetches the last X assets.
@@ -64,7 +66,16 @@ public class PhotoKitService: NSObject, PHPhotoLibraryChangeObserver {
               let rootVC = windowScene.windows.first?.rootViewController else { return }
         
         let topVC = findTopViewController(from: rootVC)
-        PHPhotoLibrary.shared().presentLimitedLibraryPicker(from: topVC)
+        
+        if #available(iOS 15.0, *) {
+            PHPhotoLibrary.shared().presentLimitedLibraryPicker(from: topVC) { _ in
+                Task { @MainActor in
+                    self.fetchRecentAssets()
+                }
+            }
+        } else {
+            PHPhotoLibrary.shared().presentLimitedLibraryPicker(from: topVC)
+        }
     }
     
     /// Opens the system picker via UIKit to avoid SwiftUI presentation collisions.
@@ -112,6 +123,14 @@ public class PhotoKitService: NSObject, PHPhotoLibraryChangeObserver {
         result.enumerateObjects { asset, _, _ in
             assets.append(asset)
         }
+        
+        // Skip assignment if the data hasn't actually changed.
+        // Replacing the array with an identical copy forces SwiftUI
+        // to destroy and recreate every grid cell, causing flicker.
+        let newIDs = assets.map(\.localIdentifier)
+        let oldIDs = self.recentAssets.map(\.localIdentifier)
+        guard newIDs != oldIDs else { return }
+        
         self.recentAssets = assets
     }
     
@@ -136,16 +155,11 @@ public class PhotoKitService: NSObject, PHPhotoLibraryChangeObserver {
         Task { @MainActor in
             self.updateAuthStatus()
             
-            if let result = self.fetchResult, let details = changeInstance.changeDetails(for: result) {
-                // Surgical update of the fetch result
-                let updatedResult = details.fetchResultAfterChanges
-                self.fetchResult = updatedResult
-                self.updateAssets(from: updatedResult)
-            } else {
-                // Full fallback refresh
-                if self.authStatus == .authorized || self.authStatus == .limited {
-                    self.fetchRecentAssets()
-                }
+            // Note: When using a fetchLimit, changeInstance.changeDetails(for:) 
+            // is unreliable and can miss newly inserted items or return nil.
+            // We force a full refresh to guarantee the UI reflects the new state.
+            if self.authStatus == .authorized || self.authStatus == .limited {
+                self.fetchRecentAssets()
             }
         }
     }

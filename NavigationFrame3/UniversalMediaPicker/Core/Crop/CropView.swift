@@ -99,8 +99,8 @@ public struct CropView: View {
                 ZStack {
                     style.backgroundColor.ignoresSafeArea()
                     
-                    // The Image layer
-                    Image(uiImage: item.thumbnail)
+                    // Display the full original image so crop coordinates match renderCroppedImage()
+                    Image(uiImage: UIImage(data: item.data) ?? item.thumbnail)
                         .resizable()
                         .scaledToFit()
                         .frame(width: size.width, height: size.height)
@@ -224,35 +224,59 @@ public struct CropView: View {
     }
     
     private func renderCroppedImage() {
-        let image = item.thumbnail
+        // Use the full-resolution original image, NOT the square thumbnail
+        let sourceImage: UIImage
+        if let fullImage = UIImage(data: item.data) {
+            sourceImage = fullImage
+        } else {
+            sourceImage = item.thumbnail // Fallback
+        }
+        
         let size = containerSize
         let cropArea = getActiveCropArea(for: size)
         
-        let renderer = UIGraphicsImageRenderer(size: cropArea.size)
-        let cropped = renderer.image { ctx in
-            // Move coordinate system so 0,0 is the top-left of the crop area
-            ctx.cgContext.translateBy(x: -cropArea.origin.x, y: -cropArea.origin.y)
-            
-            // Calculate where the image should be drawn in the view's coordinate space
-            let aspect = image.size.width / image.size.height
-            var drawWidth = size.width
-            var drawHeight = size.width / aspect
-            
-            if drawHeight > size.height {
-                drawHeight = size.height
-                drawWidth = size.height * aspect
-            }
-            
-            let drawRect = CGRect(
-                x: (size.width - drawWidth*scale)/2 + offset.width,
-                y: (size.height - drawHeight*scale)/2 + offset.height,
-                width: drawWidth*scale,
-                height: drawHeight*scale
-            )
-            
-            image.draw(in: drawRect)
+        // Calculate where the DISPLAY image sits in the container
+        // (this must match exactly how SwiftUI renders it with .scaledToFit)
+        let displayAspect = sourceImage.size.width / sourceImage.size.height
+        var displayWidth = size.width
+        var displayHeight = size.width / displayAspect
+        
+        if displayHeight > size.height {
+            displayHeight = size.height
+            displayWidth = size.height * displayAspect
         }
         
+        // The display rect (where the image appears on screen, accounting for zoom/pan)
+        let displayRect = CGRect(
+            x: (size.width - displayWidth * scale) / 2 + offset.width,
+            y: (size.height - displayHeight * scale) / 2 + offset.height,
+            width: displayWidth * scale,
+            height: displayHeight * scale
+        )
+        
+        // Map the crop area from screen coordinates to source image pixel coordinates
+        let scaleX = sourceImage.size.width / displayRect.width
+        let scaleY = sourceImage.size.height / displayRect.height
+        
+        let sourceRect = CGRect(
+            x: (cropArea.origin.x - displayRect.origin.x) * scaleX,
+            y: (cropArea.origin.y - displayRect.origin.y) * scaleY,
+            width: cropArea.width * scaleX,
+            height: cropArea.height * scaleY
+        )
+        
+        // Clamp to image bounds
+        let clampedRect = sourceRect.intersection(
+            CGRect(origin: .zero, size: sourceImage.size)
+        )
+        
+        guard !clampedRect.isEmpty,
+              let cgCropped = sourceImage.cgImage?.cropping(to: clampedRect) else {
+            onDone(sourceImage) // Fallback: return original
+            return
+        }
+        
+        let cropped = UIImage(cgImage: cgCropped, scale: sourceImage.scale, orientation: sourceImage.imageOrientation)
         onDone(cropped)
     }
     

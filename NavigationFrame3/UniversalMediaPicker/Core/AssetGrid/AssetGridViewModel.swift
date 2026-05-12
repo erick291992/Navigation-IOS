@@ -118,7 +118,13 @@ public final class AssetGridViewModel: NSObject, PHPhotoLibraryChangeObserver {
             service.fetchAssets(in: album.collection)
         }.value
         
-        state.assets = phAssets.map { .phAsset($0) }
+        // Skip assignment if the data hasn't actually changed — prevents
+        // SwiftUI from destroying and recreating every cell (thumbnail flicker).
+        let newIDs = phAssets.map(\.localIdentifier)
+        let oldIDs = state.assets.compactMap { $0.phAsset?.localIdentifier }
+        if newIDs != oldIDs {
+            state.assets = phAssets.map { .phAsset($0) }
+        }
         state.isLoading = false
     }
     
@@ -146,7 +152,7 @@ public final class AssetGridViewModel: NSObject, PHPhotoLibraryChangeObserver {
     // MARK: - PHPhotoLibraryChangeObserver
     
     nonisolated public func photoLibraryDidChange(_ changeInstance: PHChange) {
-        // Trigger a reload when the library changes, but ONLY if we are currently 
+        // Trigger a reload when the library changes, but ONLY if we are currently
         // showing library assets (i.e. currentAlbum is not nil).
         // If currentAlbum is nil, we are likely in history/reuse mode and should not overwrite.
         Task { @MainActor in
