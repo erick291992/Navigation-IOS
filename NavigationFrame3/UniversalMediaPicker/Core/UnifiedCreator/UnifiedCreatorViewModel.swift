@@ -40,9 +40,16 @@ public class UnifiedCreatorViewModel {
         self.configuration = configuration
         self.onCompletion = onCompletion
         self.onCancel = onCancel
-        self.gridViewModel = AssetGridViewModel(selectionLimit: configuration.selectionLimit)
-        
-        // Principal Move: Perform full setup (camera warm-up + photo fetch) 
+        // Resolve a process-cached AssetGridViewModel instead of constructing a
+        // new one. FlickerDx-B/C/F logs proved that every parent re-eval calls
+        // this init, and SwiftUI was tearing UnifiedCreatorView's @State down
+        // 4–5x per session — each fresh UCVM used to spawn a fresh, empty grid
+        // VM, which is exactly what produced the "grid goes black, all cells
+        // flash at once" symptom on Limited-Access popup dismiss. Shared cache
+        // keeps the loaded asset list alive across the churn.
+        self.gridViewModel = AssetGridViewModel.shared(selectionLimit: configuration.selectionLimit)
+
+        // Principal Move: Perform full setup (camera warm-up + photo fetch)
         // immediately during init to eliminate "first-frame" lag.
         self.setup()
     }

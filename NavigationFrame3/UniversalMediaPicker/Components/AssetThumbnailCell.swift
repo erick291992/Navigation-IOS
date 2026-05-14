@@ -22,8 +22,24 @@ struct AssetThumbnailCell: View {
         }
     }
     
-    @State private var thumbnail: UIImage?
-    
+    @State private var loadedThumbnail: UIImage?
+
+    // Resolution order: async-loaded value → process-wide cache → mediaItem's
+    // bundled thumbnail. Reading from the cache *during body evaluation* (not
+    // .onAppear) is what eliminates the one-frame `nil → load → image` flash
+    // when LazyVGrid recycles cells — on recycle the @State resets to nil, but
+    // the cache still has the image, so the cell paints with the right pixels
+    // on its very first frame.
+    private var displayThumbnail: UIImage? {
+        if let loadedThumbnail { return loadedThumbnail }
+        switch source {
+        case .phAsset(let asset):
+            return ThumbnailCache.shared.object(forKey: ThumbnailCache.key(for: asset))
+        case .mediaItem(let item):
+            return item.thumbnail
+        }
+    }
+
     var body: some View {
         ZStack(alignment: .topTrailing) {
             // Square Base
@@ -32,8 +48,8 @@ struct AssetThumbnailCell: View {
                 .aspectRatio(1, contentMode: .fit)
                 .overlay(
                     Group {
-                        if let thumbnail = thumbnail {
-                            Image(uiImage: thumbnail)
+                        if let image = displayThumbnail {
+                            Image(uiImage: image)
                                 .resizable()
                                 .scaledToFill()
                         } else {
@@ -47,17 +63,17 @@ struct AssetThumbnailCell: View {
                         .stroke(accentColor, lineWidth: selectionIndex != nil ? gridStyle.selectionBorderWidth : 0)
                 )
                 .cornerRadius(gridStyle.cornerRadius)
-            
+
             // Video Duration Overlay
             if gridStyle.showVideoDuration {
                 if let asset = source.phAsset, asset.mediaType == .video {
                     durationOverlay(duration: asset.duration)
                 } else if let item = source.mediaItem, item.contentType == .video {
                     // Note: MediaItem doesn't currently store duration, but we could add it.
-                    durationOverlay(duration: 0) 
+                    durationOverlay(duration: 0)
                 }
             }
-            
+
             // Selection Indicator
             if let index = selectionIndex {
                 selectionIndicator(for: index)
@@ -65,7 +81,7 @@ struct AssetThumbnailCell: View {
             }
         }
         .contentShape(Rectangle())
-        .onAppear { loadThumbnail() }
+        .onAppear { loadThumbnailIfNeeded() }
     }
     
     @ViewBuilder
@@ -106,19 +122,17 @@ struct AssetThumbnailCell: View {
         }
     }
     
-    private func loadThumbnail() {
-        if let item = source.mediaItem {
-            self.thumbnail = item.thumbnail
-            return
-        }
-        
+    private func loadThumbnailIfNeeded() {
+        // The body already reads from the cache + mediaItem fallback synchronously,
+        // so only kick off an async fetch when we genuinely have no image to show.
+        guard displayThumbnail == nil else { return }
         guard let asset = source.phAsset else { return }
-        
+
         let scale: CGFloat = 2.0 // Standard retina scale
         let targetSize = CGSize(width: 200 * scale, height: 200 * scale)
-        
+
         PhotoKitService.shared.loadThumbnail(for: asset, size: targetSize) { image in
-            self.thumbnail = image
+            self.loadedThumbnail = image
         }
     }
     

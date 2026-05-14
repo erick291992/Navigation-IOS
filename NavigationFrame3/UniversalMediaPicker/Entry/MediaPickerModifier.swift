@@ -17,7 +17,16 @@ public struct MediaPickerModifier: ViewModifier {
     
     public func body(content: Content) -> some View {
         content
-            .sheet(isPresented: $isPresented) {
+            .sheet(isPresented: $isPresented, onDismiss: {
+                // Per-session reset for the shared AssetGridViewModel cache.
+                // The grid VM is now process-cached (see AssetGridViewModel.shared),
+                // so its loaded asset list survives upstream identity churn that
+                // was causing the popup-dismiss flicker. The flip side is that
+                // selection state would leak into the next picker open; clear it
+                // here when the sheet truly goes away.
+                AssetGridViewModel.shared(selectionLimit: configuration.selectionLimit)
+                    .prepareForNewSession()
+            }) {
                 MediaPickerFlowContainer(
                     configuration: configuration,
                     onCompletion: { items in

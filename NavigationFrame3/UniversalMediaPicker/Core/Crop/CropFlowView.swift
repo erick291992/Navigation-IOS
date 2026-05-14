@@ -66,21 +66,17 @@ public struct CropFlowView: View {
                             viewModel.jumpTo(index: targetIndex)
                         },
                         onDone: { croppedImage in
-                            Task {
-                                let manager = MediaPickerManager.shared
-                                do {
-                                    let newItem = try await manager.process(croppedImage)
-                                    await MainActor.run {
-                                        viewModel.finishCrop(item: newItem, index: index)
-                                    }
-                                } catch {
-                                    print("⚠️ Crop processing failed: \(error)")
-                                    await MainActor.run {
-                                        // Reset the view's internal processing state is handled by re-appear
-                                        // but we could add a local alert here if needed
-                                    }
-                                }
-                            }
+                            // Create MediaItem directly — do NOT re-process through
+                            // manager.process() which would run generateThumbnail()
+                            // and destroy the crop's aspect ratio by squaring it.
+                            let data = croppedImage.jpegData(compressionQuality: 0.9) ?? Data()
+                            let croppedItem = MediaItem(
+                                data: data,
+                                thumbnail: croppedImage,
+                                contentType: item.contentType,
+                                originalURL: item.originalURL
+                            )
+                            viewModel.finishCrop(item: croppedItem, index: index)
                         },
                         onCancel: {
                             if let onGoBack = onGoBack {

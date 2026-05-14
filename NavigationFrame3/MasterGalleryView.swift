@@ -4,6 +4,7 @@ import PhotosUI
 struct MasterGalleryView: View {
     @Environment(\.navigationManager) var navigationManager: NavigationManager
     @State private var vm = MasterGalleryViewModel()
+    @State private var showTestSheet = false
     
     var body: some View {
         ZStack {
@@ -36,6 +37,10 @@ struct MasterGalleryView: View {
                         
                         MediaPickerButton(title: "Open Elite Picker", icon: "sparkles") {
                             vm.showModifierPicker = true
+                        }
+                        
+                        MediaPickerButton(title: "Test Double Sheet", icon: "doc.on.doc") {
+                            showTestSheet = true
                         }
                         
                         Divider().padding(.vertical, 8)
@@ -140,6 +145,10 @@ struct MasterGalleryView: View {
                 vm.handlePickerResult(items)
             }
         )
+        // 🧪 DOUBLE SHEET TEST
+        .sheet(isPresented: $showTestSheet) {
+            DoubleSheetTestContainer(vm: vm)
+        }
         // 🧪 TIER 3: Headless Engine - Custom Crop View
         .sheet(isPresented: Binding(
             get: { if case .cropping = vm.flowState { return true } else { return false } },
@@ -188,6 +197,76 @@ struct MasterGalleryView: View {
                 },
                 onCancel: {
                     vm.showGeometricPicker = false
+                }
+            )
+        }
+    }
+}
+
+struct DoubleSheetTestContainer: View {
+    @Bindable var vm: MasterGalleryViewModel
+    @State private var showInnerPicker = false
+    @State private var selectedImage: UIImage? = nil
+    @Environment(\.dismiss) var dismiss
+    
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 30) {
+                if let image = selectedImage {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity)
+                        .cornerRadius(12)
+                        .padding()
+                    
+                    Text("This is the full-size `.data` image! Notice how it auto-adjusted to the 16:9 Landscape ratio.")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                } else {
+                    Text("This is the First Sheet")
+                        .font(.title2.bold())
+                    
+                    Text("Testing if presenting the UniversalMediaPicker from a sheet works without crashing or visual bugs.")
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+                
+                Button(action: {
+                    showInnerPicker = true
+                }) {
+                    Text("Open Elite Picker")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color.pink)
+                        .cornerRadius(12)
+                }
+                .padding(.horizontal)
+                
+                Spacer()
+            }
+            .padding(.top, 20)
+            .navigationTitle("Test Sheet")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Close") { dismiss() }
+                }
+            }
+            .mediaPicker(
+                isPresented: $showInnerPicker,
+                configuration: .init(selectionLimit: 1, crop: .landscape, style: .pinkSleek),
+                onCompletion: { items in
+                    // Only grab the first one to preview the data
+                    if let firstItem = items.first, let image = UIImage(data: firstItem.data) {
+                        self.selectedImage = image
+                    }
+                    vm.handlePickerResult(items)
+                    // Note: We don't dismiss the sheet here so you can see the preview!
                 }
             )
         }

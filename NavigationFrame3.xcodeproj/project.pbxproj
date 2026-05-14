@@ -29,9 +29,22 @@
 		CD88BA8B2DE7AAE300B79D4F /* NavigationFrame3UITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NavigationFrame3UITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		CD5D47F82FB2F9F60098ADB9 /* Exceptions for "NavigationFrame3" folder in "NavigationFrame3" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = CD88BA6F2DE7AAE100B79D4F /* NavigationFrame3 */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		CD88BA722DE7AAE100B79D4F /* NavigationFrame3 */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				CD5D47F82FB2F9F60098ADB9 /* Exceptions for "NavigationFrame3" folder in "NavigationFrame3" target */,
+			);
 			path = NavigationFrame3;
 			sourceTree = "<group>";
 		};
@@ -395,6 +408,7 @@
 				DEVELOPMENT_TEAM = 8R3688592C;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NavigationFrame3/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "We need camera access to take and crop profile photos.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "We need photo library access to browse your recent media.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -436,6 +450,7 @@
 				DEVELOPMENT_TEAM = 8R3688592C;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NavigationFrame3/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "We need camera access to take and crop profile photos.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "We need photo library access to browse your recent media.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;

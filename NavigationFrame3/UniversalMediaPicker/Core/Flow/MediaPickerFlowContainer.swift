@@ -9,16 +9,16 @@ struct MediaPickerFlowContainer: View {
     
     @State private var currentStage: FlowStage = .select
     @State private var selectedItems: [MediaItem] = []
-    
+
     enum FlowStage {
         case select
         case crop
     }
-    
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            
+
             // 1. Base Layer (Always alive to preserve selection & scroll state)
             UnifiedCreatorView(
                 configuration: configuration,
