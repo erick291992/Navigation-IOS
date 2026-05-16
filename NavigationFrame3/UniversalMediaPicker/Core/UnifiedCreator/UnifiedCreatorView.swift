@@ -8,6 +8,16 @@ import AVFoundation
 public struct UnifiedCreatorView: View {
     @State private var viewModel: UnifiedCreatorViewModel
     @State private var isZoomExpanded = false
+    // Lazy-mount gate for CameraPreviewView. The UIViewRepresentable's first
+    // mount triggers ~50ms of UIKit/AVFoundation bridging (creating
+    // VideoPreviewUIView + binding the AVCaptureVideoPreviewLayer to the
+    // session). Deferring this for ~32ms lets the rest of the picker shell
+    // (header, mode buttons, shutter, grid skeleton, etc.) appear immediately
+    // when UnifiedCreatorView mounts — the camera area shows a small
+    // ProgressView for that brief window. After the gate flips, CameraPreviewView
+    // stays mounted for the rest of the picker's lifetime (so subsequent
+    // mode-switches into photo mode are instant).
+    @State private var isCameraMounted = false
     @Environment(\.scenePhase) private var scenePhase
     
     public init(
@@ -31,6 +41,16 @@ public struct UnifiedCreatorView: View {
     
     public var body: some View {
         rootContent
+            .task {
+                // One-shot lazy-mount of CameraPreviewView. See the
+                // `isCameraMounted` declaration above for the rationale.
+                // .task auto-cancels if the view disappears within the 32ms
+                // window, so a quick open-then-close doesn't trigger the
+                // UIKit bridging work.
+                guard !isCameraMounted else { return }
+                try? await Task.sleep(for: .milliseconds(32))
+                isCameraMounted = true
+            }
             .onChange(of: scenePhase) { _, newPhase in
                 if newPhase == .active {
                     viewModel.updateAuth()
@@ -103,39 +123,56 @@ public struct UnifiedCreatorView: View {
     
     private var mainViewfinderContent: some View {
         ZStack {
-            // 1. Photo Viewfinder (Persistent & Warm)
+            // 1. Photo Viewfinder (Persistent & Warm, after lazy gate)
             if viewModel.cameraService.isSourceReady {
-                CameraPreviewView()
-                    .opacity(viewModel.selectedMode == .photo ? 1 : 0)
+                if isCameraMounted {
+                    CameraPreviewView()
+                        .opacity(viewModel.selectedMode == .photo ? 1 : 0)
+                }
+                // Before isCameraMounted flips: nothing renders here. The
+                // black background from .background(Color.black) on viewfinderArea
+                // shows through, and the spinner below provides the loading hint.
             } else {
                 PermissionNeededView(type: .camera, accentColor: viewModel.configuration.style.accentColor)
                     .opacity(viewModel.selectedMode == .photo ? 1 : 0)
             }
-            
+
+            // 1a. Camera loading spinner — shown while either:
+            //   - CameraPreviewView hasn't been lazy-mounted yet (32ms window), OR
+            //   - The AVCaptureSession isn't yet producing frames
+            // Both conditions disappear automatically as state propagates.
+            if viewModel.selectedMode == .photo
+                && viewModel.cameraService.isSourceReady
+                && (!isCameraMounted || !viewModel.cameraService.isSessionRunning) {
+                ProgressView()
+                    .tint(.white.opacity(0.7))
+            }
+
             // 2. Library Viewfinder
             if viewModel.selectedMode == .library {
-                Group {
-                    if viewModel.authStatus == .denied || viewModel.authStatus == .restricted {
-                        PermissionNeededView(type: .library, accentColor: viewModel.configuration.style.accentColor)
-                    } else {
-                        libraryViewfinder
-                    }
+                if viewModel.authStatus == .denied || viewModel.authStatus == .restricted {
+                    PermissionNeededView(type: .library, accentColor: viewModel.configuration.style.accentColor)
+                } else if viewModel.recentAssets.isEmpty
+                    && (viewModel.authStatus == .authorized || viewModel.authStatus == .limited) {
+                    // Library loading spinner — disappears when PhotoKit
+                    // propagates recentAssets via @Observable.
+                    ProgressView()
+                        .tint(.white.opacity(0.7))
+                } else {
+                    libraryViewfinder
                 }
-                .transition(.opacity)
             }
-            
+
             // 3. Reuse Viewfinder
             if viewModel.selectedMode == .reuse {
                 historyViewfinder
-                    .transition(.opacity)
             }
-            
+
             // Mode Overlay (Recording indicator)
             if viewModel.isRecording {
                 recordingIndicator
             }
         }
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: viewModel.selectedMode)
     }
     
     private var onboardingView: some View {
@@ -515,6 +552,17 @@ public struct UnifiedCreatorView: View {
                         .frame(width: 48, height: 48)
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.3), lineWidth: 2))
                         .overlay(Image(systemName: "lock.fill").foregroundColor(.white.opacity(0.4)))
+                } else if viewModel.authStatus == .authorized || viewModel.authStatus == .limited {
+                    // Authorized but recentAssets hasn't propagated yet —
+                    // show a small spinner instead of the generic photo icon
+                    // so the user knows this square is loading, not empty.
+                    // Disappears the moment `recentAssets.first` returns
+                    // a value (via the @Observable cascade from PhotoKitService).
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.white.opacity(0.1))
+                        .frame(width: 48, height: 48)
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.3), lineWidth: 2))
+                        .overlay(ProgressView().tint(.white.opacity(0.5)))
                 } else {
                     RoundedRectangle(cornerRadius: 10)
                         .fill(Color.white.opacity(0.1))

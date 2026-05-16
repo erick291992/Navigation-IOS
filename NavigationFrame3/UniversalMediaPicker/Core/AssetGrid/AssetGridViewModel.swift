@@ -124,37 +124,37 @@ public final class AssetGridViewModel: NSObject, PHPhotoLibraryChangeObserver {
     
     private func loadAlbums() async {
         state.isLoading = true
-        
+
         // Principal Move: Yield the main thread to let the UI (pink dot) render first.
         await Task.yield()
-        
+
         // Move heavy PhotoKit work to background
         let service = self.albumService
         let albums = await Task.detached(priority: .userInitiated) {
             service.fetchAlbums()
         }.value
-        
+
         state.albums = albums
-        
+
         if let first = albums.first {
             state.currentAlbum = first
             await loadAssets(for: first)
         }
         state.isLoading = false
     }
-    
+
     private func loadAssets(for album: PhotoAlbumService.AlbumInfo) async {
         state.isLoading = true
-        
+
         // Yield again to ensure smooth UI interaction
         await Task.yield()
-        
+
         // Move heavy PhotoKit work to background
         let service = self.albumService
         let phAssets = await Task.detached(priority: .userInitiated) {
             service.fetchAssets(in: album.collection)
         }.value
-        
+
         // Skip assignment if the data hasn't actually changed — prevents
         // SwiftUI from destroying and recreating every cell (thumbnail flicker).
         let newIDs = phAssets.map(\.localIdentifier)
