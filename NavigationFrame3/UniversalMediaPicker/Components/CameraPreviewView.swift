@@ -8,12 +8,15 @@ public struct CameraPreviewView: UIViewRepresentable {
     public func makeUIView(context: Context) -> VideoPreviewUIView {
         let view = VideoPreviewUIView()
         view.videoPreviewLayer.session = cameraService.session
-        
-        // Start session if not already running
+
+        // Self-warm fallback for direct consumers that don't wrap this in a
+        // CameraViewfinderViewModel (e.g., EliteGeometricPickerView). The
+        // primary picker's CameraViewfinderViewModel warms via its own .task
+        // first, so this is a no-op in that flow (startWarming is idempotent).
         if !cameraService.isSessionRunning {
-            cameraService.setup()
+            Task { await cameraService.startWarming() }
         }
-        
+
         return view
     }
     

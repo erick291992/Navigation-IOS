@@ -3,180 +3,199 @@ import AVFoundation
 import UIKit
 import Observation
 
-/// A dedicated service to manage the live camera preview and capture for V3.
-@MainActor
+/// `@Observable` facade exposing the picker's published camera state.
+///
+/// Holds the `AVCaptureSession` for the UIKit preview-layer bridge to read
+/// synchronously on the main thread, plus observable lifecycle/zoom state for
+/// SwiftUI views to observe. Uses `CameraDeviceService` (the mini-repository)
+/// for the heavy off-main AVFoundation work.
+///
+/// Architecture notes:
+/// - NO class-level `@MainActor`. Async lifecycle methods (`startWarming`) are
+///   nonisolated so awaiting them hops to the cooperative thread pool per
+///   SE-0338, and the heavy AVFoundation calls inside `CameraDeviceService`
+///   run off the main thread.
+/// - Observable-state writers and sync UI-facing helpers are individually
+///   `@MainActor`-annotated; `await MainActor.run` is used inside async
+///   methods to hop back to main for observable writes.
+/// - `AVCapturePhotoCaptureDelegate` conformance lives in a dedicated extension.
 @Observable
-public class CameraService: NSObject {
-    public static let shared = CameraService()
-    
-    public var session = AVCaptureSession()
+public final class CameraService: NSObject {
+    @MainActor public static let shared = CameraService()
+
+    /// Owned here so the UIKit `AVCaptureVideoPreviewLayer` bridge can bind
+    /// to it synchronously on the main thread. Reference-typed; safe to read
+    /// from any context (`AVCaptureSession` is thread-safe).
+    public let session = AVCaptureSession()
+
     public var isSessionRunning = false
     public var isSourceReady = false
     public var zoomFactor: CGFloat = 1.0
-    public var availableZoomFactors: [CGFloat] = [1.0, 2.0, 5.0] // Default wide-angle set
-    
+    public var availableZoomFactors: [CGFloat] = [1.0, 2.0, 5.0]
+
+    private let device = CameraDeviceService.shared
     private let output = AVCapturePhotoOutput()
     private var completion: ((UIImage?) -> Void)?
-    
+
+    @MainActor
     private override init() {
         super.init()
     }
-    
-    public func setZoom(_ factor: CGFloat) {
-        guard let device = (session.inputs.first as? AVCaptureDeviceInput)?.device else { return }
-        
-        do {
-            try device.lockForConfiguration()
-            device.videoZoomFactor = max(device.minAvailableVideoZoomFactor, min(factor, device.maxAvailableVideoZoomFactor))
-            self.zoomFactor = device.videoZoomFactor
-            device.unlockForConfiguration()
-        } catch {
-            print("❌ Failed to set zoom: \(error)")
-        }
-    }
-    
-    /// Sets up the capture session.
-    public func setup() {
+
+    // MARK: - Prewarm / setup
+
+    /// Asynchronous setup of the capture session. Resolves authorization,
+    /// discovers the best back-facing camera, configures the session, and
+    /// starts it running. Idempotent: calling repeatedly is safe (early-returns
+    /// if the session already has inputs).
+    public func startWarming() async {
         let status = AVCaptureDevice.authorizationStatus(for: .video)
-        self.isSourceReady = (status == .authorized)
-        
-        guard status == .authorized else {
-            if status == .notDetermined {
-                AVCaptureDevice.requestAccess(for: .video) { authorized in
-                    Task { @MainActor in
-                        if authorized { self.setup() }
-                    }
-                }
+        await MainActor.run { setIsSourceReady(status == .authorized) }
+
+        if status == .notDetermined {
+            let granted = await device.requestVideoAuthorization()
+            await MainActor.run { setIsSourceReady(granted) }
+            if granted {
+                await startWarming()
             }
             return
         }
-        
-        guard session.inputs.isEmpty else { return } // Already setup
-        
-        // Find the best available camera (Triple -> Dual -> Wide)
-        let deviceTypes: [AVCaptureDevice.DeviceType] = [
-            .builtInTripleCamera,
-            .builtInDualWideCamera,
-            .builtInDualCamera,
-            .builtInWideAngleCamera
-        ]
-        
-        let discoverySession = AVCaptureDevice.DiscoverySession(
-            deviceTypes: deviceTypes,
-            mediaType: .video,
-            position: .back
-        )
-        
-        guard let device = discoverySession.devices.first ?? AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else { return }
-        
-        // Detect available zoom factors
-        updateZoomFactors(for: device)
-        
+
+        guard status == .authorized else { return }
+
+        // Idempotency guard — `session.inputs` is thread-safe to read.
+        guard session.inputs.isEmpty else { return }
+
+        guard let captureDevice = await device.discoverDevice(for: .back) else { return }
+
+        await MainActor.run { updateZoomFactors(for: captureDevice) }
+
+        guard let input = try? AVCaptureDeviceInput(device: captureDevice) else { return }
+
+        await device.configureSession(session, with: input, output: output)
+        await device.startSession(session)
+
+        await MainActor.run { setIsSessionRunning(true) }
+    }
+
+    // MARK: - Zoom
+
+    @MainActor
+    public func setZoom(_ factor: CGFloat) {
+        guard let captureDevice = (session.inputs.first as? AVCaptureDeviceInput)?.device else { return }
         do {
-            let input = try AVCaptureDeviceInput(device: device)
-            
-            if session.canAddInput(input) {
-                session.addInput(input)
-            }
-            
-            if session.canAddOutput(output) {
-                session.addOutput(output)
-            }
-            
-            let currentSession = self.session
-            Task.detached(priority: .userInitiated) {
-                currentSession.startRunning()
-                await MainActor.run {
-                    self.isSessionRunning = true
-                }
-            }
+            try captureDevice.lockForConfiguration()
+            let clamped = max(
+                captureDevice.minAvailableVideoZoomFactor,
+                min(factor, captureDevice.maxAvailableVideoZoomFactor)
+            )
+            captureDevice.videoZoomFactor = clamped
+            setZoomFactor(captureDevice.videoZoomFactor)
+            captureDevice.unlockForConfiguration()
         } catch {
-            print("❌ Camera setup failed: \(error)")
+            // Silent; zoom is a best-effort UI affordance.
         }
     }
-    
-    private func updateZoomFactors(for device: AVCaptureDevice) {
-        var factors: [CGFloat] = []
-        
-        // Add 0.5x only if the device physically supports it (Ultra Wide lens)
-        if device.minAvailableVideoZoomFactor <= 0.5 {
-            factors.append(0.5)
-        }
-        
-        // Always include 1.0x and 2.0x as standard
-        factors.append(1.0)
-        
-        // Only include 2.0x and 5.0x if the device can actually reach them
-        if device.maxAvailableVideoZoomFactor >= 2.0 {
-            factors.append(2.0)
-        }
-        
-        if device.maxAvailableVideoZoomFactor >= 5.0 {
-            factors.append(5.0)
-        }
-        
-        // Ensure we don't have duplicates and they are sorted
-        self.availableZoomFactors = Array(Set(factors)).sorted()
-    }
-    
-    /// Captures a high-resolution photo.
+
+    // MARK: - Capture
+
+    /// Captures a high-resolution photo. Completion fires when the delegate
+    /// callback resolves (see `AVCapturePhotoCaptureDelegate` extension).
+    @MainActor
     public func capture(completion: @escaping (UIImage?) -> Void) {
         self.completion = completion
         let settings = AVCapturePhotoSettings()
         output.capturePhoto(with: settings, delegate: self)
     }
-    
-    /// Flips between front and back camera.
+
+    // MARK: - Flip camera
+
+    /// Swaps between front and back camera. Fire-and-forget: spawns an async
+    /// Task internally so call-sites stay synchronous.
+    @MainActor
     public func flipCamera() {
-        guard !session.inputs.isEmpty else { return }
-        
-        session.beginConfiguration()
-        
-        if let currentInput = session.inputs.first as? AVCaptureDeviceInput {
-            session.removeInput(currentInput)
-            
-            let newPosition: AVCaptureDevice.Position = (currentInput.device.position == .back) ? .front : .back
-            
-            let deviceTypes: [AVCaptureDevice.DeviceType] = (newPosition == .back) ? [
-                .builtInTripleCamera,
-                .builtInDualWideCamera,
-                .builtInDualCamera,
-                .builtInWideAngleCamera
-            ] : [.builtInWideAngleCamera]
-            
-            let discoverySession = AVCaptureDevice.DiscoverySession(
-                deviceTypes: deviceTypes,
-                mediaType: .video,
-                position: newPosition
-            )
-            
-            if let newDevice = discoverySession.devices.first,
-               let newInput = try? AVCaptureDeviceInput(device: newDevice) {
-                if session.canAddInput(newInput) {
-                    session.addInput(newInput)
-                    updateZoomFactors(for: newDevice)
-                    self.zoomFactor = 1.0
-                }
-            } else {
-                // Fallback
-                session.addInput(currentInput)
-            }
+        Task { await performFlip() }
+    }
+
+    private func performFlip() async {
+        guard let currentInput = session.inputs.first as? AVCaptureDeviceInput else { return }
+        let newPosition: AVCaptureDevice.Position =
+            (currentInput.device.position == .back) ? .front : .back
+
+        guard let newDevice = await device.discoverDevice(for: newPosition) else { return }
+        let success = await device.swapInput(on: session, to: newDevice)
+        guard success else { return }
+
+        await MainActor.run {
+            updateZoomFactors(for: newDevice)
+            setZoomFactor(1.0)
         }
-        
-        session.commitConfiguration()
+    }
+
+    // MARK: - Private (state writers + computed helpers)
+
+    /// Equality-guarded `isSourceReady` setter (per `PICKER_PERF_FIX_HANDOFF.md` §5.5).
+    /// Without the guard, `setup()` was firing an `@Observable` cascade on every
+    /// throwaway VM construction during the upstream identity churn.
+    @MainActor
+    private func setIsSourceReady(_ value: Bool) {
+        guard isSourceReady != value else { return }
+        isSourceReady = value
+    }
+
+    /// Equality-guarded `isSessionRunning` setter.
+    @MainActor
+    private func setIsSessionRunning(_ value: Bool) {
+        guard isSessionRunning != value else { return }
+        isSessionRunning = value
+    }
+
+    /// Equality-guarded `zoomFactor` setter.
+    @MainActor
+    private func setZoomFactor(_ value: CGFloat) {
+        guard zoomFactor != value else { return }
+        zoomFactor = value
+    }
+
+    /// Computes available zoom presets based on the device's physical lens range.
+    @MainActor
+    private func updateZoomFactors(for captureDevice: AVCaptureDevice) {
+        var factors: [CGFloat] = []
+
+        // 0.5x only if the device has an ultra-wide lens.
+        if captureDevice.minAvailableVideoZoomFactor <= 0.5 {
+            factors.append(0.5)
+        }
+
+        // Always include 1.0x as the base.
+        factors.append(1.0)
+
+        // 2.0x and 5.0x only if reachable.
+        if captureDevice.maxAvailableVideoZoomFactor >= 2.0 {
+            factors.append(2.0)
+        }
+        if captureDevice.maxAvailableVideoZoomFactor >= 5.0 {
+            factors.append(5.0)
+        }
+
+        let computed = Array(Set(factors)).sorted()
+        guard availableZoomFactors != computed else { return }
+        availableZoomFactors = computed
     }
 }
 
+// MARK: - AVCapturePhotoCaptureDelegate
+
 extension CameraService: AVCapturePhotoCaptureDelegate {
-    nonisolated public func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
+    public func photoOutput(
+        _ output: AVCapturePhotoOutput,
+        didFinishProcessingPhoto photo: AVCapturePhoto,
+        error: Error?
+    ) {
         guard let data = photo.fileDataRepresentation(), let image = UIImage(data: data) else {
-            Task { @MainActor in
-                self.completion?(nil)
-            }
+            Task { @MainActor in self.completion?(nil) }
             return
         }
-        Task { @MainActor in
-            self.completion?(image)
-        }
+        Task { @MainActor in self.completion?(image) }
     }
 }

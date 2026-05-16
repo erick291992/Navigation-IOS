@@ -1,81 +1,75 @@
 import SwiftUI
 import PhotosUI
 
+// MARK: - Infrastructure Exception
+//
+// `MediaPickerModifier` is the picker module's entry-point ViewModifier. It
+// is the ONLY place in the picker module that calls services directly from
+// view code. The strict View → ViewModel → Service rule (see Coding
+// Conventions §1.7 of the rebuild plan) does not apply here because:
+//
+// 1. The modifier fires BEFORE any picker ViewModel exists. The
+//    `PickerViewModel` is constructed inside the sheet's content closure when
+//    the sheet presents — at the time `.onAppear` and `.task` fire on the
+//    host view, there is no VM to route through.
+// 2. The prewarm IS the value the modifier provides. Routing it through a
+//    "PrewarmService" would just add a file that delegates to two other
+//    services without eliminating the rule violation; the violation would
+//    just move to a smaller surface. We accept the exception here and
+//    document it explicitly.
+//
+// Every other file in the picker module follows the strict rule.
+
 public struct MediaPickerModifier: ViewModifier {
     @Binding var isPresented: Bool
     let configuration: MediaPickerConfiguration
     let onCompletion: ([MediaItem]) -> Void
     let onCancel: () -> Void
-    
-    // Internal States for Sequential Flow
-    @State private var isSystemPickerPresented = false
-    @State private var isCropEnginePresented = false
-    @State private var selection: [PhotosPickerItem] = []
-    
-    // Internal ID to force state reset
-    @State private var pickerId = UUID()
-    
+
     public func body(content: Content) -> some View {
         content
-            // Camera pre-warm via .onAppear (NOT .task) because .onAppear fires
-            // synchronously when the host view is added to the hierarchy, while
-            // .task has ~16-32ms of additional scheduling overhead. For a
-            // latency-critical wake-up like AVCaptureSession.startRunning, every
-            // millisecond of head-start matters — the camera session is the
-            // dominant cost in the cold-start tap-to-grid path.
+            // Camera pre-warm via `.onAppear` (NOT `.task`) because
+            // `.onAppear` fires synchronously when the host view is added to
+            // the hierarchy, while `.task` has ~16-32ms of additional
+            // scheduling overhead. For a latency-critical wake-up like
+            // `AVCaptureSession.startRunning`, every millisecond of head-start
+            // matters — camera-session cold-start dominates the tap-to-grid path.
             //
-            // We deliberately keep this inside the picker module rather than
-            // exposing it to consumers. The picker's public API is just
-            // `.mediaPicker(isPresented:configuration:onCompletion:)` —
-            // consumers should not have to know about CameraService /
-            // PhotoKitService internals to get a snappy picker.
-            // Camera pre-warm via .onAppear (NOT .task) because .onAppear fires
-            // synchronously when the host view is added to the hierarchy, while
-            // .task has ~16-32ms of additional scheduling overhead. For the
-            // latency-critical AVCaptureSession.startRunning, every millisecond
-            // of head-start matters — camera-session cold start is the dominant
-            // cost in the tap-to-grid path.
-            //
-            // Both pre-warms are kept INSIDE the picker module — consumers only
-            // need `.mediaPicker(isPresented:configuration:onCompletion:)` and
-            // shouldn't have to know about CameraService / PhotoKitService.
+            // `startWarming()` is async; we kick it off in a Task inside
+            // `.onAppear` so the call site stays synchronous and fires immediately.
+            // `startWarming()` is idempotent (early-returns if the session is
+            // already configured) so this is safe to fire on every appearance.
             .onAppear {
-                // CameraService.shared.setup() is idempotent (the
-                // `guard session.inputs.isEmpty` inside returns early on the
-                // second call) so this is safe to fire on every appearance.
-                CameraService.shared.setup()
+                Task { await CameraService.shared.startWarming() }
             }
-            // Photo pre-fetch via .task because it IS async (we await
-            // fetchRecentAssets) and the auto-cancellation on view disappear is
-            // a nice bonus.
+            // Photo pre-fetch via `.task` because it IS async (we await
+            // `prewarm()`) and the auto-cancellation on view disappear is a
+            // nice bonus.
             .task {
-                // Pre-fetch recent assets ONLY if permission is already granted.
-                // Do NOT trigger the iOS permission prompt eagerly here — that
-                // would surprise the user before they've intent-tapped the
-                // picker. First-time users will hit the prompt at tap time.
-                let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-                guard status == .authorized || status == .limited else { return }
-                await PhotoKitService.shared.fetchRecentAssets()
+                // `prewarm()` internally checks authorization status and
+                // early-returns if not granted — first-time users hit the
+                // prompt at their intent moment, not eagerly here.
+                await PhotoKitService.shared.prewarm()
 
-                // Also pre-warm the shared AssetGridViewModel cache (used by
-                // the grid in the bottom panel). PhotoKitService.recentAssets
-                // and AssetGridViewModel.state.assets are SEPARATE data stores —
-                // the former feeds the viewfinder / gallery-shortcut, the latter
-                // feeds the actual LazyVGrid. Warming both means that when the
-                // user taps to open the picker, both surfaces have data ready
-                // and neither needs to do an on-appear load.
-                let gridVM = AssetGridViewModel.shared(selectionLimit: configuration.selectionLimit)
-                if gridVM.state.assets.isEmpty {
-                    gridVM.trigger(.loadInitialData)
+                // Also warm the shared `AssetGridViewModel` cache (used by
+                // the grid in the bottom panel). `PhotoKitService.recentAssets`
+                // and `AssetGridViewModel.state.assets` are SEPARATE data
+                // stores — the former feeds the viewfinder + gallery-shortcut,
+                // the latter feeds the actual LazyVGrid. Warming both means
+                // that when the user taps to open the picker, both surfaces
+                // have data ready and neither needs to do an on-appear load.
+                let gridViewModel = AssetGridViewModel.shared(selectionLimit: configuration.selectionLimit)
+                if gridViewModel.state.assets.isEmpty {
+                    gridViewModel.trigger(.loadInitialData)
                 }
             }
             .sheet(isPresented: $isPresented, onDismiss: {
-                // Per-session reset for the shared AssetGridViewModel cache.
-                // The grid VM is process-cached (see AssetGridViewModel.shared),
-                // so its loaded asset list survives upstream identity churn that
-                // was causing the popup-dismiss flicker. The flip side is that
-                // selection state would leak into the next picker open; clear it
-                // here when the sheet truly goes away.
+                // Per-session reset for the shared `AssetGridViewModel` cache.
+                // The grid VM is process-cached (see `AssetGridViewModel.shared(selectionLimit:)`),
+                // so its loaded asset list survives upstream identity churn
+                // that was causing the popup-dismiss flicker. The flip side is
+                // that selection state would leak into the next picker open;
+                // clear it here when the sheet truly goes away.
                 AssetGridViewModel.shared(selectionLimit: configuration.selectionLimit)
                     .prepareForNewSession()
             }) {

@@ -68,12 +68,16 @@ public class EliteGeometricPickerViewModel {
     // MARK: - Actions
     
     public func setup() {
-        Task { await photoKit.fetchRecentAssets() }
-        cameraService.setup()
-
-        if previewAsset == nil, let first = recentAssets.first {
-            previewAsset = first
+        Task {
+            await photoKit.fetchRecentAssets()
+            // Preview-asset assignment moved INSIDE the Task so we read
+            // recentAssets AFTER the fetch completes (was a pre-existing
+            // race; fixed during the architectural rebuild).
+            if previewAsset == nil, let first = recentAssets.first {
+                previewAsset = first
+            }
         }
+        Task { await cameraService.startWarming() }
     }
 
     public func updateAuth() {

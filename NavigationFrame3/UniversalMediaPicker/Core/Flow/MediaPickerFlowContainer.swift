@@ -20,7 +20,7 @@ struct MediaPickerFlowContainer: View {
             Color.black.ignoresSafeArea()
 
             // 1. Base Layer (Always alive to preserve selection & scroll state)
-            UnifiedCreatorView(
+            PickerView(
                 configuration: configuration,
                 onCompletion: { items in
                     self.selectedItems = items

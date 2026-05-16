@@ -6,7 +6,7 @@ import Observation
 public enum AssetGridAction {
     case loadInitialData
     case loadHistory([MediaItem])
-    case selectAlbum(PhotoAlbumService.AlbumInfo)
+    case selectAlbum(PhotoLibraryService.AlbumInfo)
     case selectAsset(GridAsset)
     case toggleMultiSelect
     case toggleAssetSelection(GridAsset)
@@ -14,9 +14,13 @@ public enum AssetGridAction {
 }
 
 // MARK: - State Lens
+//
+// `currentAlbum` and `albums` are NOT stored here in the rebuild. They're
+// owned by `PickerViewModel` (the picker-level coordinator) and flow into
+// `AssetGridView` via `@Binding` — Apple's `Picker(selection:)` pattern.
+// The grid VM itself is concerned only with the assets it's been told to
+// load and the user's selection state.
 public struct AssetGridState {
-    public var albums: [PhotoAlbumService.AlbumInfo] = []
-    public var currentAlbum: PhotoAlbumService.AlbumInfo?
     public var assets: [GridAsset] = []
     public var selectedAssets: [GridAsset] = [] // Ordered for numbered badges
     public var isMultiSelectActive: Bool = false
@@ -26,32 +30,35 @@ public struct AssetGridState {
 
 // MARK: - ViewModel
 @Observable
-public final class AssetGridViewModel: NSObject, PHPhotoLibraryChangeObserver {
-    private let albumService = PhotoAlbumService.shared
+public final class AssetGridViewModel: NSObject {
+    private let photoKit = PhotoKitService.shared
     public let selectionLimit: Int
 
-    // The Lens
     public var state = AssetGridState()
+
+    /// Internal cache of the album most recently passed to `.selectAlbum` /
+    /// `.loadInitialData`. Used only by the PhotoKit change observer's
+    /// refresh path so it knows which album to re-fetch. Not exposed; not
+    /// `@Observable`; views never see it.
+    @ObservationIgnored private var lastLoadedAlbum: PhotoLibraryService.AlbumInfo?
 
     // MARK: - Shared instance cache
     //
-    // The FlickerDx logs proved that `UnifiedCreatorView`'s `@State viewModel`
-    // is being torn down and re-initialized 4–5x per picker session — driven
-    // by upstream identity churn (the AnyView wrapping inside
-    // `SheetNavigationContainer.body` recreates the sheet content tree on
-    // every NavigationCoordinator body re-eval). Each fresh `UnifiedCreatorViewModel`
-    // used to construct a fresh `AssetGridViewModel`, which started with
-    // `state.assets == []` and only refilled after `loadInitialData` won the
-    // async race. *That race* is the visible "grid goes black, all cells flash
-    // at once" on Limited-Access popup dismiss.
+    // The FlickerDx logs proved that the picker's `@State viewModel` is being
+    // torn down and re-initialized 4–5x per session — driven by upstream
+    // identity churn (the AnyView wrapping inside `SheetNavigationContainer.body`
+    // recreates the sheet content tree on every NavigationCoordinator body
+    // re-eval). Each fresh `PickerViewModel` used to construct a fresh
+    // `AssetGridViewModel`, which started with `state.assets == []` and only
+    // refilled after `loadInitialData` won the async race. *That race* is the
+    // visible "grid goes black, all cells flash at once" on Limited-Access
+    // popup dismiss.
     //
     // The fix: cache the grid VM by `selectionLimit`. Identity churn upstream
-    // no longer matters — every fresh `UnifiedCreatorViewModel.init` resolves
-    // to the *same* AssetGridViewModel, with its loaded assets and album state
-    // intact. The user-facing selection set is cleared per session via
-    // `prepareForNewSession()` (called from `MediaPickerModifier`'s sheet
-    // onDismiss), so the cache doesn't leak the previous picker's selection
-    // into the next one.
+    // no longer matters — every fresh `PickerViewModel.init` resolves to the
+    // *same* AssetGridViewModel, with its loaded assets intact. The user-facing
+    // selection set is cleared per session via `prepareForNewSession()`
+    // (called from `MediaPickerModifier`'s sheet onDismiss).
     @MainActor private static var cache: [Int: AssetGridViewModel] = [:]
 
     @MainActor public static func shared(selectionLimit: Int) -> AssetGridViewModel {
@@ -62,8 +69,8 @@ public final class AssetGridViewModel: NSObject, PHPhotoLibraryChangeObserver {
     }
 
     /// Resets the per-session UI state (selection, multi-select flag, error)
-    /// without throwing away the loaded asset list or album choice. Call this
-    /// when a picker sheet is dismissed so the next open starts clean.
+    /// without throwing away the loaded asset list. Call this when a picker
+    /// sheet is dismissed so the next open starts clean.
     @MainActor public func prepareForNewSession() {
         state.selectedAssets = []
         state.isMultiSelectActive = false
@@ -79,84 +86,72 @@ public final class AssetGridViewModel: NSObject, PHPhotoLibraryChangeObserver {
     deinit {
         PHPhotoLibrary.shared().unregisterChangeObserver(self)
     }
-    
-    // The Trigger
+
+    // MARK: - Triggers (the only public mutation surface for the view)
+
     public func trigger(_ action: AssetGridAction) {
         switch action {
         case .loadInitialData:
-            Task { await loadAlbums() }
-            
+            // Used by standalone consumers (e.g., AdvancedPickerExampleViewModel
+            // in the demos) that don't manage `currentAlbum` externally — we
+            // bootstrap by loading the first album internally.
+            //
+            // In the picker flow, `PickerView` owns `currentAlbum` and writes
+            // it via the binding, which triggers `.selectAlbum` from
+            // `AssetGridView`'s `.onChange`. This path is the demo fallback.
+            Task { await loadInitialAlbum() }
+
         case .loadHistory(let items):
             state.assets = [] // Clear instantly to prevent "Ghost Library" flashes
-            state.currentAlbum = nil // Indicates we are in history mode
             Task {
-                let assets = await Task.detached(priority: .userInitiated) {
-                    items.map { GridAsset.mediaItem($0) }
-                }.value
-                await MainActor.run {
-                    self.state.assets = assets
-                }
+                let assets = items.map { GridAsset.mediaItem($0) }
+                state.assets = assets
             }
-            
+
         case .selectAlbum(let album):
-            state.currentAlbum = album
+            lastLoadedAlbum = album
             Task { await loadAssets(for: album) }
-            
+
         case .selectAsset(let asset):
             if selectionLimit > 1 {
                 toggleAssetSelection(asset)
             } else {
                 state.selectedAssets = [asset]
             }
-            
+
         case .toggleMultiSelect:
             break
-            
+
         case .toggleAssetSelection(let asset):
             toggleAssetSelection(asset)
-            
+
         case .clearSelection:
             state.selectedAssets = []
         }
     }
-    
+
     // MARK: - Private Logic
-    
-    private func loadAlbums() async {
+
+    /// Standalone-consumer bootstrap: load the album list then pull assets
+    /// from the first one. Picker flow does not use this path — it manages
+    /// `currentAlbum` externally and triggers `.selectAlbum` directly.
+    private func loadInitialAlbum() async {
         state.isLoading = true
-
-        // Principal Move: Yield the main thread to let the UI (pink dot) render first.
-        await Task.yield()
-
-        // Move heavy PhotoKit work to background
-        let service = self.albumService
-        let albums = await Task.detached(priority: .userInitiated) {
-            service.fetchAlbums()
-        }.value
-
-        state.albums = albums
-
-        if let first = albums.first {
-            state.currentAlbum = first
+        await photoKit.loadAlbumsIfNeeded()
+        if let first = photoKit.albums.first {
+            lastLoadedAlbum = first
             await loadAssets(for: first)
         }
         state.isLoading = false
     }
 
-    private func loadAssets(for album: PhotoAlbumService.AlbumInfo) async {
+    private func loadAssets(for album: PhotoLibraryService.AlbumInfo) async {
         state.isLoading = true
 
-        // Yield again to ensure smooth UI interaction
-        await Task.yield()
+        let phAssets = await photoKit.fetchAssets(in: album)
 
-        // Move heavy PhotoKit work to background
-        let service = self.albumService
-        let phAssets = await Task.detached(priority: .userInitiated) {
-            service.fetchAssets(in: album.collection)
-        }.value
-
-        // Skip assignment if the data hasn't actually changed — prevents
-        // SwiftUI from destroying and recreating every cell (thumbnail flicker).
+        // Skip assignment if the identifier set hasn't actually changed —
+        // prevents SwiftUI from destroying and recreating every cell.
         let newIDs = phAssets.map(\.localIdentifier)
         let oldIDs = state.assets.compactMap { $0.phAsset?.localIdentifier }
         if newIDs != oldIDs {
@@ -164,7 +159,7 @@ public final class AssetGridViewModel: NSObject, PHPhotoLibraryChangeObserver {
         }
         state.isLoading = false
     }
-    
+
     private func toggleAssetSelection(_ asset: GridAsset) {
         if let index = state.selectedAssets.firstIndex(of: asset) {
             state.selectedAssets.remove(at: index)
@@ -174,39 +169,26 @@ public final class AssetGridViewModel: NSObject, PHPhotoLibraryChangeObserver {
             }
         }
     }
-    
+
     public func isSelected(_ asset: GridAsset) -> Bool {
         state.selectedAssets.contains(asset)
     }
-    
+
     public func selectionIndex(for asset: GridAsset) -> Int? {
         if let index = state.selectedAssets.firstIndex(of: asset) {
             return index + 1 // 1-based index for badge
         }
         return nil
     }
-    
-    // MARK: - PHPhotoLibraryChangeObserver
 
-    nonisolated public func photoLibraryDidChange(_ changeInstance: PHChange) {
-        // Lightweight refresh: re-fetch the current album's assets ONLY, and only
-        // write `state.assets` if the identifier set actually changed. We never
-        // touch `state.isLoading`, `state.albums`, or `state.currentAlbum` here —
-        // each of those is its own @Observable notification that would cascade a
-        // re-eval through the grid and produce the flicker on Limited Access
-        // popup dismiss (where the library hasn't actually changed at all).
-        Task { @MainActor in
-            await self.refreshCurrentAssets()
-        }
-    }
-
+    /// Lightweight refresh of the current album's assets. Called from the
+    /// PhotoKit change observer. Uses `lastLoadedAlbum` (the album we most
+    /// recently loaded) — never touches `state.isLoading` or any other
+    /// state that would cascade an `@Observable` re-eval through the grid.
     private func refreshCurrentAssets() async {
-        guard let album = state.currentAlbum else { return }
+        guard let album = lastLoadedAlbum else { return }
 
-        let service = self.albumService
-        let phAssets = await Task.detached(priority: .userInitiated) {
-            service.fetchAssets(in: album.collection)
-        }.value
+        let phAssets = await photoKit.fetchAssets(in: album)
 
         // Defensive: never shrink a populated grid to empty here.
         // Immediately after iOS dismisses the Limited Access popup ("Keep
@@ -223,5 +205,17 @@ public final class AssetGridViewModel: NSObject, PHPhotoLibraryChangeObserver {
         guard newIDs != oldIDs else { return }
 
         state.assets = phAssets.map { .phAsset($0) }
+    }
+}
+
+// MARK: - PHPhotoLibraryChangeObserver
+
+extension AssetGridViewModel: PHPhotoLibraryChangeObserver {
+    /// Sync nonisolated callback per Apple's protocol. Hops to MainActor via
+    /// a Task to do the async refresh work.
+    public func photoLibraryDidChange(_ changeInstance: PHChange) {
+        Task { @MainActor in
+            await self.refreshCurrentAssets()
+        }
     }
 }
