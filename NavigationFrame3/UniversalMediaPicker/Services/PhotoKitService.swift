@@ -31,8 +31,8 @@ public class PhotoKitService: NSObject, PHPhotoLibraryChangeObserver {
     
     public var recentAssets: [PHAsset] = []
     public var authStatus: PHAuthorizationStatus = .notDetermined
-    private var fetchResult: PHFetchResult<PHAsset>?
-    
+
+
     private override init() {
         super.init()
         self.authStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
@@ -51,7 +51,16 @@ public class PhotoKitService: NSObject, PHPhotoLibraryChangeObserver {
     }
     
     /// Requests permission and fetches the last X assets.
-    public func fetchRecentAssets(limit: Int = 30) {
+    ///
+    /// Now async: the heavy `PHAsset.fetchAssets` call runs off MainActor via a
+    /// `nonisolated async` helper (see `performFetch` below). Per SE-0338,
+    /// awaiting a nonisolated async function from a MainActor-isolated context
+    /// hops execution to the cooperative pool for the duration of the call —
+    /// the main thread is freed, the UI stays responsive. When the call
+    /// returns, control resumes on MainActor (because this class is @MainActor),
+    /// so the subsequent `updateAssets(from:)` call mutates observable state
+    /// safely for SwiftUI.
+    public func fetchRecentAssets(limit: Int = 30) async {
         let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         setAuthStatus(status)
 
@@ -61,17 +70,20 @@ public class PhotoKitService: NSObject, PHPhotoLibraryChangeObserver {
 
         switch status {
         case .authorized, .limited:
-            self.performFetch(limit: limit)
+            let assets = await Self.performFetch(limit: limit)
+            updateAssets(assets)
         case .notDetermined:
-            PHPhotoLibrary.requestAuthorization(for: .readWrite) { newStatus in
-                Task { @MainActor in
-                    self.setAuthStatus(newStatus)
-                    if newStatus == .authorized || newStatus == .limited {
-                        self.performFetch(limit: limit)
-                    } else {
-                        self.clearRecentAssetsIfNeeded()
-                    }
+            let granted: PHAuthorizationStatus = await withCheckedContinuation { continuation in
+                PHPhotoLibrary.requestAuthorization(for: .readWrite) { newStatus in
+                    continuation.resume(returning: newStatus)
                 }
+            }
+            self.setAuthStatus(granted)
+            if granted == .authorized || granted == .limited {
+                let assets = await Self.performFetch(limit: limit)
+                updateAssets(assets)
+            } else {
+                self.clearRecentAssetsIfNeeded()
             }
         default:
             print("⚠️ Photo Library access denied")
@@ -103,7 +115,7 @@ public class PhotoKitService: NSObject, PHPhotoLibraryChangeObserver {
         if #available(iOS 15.0, *) {
             PHPhotoLibrary.shared().presentLimitedLibraryPicker(from: topVC) { _ in
                 Task { @MainActor in
-                    self.fetchRecentAssets()
+                    await self.fetchRecentAssets()
                 }
             }
         } else {
@@ -141,34 +153,36 @@ public class PhotoKitService: NSObject, PHPhotoLibraryChangeObserver {
         return root
     }
     
-    private func performFetch(limit: Int) {
+    /// The heavy PhotoKit call. `nonisolated async` so calling it via `await`
+    /// from a MainActor context (per SE-0338) hops to the cooperative pool —
+    /// `PHAsset.fetchAssets` runs on a background thread, main thread stays free.
+    /// Static because it touches no instance state — keeps the actor isolation
+    /// boundary clear (this function can never accidentally mutate self).
+    nonisolated private static func performFetch(limit: Int) async -> [PHAsset] {
         let fetchOptions = PHFetchOptions()
         fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         fetchOptions.fetchLimit = limit
-        
+
         let result = PHAsset.fetchAssets(with: .image, options: fetchOptions)
-        self.fetchResult = result
-        self.updateAssets(from: result)
-    }
-    
-    private func updateAssets(from result: PHFetchResult<PHAsset>) {
+
         var assets: [PHAsset] = []
         result.enumerateObjects { asset, _, _ in
             assets.append(asset)
         }
+        return assets
+    }
 
+    /// Equality-guarded write path. Called on MainActor after the off-actor
+    /// fetch returns. Skips assignment if the data hasn't actually changed so
+    /// we don't cascade @Observable notifications and rebuild every grid cell.
+    private func updateAssets(_ assets: [PHAsset]) {
         // Defensive: never shrink a populated list to empty (parity with
         // AssetGridViewModel.refreshCurrentAssets). PhotoKit's Limited
         // Access selection set is briefly empty during popup dismiss; we
         // don't want the top viewfinder's recentAssets to flash blank
         // either, even though previewAsset masking currently hides it.
-        if assets.isEmpty && !self.recentAssets.isEmpty {
-            return
-        }
+        if assets.isEmpty && !self.recentAssets.isEmpty { return }
 
-        // Skip assignment if the data hasn't actually changed.
-        // Replacing the array with an identical copy forces SwiftUI
-        // to destroy and recreate every grid cell, causing flicker.
         let newIDs = assets.map(\.localIdentifier)
         let oldIDs = self.recentAssets.map(\.localIdentifier)
         guard newIDs != oldIDs else { return }
@@ -212,7 +226,7 @@ public class PhotoKitService: NSObject, PHPhotoLibraryChangeObserver {
             // is unreliable and can miss newly inserted items or return nil.
             // We force a full refresh to guarantee the UI reflects the new state.
             if self.authStatus == .authorized || self.authStatus == .limited {
-                self.fetchRecentAssets()
+                await self.fetchRecentAssets()
             }
         }
     }

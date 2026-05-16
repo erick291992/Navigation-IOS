@@ -53,31 +53,38 @@ public class UnifiedCreatorViewModel {
         // immediately during init to eliminate "first-frame" lag.
         self.setup()
     }
-    
+
     // MARK: - Computed State
-    public var recentAssets: [PHAsset] { 
-        photoKit.recentAssets 
+    public var recentAssets: [PHAsset] {
+        photoKit.recentAssets
     }
-    
+
     public var history: [MediaItem] { historyManager.history }
     public var authStatus: PHAuthorizationStatus { photoKit.authStatus }
-    
+
     // MARK: - Actions
-    
+
     public func setup() {
-        photoKit.fetchRecentAssets()
-        cameraService.setup()
-        
-        // Proactive update: if we have assets but no preview, set it now
-        if previewAsset == nil, let first = recentAssets.first {
-            previewAsset = first
+        // photoKit.fetchRecentAssets is async — spawn a structured child task
+        // so the call site stays synchronous (callers don't need to change).
+        // The Task inherits @MainActor, but the await on the nonisolated
+        // performFetch inside fetchRecentAssets hops to the cooperative pool
+        // for the heavy PhotoKit call. Main thread stays free.
+        Task {
+            await photoKit.fetchRecentAssets()
+            // Move the preview-assignment side effect to AFTER the fetch completes
+            // — otherwise we'd read recentAssets before the new ones loaded.
+            if previewAsset == nil, let first = recentAssets.first {
+                previewAsset = first
+            }
         }
+        cameraService.setup()
     }
     
     public func updateAuth() {
         photoKit.updateAuthStatus()
         if photoKit.authStatus == .authorized || photoKit.authStatus == .limited {
-            photoKit.fetchRecentAssets()
+            Task { await photoKit.fetchRecentAssets() }
         }
     }
     
