@@ -170,6 +170,10 @@ public final class AssetGridViewModel: NSObject {
         let oldIDs = state.assets.compactMap { $0.phAsset?.localIdentifier }
         if newIDs != oldIDs {
             state.assets = phAssets.map { .phAsset($0) }
+            // Tell PhotoKit to start preparing the cells' thumbnails NOW,
+            // before SwiftUI lays them out — first paint reads from the
+            // warm pool instead of paying the disk/decode/resize cost.
+            photoKit.setCachedAssets(phAssets, targetSize: PhotoKitService.gridThumbnailTargetSize)
         }
         state.isLoading = false
     }
@@ -219,6 +223,7 @@ public final class AssetGridViewModel: NSObject {
         guard newIDs != oldIDs else { return }
 
         state.assets = phAssets.map { .phAsset($0) }
+        photoKit.setCachedAssets(phAssets, targetSize: PhotoKitService.gridThumbnailTargetSize)
     }
 }
 

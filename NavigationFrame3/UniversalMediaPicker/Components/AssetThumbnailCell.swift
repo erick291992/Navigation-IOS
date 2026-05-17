@@ -128,8 +128,9 @@ struct AssetThumbnailCell: View {
         guard displayThumbnail == nil else { return }
         guard let asset = source.phAsset else { return }
 
-        let scale: CGFloat = 2.0 // Standard retina scale
-        let targetSize = CGSize(width: 200 * scale, height: 200 * scale)
+        // Use the shared constant so the request size matches what the VM
+        // prewarmed via setCachedAssets — drift here misses the warm pool.
+        let targetSize = PhotoKitService.gridThumbnailTargetSize
 
         PhotoKitService.shared.loadThumbnail(for: asset, size: targetSize) { image in
             self.loadedThumbnail = image

@@ -49,11 +49,41 @@ public enum ThumbnailCache {
 public final class PhotoKitService: NSObject {
     @MainActor public static let shared = PhotoKitService()
 
+    /// Pixel size grid cells render thumbnails at. Single source of truth so
+    /// the prewarm size (in `setCachedAssets`) and the cell's request size
+    /// (in `AssetThumbnailCell`) cannot drift apart — a mismatch silently
+    /// misses PhotoKit's warm pool and reintroduces the cold-start lag.
+    public static let gridThumbnailTargetSize = CGSize(width: 400, height: 400)
+
     public var recentAssets: [PHAsset] = []
     public var authStatus: PHAuthorizationStatus = .notDetermined
     public var albums: [PhotoLibraryService.AlbumInfo] = []
 
     private let library = PhotoLibraryService.shared
+
+    /// PhotoKit's prefetcher. Tell it "I'm about to ask for these N assets
+    /// at this size" via `startCachingImages`; subsequent `requestImage`
+    /// calls at the same key return from the warm pool instead of going to
+    /// disk. Not a parallel image cache — `ThumbnailCache` above is the
+    /// in-process bitmap cache; this one lives inside PhotoKit and is
+    /// managed by Apple (eviction, memory pressure, etc.).
+    @ObservationIgnored private let cachingManager = PHCachingImageManager()
+
+    /// Reused by both `startCachingImages` (prewarm) and `requestImage`
+    /// (per-cell read) so PhotoKit treats the warm and the read as the same
+    /// request shape — drift here silently misses the warm pool.
+    @ObservationIgnored private let thumbnailRequestOptions: PHImageRequestOptions = {
+        let opts = PHImageRequestOptions()
+        opts.isSynchronous = false
+        opts.deliveryMode = .highQualityFormat
+        return opts
+    }()
+
+    /// Tracks what's currently being warmed so the next call can stop the
+    /// old set before starting the new one. `@MainActor`-touched only —
+    /// `setCachedAssets` is `@MainActor` and is the sole writer.
+    @ObservationIgnored private var cachedAssets: [PHAsset] = []
+    @ObservationIgnored private var cachedSize: CGSize = .zero
 
     @MainActor
     private override init() {
@@ -198,6 +228,43 @@ public final class PhotoKitService: NSObject {
     // will decide whether to route through per-cell view-models or keep it as
     // a documented exception. Behavior unchanged from before the rebuild.
 
+    /// Tells PhotoKit to start preparing thumbnails for `assets` at
+    /// `targetSize` and to stop preparing the previously-warmed set.
+    /// Call this immediately after an album's asset list arrives, before
+    /// SwiftUI lays out cells — by the time cells call `loadThumbnail`,
+    /// PhotoKit returns from its warm pool instead of doing a disk read +
+    /// decode + resize (which is the ~400–1000 ms per-cell cold start the
+    /// grid otherwise pays).
+    ///
+    /// No-op when the asset IDs and size match the currently-warmed set,
+    /// so safe to call on every `loadAssets` invocation even when the
+    /// observer fires repeatedly.
+    @MainActor
+    public func setCachedAssets(_ assets: [PHAsset], targetSize: CGSize) {
+        let newIDs = assets.map(\.localIdentifier)
+        let oldIDs = cachedAssets.map(\.localIdentifier)
+        if newIDs == oldIDs && targetSize == cachedSize { return }
+
+        if !cachedAssets.isEmpty {
+            cachingManager.stopCachingImages(
+                for: cachedAssets,
+                targetSize: cachedSize,
+                contentMode: .aspectFill,
+                options: thumbnailRequestOptions
+            )
+        }
+        if !assets.isEmpty {
+            cachingManager.startCachingImages(
+                for: assets,
+                targetSize: targetSize,
+                contentMode: .aspectFill,
+                options: thumbnailRequestOptions
+            )
+        }
+        cachedAssets = assets
+        cachedSize = targetSize
+    }
+
     /// Loads a thumbnail for a given asset.
     /// Consults the process-wide `ThumbnailCache` first — on hit, `completion`
     /// runs synchronously inline so the caller can paint without an async hop.
@@ -210,6 +277,11 @@ public final class PhotoKitService: NSObject {
     /// `.scaledToFill()`. This single-largest-per-asset policy is what
     /// prevents the previewer from showing a blurry image after the grid
     /// cell had cached a small version (the original bug).
+    ///
+    /// Routed through `cachingManager` (not `PHImageManager.default()`)
+    /// so requests at the prewarmed size hit PhotoKit's warm pool. Sizes
+    /// that weren't prewarmed (e.g. the previewer's 1000pt) fall through
+    /// to a normal fetch with no penalty.
     public func loadThumbnail(for asset: PHAsset, size: CGSize, completion: @escaping (UIImage?) -> Void) {
         let key = ThumbnailCache.key(for: asset)
 
@@ -220,15 +292,10 @@ public final class PhotoKitService: NSObject {
             return
         }
 
-        let manager = PHImageManager.default()
-        let options = PHImageRequestOptions()
-        options.isSynchronous = false
-        options.deliveryMode = .highQualityFormat
-
-        manager.requestImage(for: asset,
-                             targetSize: size,
-                             contentMode: .aspectFill,
-                             options: options) { image, _ in
+        cachingManager.requestImage(for: asset,
+                                    targetSize: size,
+                                    contentMode: .aspectFill,
+                                    options: thumbnailRequestOptions) { image, _ in
             if let image = image {
                 // Guard against a late-arriving small fetch clobbering a
                 // larger image that some other caller already cached. Only
