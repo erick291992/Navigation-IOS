@@ -129,6 +129,43 @@ public final class PickerViewModel {
         previewHistoryItem = nil
     }
 
+    // MARK: - Intent: gallery thumbnail (shutter-bar shortcut)
+
+    /// Resolved bitmap for the 48x48 gallery shortcut on the shutter bar.
+    /// Eager-loaded into observable state so the leaf views
+    /// (`ShutterAndModeBarView` → `GalleryShortcutButton`) stay pure: they
+    /// just take a `UIImage?` and render it. No `.task`, no closures
+    /// threading through the chain — wrong shape for an always-visible
+    /// singleton thumbnail (see `AssetThumbnailCell` for the lazy/many case).
+    public var galleryThumbImage: UIImage?
+
+    /// 140pt matches the previous `AssetThumbnailView` default (size 70 ×
+    /// 2x retina). `ThumbnailCache`'s largest-wins policy means a hit from
+    /// the grid's 400x400 prewarm is returned and SwiftUI downscales
+    /// visually — perceptually identical, one fewer disk fetch.
+    private let galleryThumbSize = CGSize(width: 140, height: 140)
+
+    /// Loads (or refreshes) the gallery-shortcut thumbnail from
+    /// `recentAssets.first`. Sync peek first; falls through to an async
+    /// fetch on miss. Clears the image when there's no recent asset.
+    /// PickerView triggers this from its `.task` and `.onChange(of:
+    /// recentAssets)` — same lifecycle hook the previewAsset bootstrap uses.
+    public func loadGalleryThumbIfNeeded() async {
+        guard let asset = recentAssets.first else {
+            galleryThumbImage = nil
+            return
+        }
+        if let cached = photoKit.cachedThumbnail(for: asset) {
+            galleryThumbImage = cached
+            return
+        }
+        galleryThumbImage = await withCheckedContinuation { continuation in
+            photoKit.loadThumbnail(for: asset, size: galleryThumbSize) { image in
+                continuation.resume(returning: image)
+            }
+        }
+    }
+
     // MARK: - Intent: shutter / NEXT / cancel
 
     /// Fires when the shutter is tapped. Mode-aware:

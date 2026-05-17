@@ -10,7 +10,10 @@ struct ShutterAndModeBarView: View {
     let mode: PickerMode
     let accentColor: Color
     let authStatus: PHAuthorizationStatus
-    let firstRecentAsset: PHAsset?
+    /// Pre-resolved bitmap for the gallery shortcut thumb. Parent loads it
+    /// once via `PickerViewModel.loadGalleryThumbIfNeeded()` and passes
+    /// the value down — the leaf stays a pure renderer.
+    let firstAssetImage: UIImage?
     let onShutter: () -> Void
     let onFlipCamera: () -> Void
     let onSelectMode: (PickerMode) -> Void
@@ -29,7 +32,7 @@ struct ShutterAndModeBarView: View {
             HStack {
                 GalleryShortcutButton(
                     authStatus: authStatus,
-                    firstAsset: firstRecentAsset,
+                    image: firstAssetImage,
                     onTap: onGalleryShortcut
                 )
                 .frame(width: 48, height: 48)

@@ -2,15 +2,20 @@ import SwiftUI
 import Photos
 
 /// 48x48 gallery shortcut button at the bottom-left of the shutter row.
-/// Renders one of four states based on `authStatus` + the presence of a
-/// `firstAsset`:
-/// 1. Authorized/limited + asset → thumbnail of the asset, tappable.
-/// 2. Authorized/limited + no asset → loading spinner inside frame.
+/// Pure presentational view — takes a pre-resolved `image: UIImage?` and
+/// the current `authStatus`; renders one of four states:
+/// 1. Authorized/limited + image → thumbnail, tappable.
+/// 2. Authorized/limited + nil image → loading spinner inside frame.
+///    Covers both "recents still loading" and "no photos in the library."
 /// 3. Denied/restricted → lock icon, tappable (opens Settings via callback).
 /// 4. Other (notDetermined) → generic photo icon, disabled.
+///
+/// The image is loaded by `PickerViewModel.loadGalleryThumbIfNeeded()`
+/// and passed down through `ShutterAndModeBarView`. This view never
+/// touches PhotoKit or `ThumbnailCache`.
 struct GalleryShortcutButton: View {
     let authStatus: PHAuthorizationStatus
-    let firstAsset: PHAsset?
+    let image: UIImage?
     let onTap: () -> Void
 
     var body: some View {
@@ -19,15 +24,18 @@ struct GalleryShortcutButton: View {
             onTap()
         }) {
             ZStack {
-                if (authStatus == .authorized || authStatus == .limited), let firstAsset = firstAsset {
-                    AssetThumbnailView(asset: firstAsset) { _ in }
-                        .allowsHitTesting(false)
+                if (authStatus == .authorized || authStatus == .limited), let image = image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
                         .frame(width: 48, height: 48)
                         .cornerRadius(10)
+                        .clipped()
                         .overlay(
                             RoundedRectangle(cornerRadius: 10)
                                 .stroke(Color.white.opacity(0.6), lineWidth: 2)
                         )
+                        .allowsHitTesting(false)
                 } else if authStatus == .denied || authStatus == .restricted {
                     deniedState
                 } else if authStatus == .authorized || authStatus == .limited {
@@ -50,10 +58,11 @@ struct GalleryShortcutButton: View {
             .overlay(Image(systemName: "lock.fill").foregroundColor(.white.opacity(0.4)))
     }
 
-    /// Authorized but `recentAssets` hasn't propagated yet — show a small
-    /// spinner instead of the generic photo icon so the user knows this
-    /// square is loading, not empty. Disappears the moment `firstAsset`
-    /// becomes non-nil (via the @Observable cascade from PhotoKitService).
+    /// Authorized but the parent hasn't resolved the gallery thumbnail yet
+    /// (or the library has no photos). Small spinner so the user knows
+    /// this square is loading, not empty. Flips to the thumbnail the
+    /// moment `image` becomes non-nil via the @Observable cascade from
+    /// `PickerViewModel.galleryThumbImage`.
     private var loadingState: some View {
         RoundedRectangle(cornerRadius: 10)
             .fill(Color.white.opacity(0.1))

@@ -130,40 +130,6 @@ struct MediaPickerNavCard: View {
     }
 }
 
-// MARK: - PhotoKit & Camera Helpers
-
-struct AssetThumbnailView: View {
-    let asset: PHAsset
-    var size: CGFloat = 70
-    var cornerRadius: CGFloat = 6
-    let onTap: (UIImage) -> Void
-    
-    @State private var thumbnail: UIImage?
-    
-    var body: some View {
-        ZStack {
-            if let thumbnail = thumbnail {
-                Image(uiImage: thumbnail)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: size, height: size)
-                    .cornerRadius(cornerRadius)
-                    .clipped()
-                    .onTapGesture { onTap(thumbnail) }
-            } else {
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(Color.white.opacity(0.1))
-                    .frame(width: size, height: size)
-            }
-        }
-        .onAppear {
-            PhotoKitService.shared.loadThumbnail(for: asset, size: CGSize(width: size * 2, height: size * 2)) { image in
-                self.thumbnail = image
-            }
-        }
-    }
-}
-
 struct ScaleButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
