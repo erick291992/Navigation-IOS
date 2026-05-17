@@ -47,7 +47,7 @@ public enum ThumbnailCache {
 /// - `PHPhotoLibraryChangeObserver` conformance lives in a dedicated extension.
 @Observable
 public final class PhotoKitService: NSObject {
-    @MainActor public static let shared = PhotoKitService()
+    public static let shared = PhotoKitService()
 
     /// Pixel size grid cells render thumbnails at. Single source of truth so
     /// the prewarm size (in `setCachedAssets`) and the cell's request size
@@ -91,7 +91,12 @@ public final class PhotoKitService: NSObject {
     @ObservationIgnored private var cachedAssets: [PHAsset] = []
     @ObservationIgnored private var cachedSize: CGSize = .zero
 
-    @MainActor
+    /// Nonisolated — init does only thread-safe PhotoKit calls
+    /// (`authorizationStatus(for:)` and `register(_:)` are both documented
+    /// thread-safe) plus one write to `authStatus` before the instance is
+    /// observable by anyone. Removing the `@MainActor` here lets
+    /// `MediaPickerManager` (and any other consumer) hold a reference to
+    /// `PhotoKitService.shared` from a nonisolated context.
     private override init() {
         super.init()
         self.authStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)

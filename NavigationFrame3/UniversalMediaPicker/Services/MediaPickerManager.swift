@@ -3,7 +3,15 @@ import PhotosUI
 import AVFoundation
 
 /// Handles the low-level processing of media assets into Unified MediaItem objects.
-@MainActor
+///
+/// **Isolation note**: no `@MainActor` anywhere on this class. The instance
+/// methods (`process(...)`) are nonisolated async, so per SE-0338 their
+/// bodies run on the cooperative concurrent executor (background pool).
+/// JPEG encoding, thumbnail generation, and video frame extraction all
+/// stay off the main thread while still being called naturally with
+/// `try await pickerManager.process(...)` from `@MainActor` view models —
+/// the await suspends the caller on main, the work runs on background,
+/// then the caller resumes on main when done.
 public class MediaPickerManager {
     public static let shared = MediaPickerManager()
 

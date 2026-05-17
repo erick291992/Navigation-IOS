@@ -66,8 +66,14 @@ public class CropFlowViewModel {
         }
     }
     
-    public func finishCrop(item: MediaItem, index: Int) {
-        croppedResults[index] = item.thumbnail
+    /// Stores the cropped image in `croppedResults` (UIImage only — JPEG
+    /// encoding is deferred to `finalize` so the per-crop tap stays snappy
+    /// and we don't encode any image we ultimately discard if the user
+    /// goes back). Earlier shape took a fully-built MediaItem and encoded
+    /// JPEG inline in the view's `onDone` closure — that blocked main per
+    /// crop and double-encoded (once on tap, once in finalize).
+    public func finishCrop(image: UIImage, index: Int) {
+        croppedResults[index] = image
         moveToNextUncropped()
     }
     
@@ -100,22 +106,34 @@ public class CropFlowViewModel {
                 return
             }
         }
-        finalize()
+        Task { await finalize() }
     }
-    
-    private func finalize() {
-        let finalItems = items.enumerated().compactMap { index, originalItem in
-            if let croppedImage = croppedResults[index] {
-                return MediaItem(
+
+    private func finalize() async {
+        // Snapshot on main (safe to read @MainActor state) — we'll send the
+        // pairs into a detached Task for the heavy encode work below.
+        let pairs: [(MediaItem, UIImage)] = items.enumerated().compactMap { index, originalItem in
+            guard let croppedImage = croppedResults[index] else { return nil }
+            return (originalItem, croppedImage)
+        }
+
+        // Encode every JPEG off main on a worker thread. For N cropped
+        // images this would otherwise block main for ~N × ~200 ms while the
+        // user waits for the picker to finish. Task.detached runs on the
+        // cooperative pool with no actor inheritance.
+        let finalItems: [MediaItem] = await Task.detached(priority: .userInitiated) {
+            pairs.map { originalItem, croppedImage in
+                MediaItem(
                     data: croppedImage.jpegData(compressionQuality: 0.8) ?? originalItem.data,
                     thumbnail: croppedImage,
                     contentType: originalItem.contentType,
                     originalURL: originalItem.originalURL
                 )
             }
-            return nil
-        }
-        
+        }.value
+
+        // Back on main here (Task body completed, we're awaiting from a
+        // @MainActor method).
         historyManager.addToHistory(finalItems)
         onCompletion(finalItems)
         items = []
