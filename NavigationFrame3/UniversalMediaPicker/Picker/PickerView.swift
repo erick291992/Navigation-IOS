@@ -148,8 +148,13 @@ public struct PickerView: View {
             AssetGridView(
                 configuration: viewModel.configuration,
                 currentAlbum: $viewModel.currentAlbum,   // ← binding (single source of truth)
+                selectedMode: viewModel.selectedMode,
+                history: viewModel.history,
                 onAssetTap: { gridAsset in
                     viewModel.handleGridAssetTap(gridAsset)
+                },
+                onSelectionChange: { assets in
+                    viewModel.updateSelection(assets)
                 }
             )
 
@@ -186,20 +191,20 @@ public struct PickerView: View {
             Text("History")
                 .font(.system(size: 16, weight: .bold))
                 .foregroundColor(.white)
+        } else if viewModel.configuration.style.gridStyle.showAlbumPicker {
+            // Always render the dropdown when the configuration allows it.
+            // AlbumDropdownMenu handles both the loading state (faded + spinner)
+            // and the loaded state (chevron + interactive menu) internally —
+            // no `currentAlbum != nil` gate needed at this layer (eliminates
+            // the "tap-on-non-interactive-Text" window that existed before).
+            AlbumDropdownMenu(
+                albums: viewModel.albums,
+                currentAlbum: $viewModel.currentAlbum
+            )
         } else {
-            if viewModel.configuration.style.gridStyle.showAlbumPicker
-                && viewModel.currentAlbum != nil {
-                // Dumb component — receives `albums` as data + `currentAlbum`
-                // as a binding (Apple's `Picker(selection:)` pattern).
-                AlbumDropdownMenu(
-                    albums: viewModel.albums,
-                    currentAlbum: $viewModel.currentAlbum
-                )
-            } else {
-                Text(viewModel.currentAlbum?.title ?? "Recents")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.white)
-            }
+            Text(viewModel.currentAlbum?.title ?? "Recents")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(.white)
         }
     }
 

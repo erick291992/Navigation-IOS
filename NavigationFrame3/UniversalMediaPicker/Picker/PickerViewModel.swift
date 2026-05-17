@@ -6,21 +6,23 @@ import Observation
 /// `@MainActor @Observable` coordinator for the universal media picker.
 ///
 /// Holds all **picker-specific cross-cutting state** (`selectedMode`,
-/// `previewAsset`, `previewHistoryItem`, `currentAlbum`). Owns the picker's
-/// lifecycle callbacks (`onCompletion`, `onCancel`) and orchestrates the
-/// flow between the camera service, the photo service, the grid VM cache,
-/// the history manager, the picker engine, and the picker manager.
+/// `previewAsset`, `previewHistoryItem`, `currentAlbum`, `selectedAssets`).
+/// Owns the picker's lifecycle callbacks (`onCompletion`, `onCancel`) and
+/// orchestrates the flow between the camera service, the photo service, the
+/// history manager, the picker engine, and the picker manager.
 ///
 /// Subviews (Camera/Library/History viewfinders, the asset grid, the
 /// shutter/mode bar) are self-contained. They receive cross-cutting state
-/// from this coordinator either as `let` parameters (for read-only values)
-/// or `@Binding` (for two-way values like `currentAlbum`); they fire
-/// callbacks UP for events; this coordinator routes the events to its
+/// from this coordinator either as `let` parameters or `@Binding`, and they
+/// fire callbacks UP for events. This coordinator routes the events to its
 /// services.
 ///
-/// The shared-cache `AssetGridViewModel` is held privately as an
-/// implementation detail. `PickerView` never sees it — its presence is the
-/// load-bearing flicker fix from `ASSETGRID_FLICKER_POSTMORTEM.md` §4.
+/// **Selection sync**: `AssetGridView` mirrors its `state.selectedAssets` up
+/// to this VM via the `onSelectionChange` callback. This mirror drives
+/// `selectionCount` (NEXT button count) and `handleNextTapped` /
+/// `handleShutter` (selection processing). No direct reference to
+/// `AssetGridViewModel` is held here — the grid VM lives privately inside
+/// `AssetGridView`'s `@State`.
 @MainActor
 @Observable
 public final class PickerViewModel {
@@ -38,10 +40,6 @@ public final class PickerViewModel {
     private let pickerEngine = MediaPickerEngine.shared
     private let pickerManager = MediaPickerManager.shared
 
-    /// Shared grid VM (process-cached). Private — PickerView reads its own
-    /// computed proxies (`selectionCount`, etc.) and never sees this directly.
-    private let gridViewModel: AssetGridViewModel
-
     // MARK: - Cross-cutting picker state (the truth source for parameters down)
 
     public var selectedMode: PickerMode = .library
@@ -51,6 +49,11 @@ public final class PickerViewModel {
     /// Currently displayed album — single source of truth, passed to
     /// `AssetGridView` and `AlbumDropdownMenu` via `@Binding`.
     public var currentAlbum: PhotoLibraryService.AlbumInfo?
+
+    /// Mirror of `AssetGridView`'s selection, updated via the
+    /// `onSelectionChange` callback. Drives NEXT-button count and
+    /// shutter/NEXT-tapped processing.
+    public var selectedAssets: [GridAsset] = []
 
     // MARK: - Init
 
@@ -62,8 +65,6 @@ public final class PickerViewModel {
         self.configuration = configuration
         self.onCompletion = onCompletion
         self.onCancel = onCancel
-        // Resolve the process-cached grid VM (survives upstream identity churn).
-        self.gridViewModel = AssetGridViewModel.shared(selectionLimit: configuration.selectionLimit)
     }
 
     // MARK: - Computed proxies (read by PickerView via the strict View → VM rule)
@@ -76,9 +77,7 @@ public final class PickerViewModel {
     public var availableZoomFactors: [CGFloat] { cameraService.availableZoomFactors }
     public var zoomFactor: CGFloat { cameraService.zoomFactor }
 
-    /// Count read from the shared grid VM via internal cache reference. View
-    /// reads this proxy; the VM-to-VM access stays an implementation detail.
-    public var selectionCount: Int { gridViewModel.state.selectedAssets.count }
+    public var selectionCount: Int { selectedAssets.count }
 
     // MARK: - Intent: album bootstrap (initial-album setup for the picker flow)
 
@@ -91,6 +90,16 @@ public final class PickerViewModel {
         if currentAlbum == nil, let first = photoKit.albums.first {
             currentAlbum = first
         }
+    }
+
+    // MARK: - Intent: selection sync (callback from AssetGridView)
+
+    /// Called from `AssetGridView.onSelectionChange` whenever the grid VM's
+    /// selection array changes. Keeps our mirror in sync so `selectionCount`
+    /// and the shutter/NEXT handlers see the same selection the user just
+    /// made.
+    public func updateSelection(_ assets: [GridAsset]) {
+        selectedAssets = assets
     }
 
     // MARK: - Intent: preview / mode
@@ -108,17 +117,11 @@ public final class PickerViewModel {
         }
     }
 
-    /// Called from the mode bar.
+    /// Called from the mode bar. The grid VM listens for `selectedMode`
+    /// changes via its own `.onChange` and swaps its data source
+    /// accordingly — we just publish the new mode here.
     public func selectMode(_ mode: PickerMode) {
         selectedMode = mode
-        if mode == .reuse {
-            gridViewModel.trigger(.loadHistory(history))
-        } else if let album = currentAlbum {
-            // Re-load the current album's assets (switching back from .reuse
-            // cleared them). `.selectAlbum` is internal to the grid VM —
-            // PickerViewModel uses it via its private gridViewModel reference.
-            gridViewModel.trigger(.selectAlbum(album))
-        }
     }
 
     public func setPreview(_ asset: PHAsset) {
@@ -133,9 +136,8 @@ public final class PickerViewModel {
     /// - library/reuse mode + selection: submit selection.
     /// - library/reuse mode + no selection: submit the preview item.
     public func handleShutter() {
-        let selected = gridViewModel.state.selectedAssets
-        if !selected.isEmpty {
-            handleGridAssets(selected)
+        if !selectedAssets.isEmpty {
+            handleGridAssets(selectedAssets)
             return
         }
 
@@ -153,10 +155,10 @@ public final class PickerViewModel {
         }
     }
 
-    /// Fires when the NEXT button is tapped. Processes the grid's current
-    /// selection (read from the internal grid VM reference).
+    /// Fires when the NEXT button is tapped. Processes the user's current
+    /// selection (mirrored from `AssetGridView`).
     public func handleNextTapped() {
-        handleGridAssets(gridViewModel.state.selectedAssets)
+        handleGridAssets(selectedAssets)
     }
 
     public func handleCancel() {

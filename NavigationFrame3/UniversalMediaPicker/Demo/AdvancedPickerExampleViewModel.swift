@@ -6,6 +6,7 @@ import Observation
 // Proves developers can build their own entirely custom grid UI
 // utilizing AssetGridViewModel for fetching and MediaPickerEngine for processing.
 
+@MainActor
 @Observable
 class AdvancedPickerExampleViewModel {
     

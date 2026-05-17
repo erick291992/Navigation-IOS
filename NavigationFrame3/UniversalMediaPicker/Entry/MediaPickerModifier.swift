@@ -48,30 +48,21 @@ public struct MediaPickerModifier: ViewModifier {
             .task {
                 // `prewarm()` internally checks authorization status and
                 // early-returns if not granted — first-time users hit the
-                // prompt at their intent moment, not eagerly here.
+                // prompt at their intent moment, not eagerly here. Warms
+                // recents (for the viewfinder + gallery shortcut) and the
+                // album list (for the dropdown). The grid's per-album asset
+                // load is left to AssetGridView's own .task once the picker
+                // mounts — PhotoKit's internal indexes make that load fast
+                // and the skeleton UI bridges the brief reload window.
                 await PhotoKitService.shared.prewarm()
-
-                // Also warm the shared `AssetGridViewModel` cache (used by
-                // the grid in the bottom panel). `PhotoKitService.recentAssets`
-                // and `AssetGridViewModel.state.assets` are SEPARATE data
-                // stores — the former feeds the viewfinder + gallery-shortcut,
-                // the latter feeds the actual LazyVGrid. Warming both means
-                // that when the user taps to open the picker, both surfaces
-                // have data ready and neither needs to do an on-appear load.
-                let gridViewModel = AssetGridViewModel.shared(selectionLimit: configuration.selectionLimit)
-                if gridViewModel.state.assets.isEmpty {
-                    gridViewModel.trigger(.loadInitialData)
-                }
             }
             .sheet(isPresented: $isPresented, onDismiss: {
-                // Per-session reset for the shared `AssetGridViewModel` cache.
-                // The grid VM is process-cached (see `AssetGridViewModel.shared(selectionLimit:)`),
-                // so its loaded asset list survives upstream identity churn
-                // that was causing the popup-dismiss flicker. The flip side is
-                // that selection state would leak into the next picker open;
-                // clear it here when the sheet truly goes away.
-                AssetGridViewModel.shared(selectionLimit: configuration.selectionLimit)
-                    .prepareForNewSession()
+                // Per-session reset: clear the user's selection cache so the
+                // next picker open starts with an empty selection. Goes
+                // through `AssetGridViewModel.clearSession(for:)` rather than
+                // touching the cache type directly — the view never sees the
+                // cache implementation.
+                AssetGridViewModel.clearSession(for: configuration.selectionLimit)
             }) {
                 MediaPickerFlowContainer(
                     configuration: configuration,

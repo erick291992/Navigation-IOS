@@ -136,7 +136,7 @@ public final class PhotoLibraryService {
         case .smartAlbumFavorites:   icon = "heart.fill"
         case .smartAlbumVideos:      icon = "video.fill"
         case .smartAlbumPanoramas:   icon = "mountain.2.fill"
-        case .smartAlbumBursts:      icon = "stack.fill"
+        case .smartAlbumBursts:      icon = "rectangle.stack.fill"
         case .smartAlbumScreenshots: icon = "iphone"
         default:                     icon = "folder.fill"
         }

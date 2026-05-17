@@ -258,8 +258,20 @@ struct LibraryPreviewer: View {
     
     private func loadImage(for asset: PHAsset?) {
         guard let asset = asset else { return }
+
+        // Paint the cached cell-sized thumbnail synchronously so the
+        // previewer flips images on the same frame as the tap. Otherwise
+        // the previewer waits 1-2s for the 1000pt high-res PHImageManager
+        // fetch and visually appears unresponsive. The cached image is
+        // smaller (~400px) but `.scaledToFill` makes the swap perceptually
+        // instant; the high-res replacement below upgrades sharpness when
+        // it arrives.
+        if let cached = ThumbnailCache.shared.object(forKey: ThumbnailCache.key(for: asset)) {
+            self.image = cached
+        }
+
         PhotoKitService.shared.loadThumbnail(for: asset, size: CGSize(width: 1000, height: 1000)) { img in
-            self.image = img
+            if let img { self.image = img }
         }
     }
 }

@@ -1,32 +1,47 @@
 import SwiftUI
 import Photos
 
-/// The asset grid. Self-contained — instantiates its own
-/// `AssetGridViewModel` via the shared-cache resolver (so identity churn
-/// upstream doesn't reset selected-asset state mid-session).
+/// The asset grid. **Self-contained** — instantiates its own
+/// `AssetGridViewModel` via plain `@State`. The user's selection survives
+/// SwiftUI's upstream identity churn because `AssetGridViewModel.init`
+/// restores it from `AssetGridSelectionCache` (a small process-wide cache
+/// for `[GridAsset]` only).
 ///
-/// Takes `currentAlbum` as a `Binding` from the parent (Apple's
-/// `Picker(selection:)` pattern). When the binding's value changes (because
-/// the parent — `PickerView` — owns the truth and updates it from the
-/// album dropdown or its own initial-album bootstrap), the view's
-/// `.onChange` fires and the VM loads the assets for the new album.
+/// Cross-cutting inputs flow DOWN as parameters (Apple's primitive shape):
+/// - `currentAlbum: Binding` — picker owns the truth; we observe via `.onChange`.
+/// - `selectedMode: PickerMode` — picker owns; we observe to swap data source.
+/// - `history: [MediaItem]` — picker provides for reuse-mode loading.
+///
+/// Events flow UP via callbacks:
+/// - `onAssetTap(GridAsset)` — fires when user taps a cell.
+/// - `onSelectionChange([GridAsset])` — fires whenever the VM's selection
+///   array changes, so the parent (PickerView) can mirror count + selection
+///   for its NEXT-button and shutter-handler logic.
 struct AssetGridView: View {
     let configuration: MediaPickerConfiguration
     @Binding var currentAlbum: PhotoLibraryService.AlbumInfo?
+    let selectedMode: PickerMode
+    let history: [MediaItem]
     let onAssetTap: (GridAsset) -> Void
+    let onSelectionChange: ([GridAsset]) -> Void
 
     @State private var viewModel: AssetGridViewModel
 
     init(
         configuration: MediaPickerConfiguration,
         currentAlbum: Binding<PhotoLibraryService.AlbumInfo?>,
-        onAssetTap: @escaping (GridAsset) -> Void
+        selectedMode: PickerMode,
+        history: [MediaItem],
+        onAssetTap: @escaping (GridAsset) -> Void,
+        onSelectionChange: @escaping ([GridAsset]) -> Void
     ) {
         self.configuration = configuration
         self._currentAlbum = currentAlbum
+        self.selectedMode = selectedMode
+        self.history = history
         self.onAssetTap = onAssetTap
-        // Resolve the shared cache instance — survives upstream identity churn.
-        self._viewModel = State(initialValue: AssetGridViewModel.shared(selectionLimit: configuration.selectionLimit))
+        self.onSelectionChange = onSelectionChange
+        self._viewModel = State(initialValue: AssetGridViewModel(selectionLimit: configuration.selectionLimit))
     }
 
     private var gridStyle: MediaPickerStyle.GridStyle {
@@ -57,7 +72,17 @@ struct AssetGridView: View {
                         )
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            // TODO: restore haptic feedback once Core Haptics
+                            // pre-warm is solved without re-introducing the
+                            // first-tap stall. Previous approach (prewarm in
+                            // `MediaPickerModifier.onAppear` + shared static
+                            // `UIImpactFeedbackGenerator`) cured the stall on
+                            // simulator but reintroduced it intermittently —
+                            // needs proper device testing + a measured warm
+                            // window before re-adding. Diagnosis notes are in
+                            // chat history; root cause is Core Haptics engine
+                            // cold-start blocking the main thread for
+                            // ~400-1000 ms on first `.impactOccurred()`.
                             viewModel.trigger(.selectAsset(asset))
                             onAssetTap(asset)
                         }
@@ -65,14 +90,40 @@ struct AssetGridView: View {
                 }
             }
         }
+        .task {
+            // Initial selection from cache is already loaded by VM.init —
+            // emit it once so the parent (PickerView) can sync its mirror
+            // and the NEXT button reflects any restored selection.
+            onSelectionChange(viewModel.state.selectedAssets)
+        }
         .onChange(of: currentAlbum) { _, newAlbum in
-            // When the parent (PickerView) sets currentAlbum (either from the
-            // album dropdown or from its initial-album bootstrap), load the
-            // assets for it. The VM caches the album internally for the
-            // PhotoKit change observer's refresh path.
+            // Parent updated currentAlbum (dropdown selection or initial bootstrap).
+            // Skip if we're in reuse mode — history is the data source there.
+            guard selectedMode != .reuse else { return }
             if let newAlbum {
                 viewModel.trigger(.selectAlbum(newAlbum))
             }
+        }
+        .onChange(of: selectedMode) { _, newMode in
+            // Mode switch — swap the data source. In reuse mode the grid
+            // shows history items; otherwise it shows the current album's
+            // assets.
+            switch newMode {
+            case .reuse:
+                viewModel.trigger(.loadHistory(history))
+            case .library, .photo:
+                if let album = currentAlbum {
+                    viewModel.trigger(.selectAlbum(album))
+                }
+            }
+        }
+        .onChange(of: viewModel.state.selectedAssets) { _, newSelection in
+            // Mirror selection up to the parent so PickerView's NEXT button
+            // count + handleShutter/handleNextTapped see the same selection
+            // the user just made. The VM has already written through to
+            // AssetGridSelectionCache; this callback just keeps the parent's
+            // observable mirror in sync.
+            onSelectionChange(newSelection)
         }
     }
 

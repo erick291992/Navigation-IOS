@@ -8,6 +8,14 @@ import Observation
 /// in-place edit in `Photos.app` (crop, markup, filter — same identifier,
 /// new pixels) produces a cache miss and a fresh fetch. Without this, the
 /// grid would happily serve pre-edit pixels until the entry was evicted.
+///
+/// One entry per asset, regardless of requested size. `loadThumbnail`
+/// always stores the LARGEST image ever fetched for that asset and
+/// downscales for smaller consumers via SwiftUI's `.scaledToFill()`. The
+/// alternative — keying by size too — meant a small grid-cell request
+/// arriving after a larger previewer request would overwrite the high-res
+/// image with a low-res one, causing visible blur the next time the
+/// previewer reopened. See `loadThumbnail` for the comparison logic.
 public enum ThumbnailCache {
     public static let shared: NSCache<NSString, UIImage> = {
         let c = NSCache<NSString, UIImage>()
@@ -187,9 +195,21 @@ public final class PhotoKitService: NSObject {
     /// Loads a thumbnail for a given asset.
     /// Consults the process-wide `ThumbnailCache` first — on hit, `completion`
     /// runs synchronously inline so the caller can paint without an async hop.
+    ///
+    /// Cache hit only counts when the cached image's pixel dimensions are
+    /// at least as large as `size`. A smaller-than-requested cached image
+    /// triggers a refetch at the requested size, and the new (larger)
+    /// image replaces it. Downstream callers asking for SMALLER sizes
+    /// later read this larger cached image and downscale visually via
+    /// `.scaledToFill()`. This single-largest-per-asset policy is what
+    /// prevents the previewer from showing a blurry image after the grid
+    /// cell had cached a small version (the original bug).
     public func loadThumbnail(for asset: PHAsset, size: CGSize, completion: @escaping (UIImage?) -> Void) {
         let key = ThumbnailCache.key(for: asset)
-        if let cached = ThumbnailCache.shared.object(forKey: key) {
+
+        if let cached = ThumbnailCache.shared.object(forKey: key),
+           cached.pixelSize.width >= size.width,
+           cached.pixelSize.height >= size.height {
             completion(cached)
             return
         }
@@ -204,7 +224,14 @@ public final class PhotoKitService: NSObject {
                              contentMode: .aspectFill,
                              options: options) { image, _ in
             if let image = image {
-                ThumbnailCache.shared.setObject(image, forKey: key)
+                // Guard against a late-arriving small fetch clobbering a
+                // larger image that some other caller already cached. Only
+                // replace when the incoming image is at least as large
+                // (by area) as what's there.
+                let existing = ThumbnailCache.shared.object(forKey: key)
+                if existing == nil || image.pixelSize.area >= existing!.pixelSize.area {
+                    ThumbnailCache.shared.setObject(image, forKey: key)
+                }
             }
             completion(image)
         }
@@ -276,6 +303,22 @@ extension PhotoKitService: PHPhotoLibraryChangeObserver {
             }
         }
     }
+}
+
+// MARK: - UIImage pixel-size helper (used by loadThumbnail size comparisons)
+
+private extension UIImage {
+    /// True pixel dimensions = points * scale. `UIImage.size` alone is in
+    /// points, which lies on Retina devices (a 400×400 thumbnail @2x has
+    /// `size == 200×200`); comparing that against a point-based requested
+    /// size would always look "too small" and trigger needless refetches.
+    var pixelSize: CGSize {
+        CGSize(width: size.width * scale, height: size.height * scale)
+    }
+}
+
+private extension CGSize {
+    var area: CGFloat { width * height }
 }
 
 // MARK: - PHPickerViewControllerDelegate adapter

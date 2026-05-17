@@ -29,6 +29,23 @@ public struct AssetGridState {
 }
 
 // MARK: - ViewModel
+//
+// `@MainActor` at the class level — matches the rebuild's other view models
+// (PickerViewModel, CameraViewfinderViewModel, LibraryViewfinderViewModel).
+// Every method (including async ones) is MainActor-isolated, so observable
+// state writes happen on MainActor by construction. Async methods that await
+// non-isolated service functions (PhotoKitService is not @MainActor) still
+// hop off-main per SE-0338; control returns to MainActor on resume.
+//
+// **Selection survives SwiftUI churn via `AssetGridSelectionCache`** — a
+// small process-wide cache that holds ONLY the user's selection
+// (`[GridAsset]`). On `init`, the VM restores selection from the cache; on
+// every selection mutation, the VM writes through to the cache. The VM
+// instance itself is NOT cached — `AssetGridView` creates a fresh one each
+// time via plain `@State`. The grid's loaded `state.assets` is also not
+// cached (PhotoKit re-fetches are fast; skeleton UI bridges the brief
+// reload). See `AssetGridSelectionCache.swift` for the full rationale.
+@MainActor
 @Observable
 public final class AssetGridViewModel: NSObject {
     private let photoKit = PhotoKitService.shared
@@ -42,49 +59,37 @@ public final class AssetGridViewModel: NSObject {
     /// `@Observable`; views never see it.
     @ObservationIgnored private var lastLoadedAlbum: PhotoLibraryService.AlbumInfo?
 
-    // MARK: - Shared instance cache
-    //
-    // The FlickerDx logs proved that the picker's `@State viewModel` is being
-    // torn down and re-initialized 4–5x per session — driven by upstream
-    // identity churn (the AnyView wrapping inside `SheetNavigationContainer.body`
-    // recreates the sheet content tree on every NavigationCoordinator body
-    // re-eval). Each fresh `PickerViewModel` used to construct a fresh
-    // `AssetGridViewModel`, which started with `state.assets == []` and only
-    // refilled after `loadInitialData` won the async race. *That race* is the
-    // visible "grid goes black, all cells flash at once" on Limited-Access
-    // popup dismiss.
-    //
-    // The fix: cache the grid VM by `selectionLimit`. Identity churn upstream
-    // no longer matters — every fresh `PickerViewModel.init` resolves to the
-    // *same* AssetGridViewModel, with its loaded assets intact. The user-facing
-    // selection set is cleared per session via `prepareForNewSession()`
-    // (called from `MediaPickerModifier`'s sheet onDismiss).
-    @MainActor private static var cache: [Int: AssetGridViewModel] = [:]
-
-    @MainActor public static func shared(selectionLimit: Int) -> AssetGridViewModel {
-        if let cached = cache[selectionLimit] { return cached }
-        let fresh = AssetGridViewModel(selectionLimit: selectionLimit)
-        cache[selectionLimit] = fresh
-        return fresh
-    }
-
-    /// Resets the per-session UI state (selection, multi-select flag, error)
-    /// without throwing away the loaded asset list. Call this when a picker
-    /// sheet is dismissed so the next open starts clean.
-    @MainActor public func prepareForNewSession() {
-        state.selectedAssets = []
-        state.isMultiSelectActive = false
-        state.errorMessage = nil
-    }
-
     public init(selectionLimit: Int = 1) {
         self.selectionLimit = selectionLimit
         super.init()
+        // Restore selection from the cache so user-tapped photos survive
+        // SwiftUI's upstream identity churn (see AssetGridSelectionCache).
+        state.selectedAssets = AssetGridSelectionCache.selection(for: selectionLimit)
         PHPhotoLibrary.shared().register(self)
     }
 
     deinit {
         PHPhotoLibrary.shared().unregisterChangeObserver(self)
+    }
+
+    // MARK: - Session lifecycle
+
+    /// Resets the per-session UI state (selection, multi-select flag, error)
+    /// without throwing away the loaded asset list. Call this when a picker
+    /// sheet is dismissed so the next open starts clean.
+    public func prepareForNewSession() {
+        writeSelection([])
+        state.isMultiSelectActive = false
+        state.errorMessage = nil
+    }
+
+    /// Static convenience for callers that don't have a VM instance handy
+    /// (e.g., `MediaPickerModifier`'s `.sheet(onDismiss:)`). Clears the
+    /// selection cache directly without needing to construct a VM. The
+    /// cache type itself is internal — only the VM (or its statics) touch
+    /// it, satisfying the strict "view never touches the cache" rule.
+    public static func clearSession(for selectionLimit: Int) {
+        AssetGridSelectionCache.clear(for: selectionLimit)
     }
 
     // MARK: - Triggers (the only public mutation surface for the view)
@@ -116,7 +121,7 @@ public final class AssetGridViewModel: NSObject {
             if selectionLimit > 1 {
                 toggleAssetSelection(asset)
             } else {
-                state.selectedAssets = [asset]
+                writeSelection([asset])
             }
 
         case .toggleMultiSelect:
@@ -126,11 +131,20 @@ public final class AssetGridViewModel: NSObject {
             toggleAssetSelection(asset)
 
         case .clearSelection:
-            state.selectedAssets = []
+            writeSelection([])
         }
     }
 
     // MARK: - Private Logic
+
+    /// Single chokepoint for selection mutations — writes both to observable
+    /// state (for SwiftUI re-render) and to the persistence cache (for
+    /// survival across SwiftUI churn). Every path that mutates
+    /// `selectedAssets` must go through here.
+    private func writeSelection(_ assets: [GridAsset]) {
+        state.selectedAssets = assets
+        AssetGridSelectionCache.update(assets, for: selectionLimit)
+    }
 
     /// Standalone-consumer bootstrap: load the album list then pull assets
     /// from the first one. Picker flow does not use this path — it manages
@@ -161,13 +175,13 @@ public final class AssetGridViewModel: NSObject {
     }
 
     private func toggleAssetSelection(_ asset: GridAsset) {
-        if let index = state.selectedAssets.firstIndex(of: asset) {
-            state.selectedAssets.remove(at: index)
-        } else {
-            if state.selectedAssets.count < selectionLimit {
-                state.selectedAssets.append(asset)
-            }
+        var newSelection = state.selectedAssets
+        if let index = newSelection.firstIndex(of: asset) {
+            newSelection.remove(at: index)
+        } else if newSelection.count < selectionLimit {
+            newSelection.append(asset)
         }
+        writeSelection(newSelection)
     }
 
     public func isSelected(_ asset: GridAsset) -> Bool {
@@ -211,9 +225,11 @@ public final class AssetGridViewModel: NSObject {
 // MARK: - PHPhotoLibraryChangeObserver
 
 extension AssetGridViewModel: PHPhotoLibraryChangeObserver {
-    /// Sync nonisolated callback per Apple's protocol. Hops to MainActor via
-    /// a Task to do the async refresh work.
-    public func photoLibraryDidChange(_ changeInstance: PHChange) {
+    /// Sync nonisolated callback per Apple's protocol. Must be marked
+    /// `nonisolated` to satisfy the protocol conformance since the class
+    /// itself is `@MainActor`. Hops to MainActor via a Task to do the
+    /// async refresh work.
+    public nonisolated func photoLibraryDidChange(_ changeInstance: PHChange) {
         Task { @MainActor in
             await self.refreshCurrentAssets()
         }
