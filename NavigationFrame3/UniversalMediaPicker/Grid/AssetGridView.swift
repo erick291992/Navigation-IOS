@@ -68,7 +68,9 @@ struct AssetGridView: View {
                             source: asset.phAsset != nil ? .phAsset(asset.phAsset!) : .mediaItem(asset.mediaItem!),
                             gridStyle: gridStyle,
                             selectionIndex: viewModel.selectionIndex(for: asset),
-                            accentColor: configuration.style.accentColor
+                            accentColor: configuration.style.accentColor,
+                            initialImage: viewModel.thumbnail(for: asset),
+                            loadAsync: { await viewModel.requestThumbnail(for: asset) }
                         )
                         .contentShape(Rectangle())
                         .onTapGesture {

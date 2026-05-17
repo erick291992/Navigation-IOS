@@ -1,44 +1,54 @@
 import SwiftUI
 import Photos
 
+/// Pure presentational cell — knows nothing about PhotoKit, ThumbnailCache,
+/// or how thumbnails are fetched. The parent (AssetGridView) wires it to the
+/// grid VM, which routes through PhotoKitService.
+///
+/// Two image inputs:
+/// - `initialImage`: painted immediately on body evaluation. Parent computes
+///   synchronously (cache peek or MediaItem.thumbnail) so cell paints on
+///   first frame without an async hop. nil → placeholder.
+/// - `loadAsync`: optional async loader invoked from `.task(id:)`. Auto-cancels
+///   on cell recycle (LazyVGrid reuses the View with a new asset; SwiftUI
+///   cancels the old task and starts a new one keyed on `source.id`).
+///
+/// The cell keeps `@State asyncLoaded` for the resolved image so that when
+/// the load finishes only THIS cell re-renders — moving the image into the
+/// VM's observable state would cascade a re-render across every cell on each
+/// load completion. Per-cell granularity preserved.
 struct AssetThumbnailCell: View {
     let source: AssetThumbnailSource
     let gridStyle: MediaPickerStyle.GridStyle
     let selectionIndex: Int?
     let accentColor: Color
-    
+    let initialImage: UIImage?
+    let loadAsync: (() async -> UIImage?)?
+
     enum AssetThumbnailSource {
         case phAsset(PHAsset)
         case mediaItem(MediaItem)
-        
+
+        var id: String {
+            switch self {
+            case .phAsset(let asset): return asset.localIdentifier
+            case .mediaItem(let item): return item.id.uuidString
+            }
+        }
+
         var phAsset: PHAsset? {
             if case .phAsset(let asset) = self { return asset }
             return nil
         }
-        
+
         var mediaItem: MediaItem? {
             if case .mediaItem(let item) = self { return item }
             return nil
         }
     }
-    
-    @State private var loadedThumbnail: UIImage?
 
-    // Resolution order: async-loaded value → process-wide cache → mediaItem's
-    // bundled thumbnail. Reading from the cache *during body evaluation* (not
-    // .onAppear) is what eliminates the one-frame `nil → load → image` flash
-    // when LazyVGrid recycles cells — on recycle the @State resets to nil, but
-    // the cache still has the image, so the cell paints with the right pixels
-    // on its very first frame.
-    private var displayThumbnail: UIImage? {
-        if let loadedThumbnail { return loadedThumbnail }
-        switch source {
-        case .phAsset(let asset):
-            return ThumbnailCache.shared.object(forKey: ThumbnailCache.key(for: asset))
-        case .mediaItem(let item):
-            return item.thumbnail
-        }
-    }
+    @State private var asyncLoaded: UIImage?
+    private var displayImage: UIImage? { asyncLoaded ?? initialImage }
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -48,7 +58,7 @@ struct AssetThumbnailCell: View {
                 .aspectRatio(1, contentMode: .fit)
                 .overlay(
                     Group {
-                        if let image = displayThumbnail {
+                        if let image = displayImage {
                             Image(uiImage: image)
                                 .resizable()
                                 .scaledToFill()
@@ -81,9 +91,16 @@ struct AssetThumbnailCell: View {
             }
         }
         .contentShape(Rectangle())
-        .onAppear { loadThumbnailIfNeeded() }
+        .task(id: source.id) {
+            // Kick off the parent's async load only if we don't already have
+            // an image to show and a loader was provided. `.task(id:)`
+            // auto-cancels on cell recycle / disappear, so we don't waste
+            // work loading thumbnails for cells that scrolled offscreen.
+            guard displayImage == nil, let loadAsync else { return }
+            asyncLoaded = await loadAsync()
+        }
     }
-    
+
     @ViewBuilder
     private func durationOverlay(duration: TimeInterval) -> some View {
         VStack {
@@ -100,7 +117,7 @@ struct AssetThumbnailCell: View {
             }
         }
     }
-    
+
     @ViewBuilder
     private func selectionIndicator(for index: Int) -> some View {
         switch gridStyle.selectionIndicator {
@@ -121,22 +138,7 @@ struct AssetThumbnailCell: View {
             EmptyView()
         }
     }
-    
-    private func loadThumbnailIfNeeded() {
-        // The body already reads from the cache + mediaItem fallback synchronously,
-        // so only kick off an async fetch when we genuinely have no image to show.
-        guard displayThumbnail == nil else { return }
-        guard let asset = source.phAsset else { return }
 
-        // Use the shared constant so the request size matches what the VM
-        // prewarmed via setCachedAssets — drift here misses the warm pool.
-        let targetSize = PhotoKitService.gridThumbnailTargetSize
-
-        PhotoKitService.shared.loadThumbnail(for: asset, size: targetSize) { image in
-            self.loadedThumbnail = image
-        }
-    }
-    
     private func formatDuration(_ duration: TimeInterval) -> String {
         let mins = Int(duration) / 60
         let secs = Int(duration) % 60

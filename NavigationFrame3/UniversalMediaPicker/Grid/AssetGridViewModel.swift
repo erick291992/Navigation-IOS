@@ -199,6 +199,38 @@ public final class AssetGridViewModel: NSObject {
         return nil
     }
 
+    // MARK: - Thumbnails (called by AssetGridView per cell)
+
+    /// Synchronous thumbnail lookup. The grid passes the result to each cell
+    /// as `initialImage` so the cell paints on its first frame without an
+    /// async hop. Returns nil on miss; the cell's `.task(id:)` then calls
+    /// `requestThumbnail` to populate.
+    ///
+    /// PHAsset path: peeks the process-wide `ThumbnailCache` via the service.
+    /// MediaItem path: returns the bundled bitmap directly (no async needed).
+    public func thumbnail(for asset: GridAsset) -> UIImage? {
+        switch asset {
+        case .phAsset(let ph):
+            return photoKit.cachedThumbnail(for: ph)
+        case .mediaItem(let item):
+            return item.thumbnail
+        }
+    }
+
+    /// Async thumbnail fetch for a single grid asset. The grid passes this
+    /// to each cell as `loadAsync`; the cell awaits it in `.task(id:)`,
+    /// which auto-cancels if the cell disappears before the load resolves.
+    /// MediaItem cells return nil immediately (they already carry their
+    /// bitmap; the cell uses `initialImage` instead).
+    public func requestThumbnail(for asset: GridAsset) async -> UIImage? {
+        guard case .phAsset(let ph) = asset else { return nil }
+        return await withCheckedContinuation { continuation in
+            photoKit.loadThumbnail(for: ph, size: PhotoKitService.gridThumbnailTargetSize) { image in
+                continuation.resume(returning: image)
+            }
+        }
+    }
+
     /// Lightweight refresh of the current album's assets. Called from the
     /// PhotoKit change observer. Uses `lastLoadedAlbum` (the album we most
     /// recently loaded) — never touches `state.isLoading` or any other

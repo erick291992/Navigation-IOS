@@ -223,10 +223,22 @@ public final class PhotoKitService: NSObject {
 
     // MARK: - Thumbnail loading
     //
-    // Phase-1 carryover: thumbnail loading remains on the facade for now
-    // because many existing views (cells, previewers) call it directly. Phase 2
-    // will decide whether to route through per-cell view-models or keep it as
-    // a documented exception. Behavior unchanged from before the rebuild.
+    // Lane discipline (post-cell-refactor): only AssetGridViewModel calls
+    // these. Views (cells, previewers) take their image data as parameters
+    // from their parent's VM. The previewer + gallery-shortcut callers in
+    // MediaPickerViewComponents.swift are still on the old direct-call shape
+    // and will move next — see the post-prewarm cleanup backlog.
+
+    /// Synchronous peek into the process-wide `ThumbnailCache`. The grid VM
+    /// passes the result to each cell as `initialImage` so the cell paints
+    /// on its first frame without an async hop (and survives recycles where
+    /// `@State` resets but the cache still holds the bitmap).
+    ///
+    /// Returns nil on miss; callers should kick off an async `loadThumbnail`
+    /// to populate (which the cell's `.task(id:)` does automatically).
+    public func cachedThumbnail(for asset: PHAsset) -> UIImage? {
+        ThumbnailCache.shared.object(forKey: ThumbnailCache.key(for: asset))
+    }
 
     /// Tells PhotoKit to start preparing thumbnails for `assets` at
     /// `targetSize` and to stop preparing the previously-warmed set.
