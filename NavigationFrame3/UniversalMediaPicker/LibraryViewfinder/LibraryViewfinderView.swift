@@ -1,5 +1,6 @@
 import SwiftUI
 import Photos
+import PhotosUI
 
 /// Self-contained library viewfinder. Instantiates its own
 /// `LibraryViewfinderViewModel` internally. Receives `previewAsset` as a
@@ -11,16 +12,26 @@ import Photos
 /// 2. Authorized, fetch in flight → `ProgressView`.
 /// 3. Authorized, fetch done, no assets → `EmptyStateView` with "Open Library".
 /// 4. Authorized, has assets → `LibraryPreviewer` showing the chosen asset.
+///
+/// The previewer's tap target is `PhotosPicker` when authorized (SwiftUI
+/// native — no UIKit bridge, no delegate, no topVC traversal) and a
+/// `Button` when limited (the limited-access library picker has no SwiftUI
+/// equivalent and must use the UIKit bridge in `PhotoKitService`).
 struct LibraryViewfinderView: View {
     @State private var viewModel = LibraryViewfinderViewModel()
 
     let previewAsset: PHAsset?
     let accentColor: Color
-    /// Fires when the user wants to present the system picker (tap on the
-    /// preview or on the empty-state "Open Library" button in
-    /// non-`.limited` mode). Parent routes to `PhotoKitService.openSystemPicker`
-    /// with its own completion handler.
-    let onOpenSystemPicker: () -> Void
+    let selectionLimit: Int
+    @Binding var pickerSelection: [PhotosPickerItem]
+    /// Limited-access path — opens `PHPhotoLibrary.presentLimitedLibraryPicker`
+    /// via the parent's VM. No SwiftUI equivalent exists for this UI.
+    let onLimitedTap: () -> Void
+    /// Empty-state fallback when authorized — `EmptyStateView`'s internal
+    /// Button can't cleanly host a `PhotosPicker` without refactoring the
+    /// component, so we still route through the parent's imperative
+    /// `openSystemPicker()` for that specific edge case.
+    let onAuthorizedEmptyStateFallback: () -> Void
 
     var body: some View {
         Group {
@@ -36,30 +47,43 @@ struct LibraryViewfinderView: View {
                     actionTitle: "Open Library",
                     onAction: {
                         if viewModel.authStatus == .limited {
-                            viewModel.openLimitedPicker()
+                            onLimitedTap()
                         } else {
-                            onOpenSystemPicker()
+                            onAuthorizedEmptyStateFallback()
                         }
                     }
                 )
             } else {
                 let displayedAsset = viewModel.displayAsset(preferring: previewAsset)
-                LibraryPreviewer(
+                let previewer = LibraryPreviewer(
                     assetID: displayedAsset?.localIdentifier,
                     initialImage: viewModel.thumbnail(for: displayedAsset),
                     loadAsync: displayedAsset.map { asset in
                         { await viewModel.requestThumbnail(for: asset) }
                     }
                 )
-                .onTapGesture {
-                    // TODO: restore haptic feedback once Core Haptics
-                    // pre-warm is solved without re-introducing the first-tap
-                    // stall. Same root cause as the cell + gallery-shortcut
-                    // TODOs — first `.impactOccurred()` of a session blocks
-                    // main ~400-1000ms cold-starting Core Haptics, making
-                    // the previewer tap visually unresponsive until the
-                    // system picker presents.
-                    onOpenSystemPicker()
+
+                if viewModel.authStatus == .limited {
+                    previewer.onTapGesture {
+                        // TODO: restore haptic feedback once Core Haptics
+                        // pre-warm is solved without re-introducing the
+                        // first-tap stall (see AssetGridView cell TODO).
+                        onLimitedTap()
+                    }
+                } else if viewModel.authStatus == .authorized {
+                    PhotosPicker(
+                        selection: $pickerSelection,
+                        maxSelectionCount: selectionLimit,
+                        matching: .images
+                    ) {
+                        previewer
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    // notDetermined etc — render previewer without a tap
+                    // action. (Onboarding flow handles permission request
+                    // elsewhere.)
+                    previewer
                 }
             }
         }

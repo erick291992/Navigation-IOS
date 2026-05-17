@@ -33,7 +33,9 @@ struct EmptyStateView: View {
 
                 if let actionTitle = actionTitle, let onAction = onAction {
                     Button(actionTitle) {
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        // TODO: restore haptic feedback once Core Haptics
+                        // pre-warm is solved without re-introducing the
+                        // first-tap stall (see AssetGridView cell TODO).
                         onAction()
                     }
                     .font(.system(size: 14, weight: .bold))

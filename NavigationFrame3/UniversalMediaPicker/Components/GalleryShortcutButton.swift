@@ -1,58 +1,79 @@
 import SwiftUI
 import Photos
+import PhotosUI
 
 /// 48x48 gallery shortcut button at the bottom-left of the shutter row.
 /// Pure presentational view — takes a pre-resolved `image: UIImage?` and
-/// the current `authStatus`; renders one of four states:
-/// 1. Authorized/limited + image → thumbnail, tappable.
-/// 2. Authorized/limited + nil image → loading spinner inside frame.
-///    Covers both "recents still loading" and "no photos in the library."
-/// 3. Denied/restricted → lock icon, tappable (opens Settings via callback).
-/// 4. Other (notDetermined) → generic photo icon, disabled.
+/// the current `authStatus`; the tap target shape depends on auth state:
 ///
-/// The image is loaded by `PickerViewModel.loadGalleryThumbIfNeeded()`
-/// and passed down through `ShutterAndModeBarView`. This view never
-/// touches PhotoKit or `ThumbnailCache`.
+/// - `.authorized` → SwiftUI `PhotosPicker` (native; no UIKit bridge,
+///   no delegate, no topVC traversal — Apple handles presentation).
+/// - `.limited` / `.denied` / `.restricted` → `Button` calling
+///   `onLimitedOrDeniedTap` so the parent VM can route to either the
+///   limited-access library picker (no SwiftUI equivalent) or the
+///   Settings deeplink.
+/// - `.notDetermined` → disabled placeholder; onboarding handles auth.
+///
+/// The image itself is loaded by `PickerViewModel.loadGalleryThumbIfNeeded()`
+/// and passed down through `ShutterAndModeBarView`. This view never touches
+/// PhotoKit or `ThumbnailCache`.
 struct GalleryShortcutButton: View {
     let authStatus: PHAuthorizationStatus
     let image: UIImage?
-    let onTap: () -> Void
+    let selectionLimit: Int
+    @Binding var pickerSelection: [PhotosPickerItem]
+    /// Fires for limited, denied, restricted. Authorized uses PhotosPicker.
+    let onLimitedOrDeniedTap: () -> Void
 
     var body: some View {
-        Button(action: {
-            // TODO: restore haptic feedback once Core Haptics pre-warm is
-            // solved without re-introducing the first-tap stall. Same root
-            // cause as AssetGridView's cell-tap TODO — first
-            // `UIImpactFeedbackGenerator(...).impactOccurred()` of a session
-            // cold-starts the Core Haptics engine and blocks main ~400-1000ms,
-            // which makes this 48x48 button visually stuck "pressed" until
-            // the system picker finally presents. Removed to match the cell
-            // decision; restore together when a measured prewarm exists.
-            onTap()
-        }) {
-            ZStack {
-                if (authStatus == .authorized || authStatus == .limited), let image = image {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 48, height: 48)
-                        .cornerRadius(10)
-                        .clipped()
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.white.opacity(0.6), lineWidth: 2)
-                        )
-                        .allowsHitTesting(false)
-                } else if authStatus == .denied || authStatus == .restricted {
-                    deniedState
-                } else if authStatus == .authorized || authStatus == .limited {
-                    loadingState
-                } else {
-                    placeholderState
-                }
+        if authStatus == .authorized {
+            PhotosPicker(
+                selection: $pickerSelection,
+                maxSelectionCount: selectionLimit,
+                matching: .images
+            ) {
+                buttonContent
+            }
+            .buttonStyle(.plain)
+        } else {
+            Button(action: {
+                // TODO: restore haptic feedback once Core Haptics pre-warm
+                // is solved without re-introducing the first-tap stall.
+                // Same root cause as the cell + previewer-tap TODOs.
+                onLimitedOrDeniedTap()
+            }) {
+                buttonContent
+            }
+            .disabled(authStatus == .notDetermined)
+        }
+    }
+
+    /// The four-state visual: thumbnail / spinner / lock / placeholder.
+    /// Same content rendered regardless of whether the wrapper is a
+    /// `PhotosPicker` or a `Button`.
+    @ViewBuilder
+    private var buttonContent: some View {
+        ZStack {
+            if (authStatus == .authorized || authStatus == .limited), let image = image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 48, height: 48)
+                    .cornerRadius(10)
+                    .clipped()
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color.white.opacity(0.6), lineWidth: 2)
+                    )
+                    .allowsHitTesting(false)
+            } else if authStatus == .denied || authStatus == .restricted {
+                deniedState
+            } else if authStatus == .authorized || authStatus == .limited {
+                loadingState
+            } else {
+                placeholderState
             }
         }
-        .disabled(authStatus == .notDetermined)
     }
 
     private var deniedState: some View {

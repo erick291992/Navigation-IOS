@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import Photos
 import PhotosUI
 import Observation
@@ -257,11 +258,33 @@ public final class PickerViewModel {
         }
     }
 
-    /// Opens `PHPickerViewController` via PhotoKitService and routes results
-    /// back through the grid-assets handler.
+    /// Imperative `PHPickerViewController` bridge. Kept ONLY for the
+    /// empty-state "Open Library" fallback in `LibraryViewfinderView` —
+    /// the gallery shortcut, previewer tap, and main flow all route
+    /// through SwiftUI's native `PhotosPicker` via `processPicked(_:)`.
+    /// TODO: refactor `EmptyStateView` to support a `PhotosPicker`-based
+    /// action so this method (and `PhotoKitService.openSystemPicker` +
+    /// `PhotoKitServicePickerDelegate`) can be deleted.
     public func openSystemPicker() {
         photoKit.openSystemPicker(selectionLimit: configuration.selectionLimit) { [weak self] assets in
             self?.handleGridAssets(assets.map { .phAsset($0) })
+        }
+    }
+
+    /// Called from `PickerView`'s `.onChange(of: systemPickerSelection)`
+    /// when `PhotosPicker` writes a new selection. Routes the picked
+    /// items through `pickerManager.process(_:)` and hands the
+    /// resulting `MediaItem` array to the completion callback.
+    ///
+    /// This replaces the old delegate-callback path: `PhotosPicker` is a
+    /// SwiftUI-native binding, so we no longer need a shared mutable
+    /// delegate, a topVC traversal, or imperative `present()` — Apple's
+    /// own picker handles its lifecycle and just writes back via the
+    /// binding when the user picks.
+    public func processPicked(_ items: [PhotosPickerItem]) async {
+        guard !items.isEmpty else { return }
+        if let mediaItems = try? await pickerManager.process(items) {
+            onCompletion(mediaItems)
         }
     }
 

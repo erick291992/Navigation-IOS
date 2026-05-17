@@ -1,5 +1,6 @@
 import SwiftUI
 import Photos
+import PhotosUI
 
 /// Composed bottom-of-shell control: shutter row (gallery shortcut +
 /// shutter button + flip-camera) plus mode row (Library / Reuse / Photo).
@@ -14,9 +15,16 @@ struct ShutterAndModeBarView: View {
     /// once via `PickerViewModel.loadGalleryThumbIfNeeded()` and passes
     /// the value down — the leaf stays a pure renderer.
     let firstAssetImage: UIImage?
+    let selectionLimit: Int
+    /// Driven by `PhotosPicker` when authStatus is `.authorized`. Parent
+    /// observes via `.onChange` and routes to `processPicked(_:)`.
+    @Binding var pickerSelection: [PhotosPickerItem]
     let onShutter: () -> Void
     let onFlipCamera: () -> Void
     let onSelectMode: (PickerMode) -> Void
+    /// Limited-access path AND denied/restricted path. The authorized
+    /// path is handled by `GalleryShortcutButton`'s internal
+    /// `PhotosPicker` — no callback needed for it.
     let onGalleryShortcut: () -> Void
 
     var body: some View {
@@ -33,7 +41,9 @@ struct ShutterAndModeBarView: View {
                 GalleryShortcutButton(
                     authStatus: authStatus,
                     image: firstAssetImage,
-                    onTap: onGalleryShortcut
+                    selectionLimit: selectionLimit,
+                    pickerSelection: $pickerSelection,
+                    onLimitedOrDeniedTap: onGalleryShortcut
                 )
                 .frame(width: 48, height: 48)
                 Spacer()

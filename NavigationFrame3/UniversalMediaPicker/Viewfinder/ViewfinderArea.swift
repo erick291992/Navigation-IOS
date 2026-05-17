@@ -1,5 +1,6 @@
 import SwiftUI
 import Photos
+import PhotosUI
 
 /// Dumb layout container for the top-half viewfinder. **No ViewModel.**
 ///
@@ -11,14 +12,23 @@ import Photos
 /// their mode because they're cheap.
 ///
 /// All cross-cutting state (`previewAsset`, `previewHistoryItem`, `history`)
-/// flows in as `let` parameters from `PickerView` (TextField-style).
+/// flows in as `let` parameters from `PickerView` (TextField-style). The
+/// `pickerSelection` binding flows through to `LibraryViewfinderView` so
+/// the previewer-tap area can be wrapped in `PhotosPicker` when authorized.
 struct ViewfinderArea: View {
     let mode: PickerMode
     let previewAsset: PHAsset?
     let previewHistoryItem: MediaItem?
     let history: [MediaItem]
     let accentColor: Color
-    let onOpenSystemPicker: () -> Void
+    let selectionLimit: Int
+    @Binding var pickerSelection: [PhotosPickerItem]
+    /// Limited-access path (no SwiftUI equivalent for the manage-access UI).
+    let onLimitedTap: () -> Void
+    /// Empty-state "Open Library" fallback when authorized — uses imperative
+    /// PHPickerViewController bridge because EmptyStateView's internal Button
+    /// can't be cleanly wrapped in PhotosPicker (separate refactor).
+    let onAuthorizedEmptyStateFallback: () -> Void
 
     /// Tracks whether the camera has been shown at least once during this
     /// picker session. Once set, the camera viewfinder stays mounted so the
@@ -36,7 +46,10 @@ struct ViewfinderArea: View {
                 LibraryViewfinderView(
                     previewAsset: previewAsset,
                     accentColor: accentColor,
-                    onOpenSystemPicker: onOpenSystemPicker
+                    selectionLimit: selectionLimit,
+                    pickerSelection: $pickerSelection,
+                    onLimitedTap: onLimitedTap,
+                    onAuthorizedEmptyStateFallback: onAuthorizedEmptyStateFallback
                 )
             }
 

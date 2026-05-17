@@ -1,5 +1,6 @@
 import SwiftUI
 import Photos
+import PhotosUI
 
 /// The picker shell that replaces the monolithic `UnifiedCreatorView`.
 ///
@@ -11,6 +12,10 @@ import Photos
 public struct PickerView: View {
     @State private var viewModel: PickerViewModel
     @Environment(\.scenePhase) private var scenePhase
+
+    /// Binding driven by SwiftUI `PhotosPicker` instances inside the
+    /// gallery shortcut + previewer-tap path. On change → `processPicked`.
+    @State private var systemPickerSelection: [PhotosPickerItem] = []
 
     public init(
         configuration: MediaPickerConfiguration,
@@ -61,6 +66,17 @@ public struct PickerView: View {
             // (library change observer, limited-access pick set updates).
             Task { await viewModel.loadGalleryThumbIfNeeded() }
         }
+        .onChange(of: systemPickerSelection) { _, items in
+            guard !items.isEmpty else { return }
+            Task {
+                await viewModel.processPicked(items)
+                // Reset so the next pick of the same item still fires
+                // .onChange. SwiftUI dedupes identical values, so without
+                // this reset, picking the same photo twice in a row would
+                // not trigger a second processing pass.
+                systemPickerSelection = []
+            }
+        }
     }
 
     // MARK: - Layout
@@ -100,7 +116,10 @@ public struct PickerView: View {
                         previewHistoryItem: viewModel.previewHistoryItem,
                         history: viewModel.history,
                         accentColor: viewModel.configuration.style.accentColor,
-                        onOpenSystemPicker: { viewModel.openSystemPicker() }
+                        selectionLimit: viewModel.configuration.selectionLimit,
+                        pickerSelection: $systemPickerSelection,
+                        onLimitedTap: { viewModel.handleGalleryShortcut() },
+                        onAuthorizedEmptyStateFallback: { viewModel.openSystemPicker() }
                     )
                 }
             }
@@ -141,6 +160,8 @@ public struct PickerView: View {
                 accentColor: viewModel.configuration.style.accentColor,
                 authStatus: viewModel.authStatus,
                 firstAssetImage: viewModel.galleryThumbImage,
+                selectionLimit: viewModel.configuration.selectionLimit,
+                pickerSelection: $systemPickerSelection,
                 onShutter: { viewModel.handleShutter() },
                 onFlipCamera: { viewModel.flipCamera() },
                 onSelectMode: { viewModel.selectMode($0) },
