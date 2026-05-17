@@ -4,14 +4,14 @@ import Observation
 
 // MARK: - Tier 3 Advanced Grid ViewModel
 // Proves developers can build their own entirely custom grid UI
-// utilizing AssetGridViewModel for fetching and MediaPickerEngine for processing.
+// utilizing AssetGridViewModel for fetching and MediaPickerManager for processing.
 
 @MainActor
 @Observable
 class AdvancedPickerExampleViewModel {
-    
+
     // Core Managers (constructor-default DI)
-    private let engine: MediaPickerEngine
+    private let manager: MediaPickerManager
     
     // We leverage AssetGridViewModel simply as a pure data source for PHAssets
     // meaning the developer doesn't have to write lower-level PhotoKit fetching logic themselves.
@@ -32,9 +32,9 @@ class AdvancedPickerExampleViewModel {
         case cropping(index: Int, total: Int)
     }
     
-    init(maxSelection: Int = 3, engine: MediaPickerEngine = .shared) {
+    init(maxSelection: Int = 3, manager: MediaPickerManager = .shared) {
         self.maxSelection = maxSelection
-        self.engine = engine
+        self.manager = manager
         self.gridModel = AssetGridViewModel(selectionLimit: maxSelection)
         self.gridModel.trigger(.loadInitialData) // Fetch photos immediately
     }
@@ -58,7 +58,7 @@ class AdvancedPickerExampleViewModel {
                 let phAssets = assets.compactMap { $0.phAsset }
                 
                 // Pass raw PHAssets straight to the Tier 3 Engine!
-                let processed = try await engine.process(phAssets)
+                let processed = try await manager.process(phAssets)
                 
                 await MainActor.run {
                     self.itemsToCrop = processed
@@ -75,7 +75,7 @@ class AdvancedPickerExampleViewModel {
     
     func didFinishCrop(_ croppedImage: UIImage, at index: Int) {
         Task {
-            let result = try? await engine.process(croppedImage)
+            let result = try? await manager.process(croppedImage)
             await MainActor.run {
                 if let result = result {
                     self.croppedResults[index] = result.thumbnail

@@ -43,7 +43,6 @@ public final class PickerViewModel {
     private let cameraService: CameraService
     private let photoKit: PhotoKitService
     private let historyManager: MediaHistoryManager
-    private let pickerEngine: MediaPickerEngine
     private let pickerManager: MediaPickerManager
 
     // MARK: - Cross-cutting picker state (the truth source for parameters down)
@@ -68,7 +67,6 @@ public final class PickerViewModel {
         cameraService: CameraService = .shared,
         photoKit: PhotoKitService = .shared,
         historyManager: MediaHistoryManager = .shared,
-        pickerEngine: MediaPickerEngine = .shared,
         pickerManager: MediaPickerManager = .shared,
         onCompletion: @escaping ([MediaItem]) -> Void,
         onCancel: @escaping () -> Void
@@ -77,7 +75,6 @@ public final class PickerViewModel {
         self.cameraService = cameraService
         self.photoKit = photoKit
         self.historyManager = historyManager
-        self.pickerEngine = pickerEngine
         self.pickerManager = pickerManager
         self.onCompletion = onCompletion
         self.onCancel = onCancel
@@ -240,13 +237,14 @@ public final class PickerViewModel {
         }
     }
 
-    // MARK: - Intent: gallery shortcut + system picker
+    // MARK: - Intent: gallery shortcut (non-authorized paths only)
 
-    /// Mode-aware gallery shortcut behavior (auth-based routing).
+    /// Auth-based routing for the gallery shortcut tap when the user is
+    /// NOT authorized. The authorized path is handled inside
+    /// `GalleryShortcutButton` by `PhotosPicker` directly — no callback
+    /// reaches here for that case.
     public func handleGalleryShortcut() {
         switch authStatus {
-        case .authorized:
-            openSystemPicker()
         case .limited:
             photoKit.openLimitedPicker()
         case .denied, .restricted:
@@ -254,20 +252,9 @@ public final class PickerViewModel {
                 UIApplication.shared.open(url)
             }
         default:
+            // .authorized goes through PhotosPicker; .notDetermined is
+            // handled by the onboarding flow, not this button.
             break
-        }
-    }
-
-    /// Imperative `PHPickerViewController` bridge. Kept ONLY for the
-    /// empty-state "Open Library" fallback in `LibraryViewfinderView` —
-    /// the gallery shortcut, previewer tap, and main flow all route
-    /// through SwiftUI's native `PhotosPicker` via `processPicked(_:)`.
-    /// TODO: refactor `EmptyStateView` to support a `PhotosPicker`-based
-    /// action so this method (and `PhotoKitService.openSystemPicker` +
-    /// `PhotoKitServicePickerDelegate`) can be deleted.
-    public func openSystemPicker() {
-        photoKit.openSystemPicker(selectionLimit: configuration.selectionLimit) { [weak self] assets in
-            self?.handleGridAssets(assets.map { .phAsset($0) })
         }
     }
 
@@ -316,7 +303,7 @@ public final class PickerViewModel {
             let existingItems = assets.compactMap { $0.mediaItem }
 
             if !phAssets.isEmpty,
-               let processed = try? await self.pickerEngine.process(phAssets) {
+               let processed = try? await self.pickerManager.process(phAssets) {
                 finalItems.append(contentsOf: processed)
             }
 

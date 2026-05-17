@@ -25,10 +25,6 @@ struct ViewfinderArea: View {
     @Binding var pickerSelection: [PhotosPickerItem]
     /// Limited-access path (no SwiftUI equivalent for the manage-access UI).
     let onLimitedTap: () -> Void
-    /// Empty-state "Open Library" fallback when authorized — uses imperative
-    /// PHPickerViewController bridge because EmptyStateView's internal Button
-    /// can't be cleanly wrapped in PhotosPicker (separate refactor).
-    let onAuthorizedEmptyStateFallback: () -> Void
 
     /// Tracks whether the camera has been shown at least once during this
     /// picker session. Once set, the camera viewfinder stays mounted so the
@@ -48,8 +44,7 @@ struct ViewfinderArea: View {
                     accentColor: accentColor,
                     selectionLimit: selectionLimit,
                     pickerSelection: $pickerSelection,
-                    onLimitedTap: onLimitedTap,
-                    onAuthorizedEmptyStateFallback: onAuthorizedEmptyStateFallback
+                    onLimitedTap: onLimitedTap
                 )
             }
 

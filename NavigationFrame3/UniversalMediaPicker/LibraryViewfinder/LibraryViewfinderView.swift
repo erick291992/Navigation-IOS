@@ -13,10 +13,11 @@ import PhotosUI
 /// 3. Authorized, fetch done, no assets → `EmptyStateView` with "Open Library".
 /// 4. Authorized, has assets → `LibraryPreviewer` showing the chosen asset.
 ///
-/// The previewer's tap target is `PhotosPicker` when authorized (SwiftUI
-/// native — no UIKit bridge, no delegate, no topVC traversal) and a
-/// `Button` when limited (the limited-access library picker has no SwiftUI
-/// equivalent and must use the UIKit bridge in `PhotoKitService`).
+/// The "Open Library" tap target is `PhotosPicker` when authorized (SwiftUI
+/// native — no UIKit bridge) and a `Button` when limited (the limited-access
+/// library picker has no SwiftUI equivalent and must use the UIKit bridge
+/// in `PhotoKitService`). Same pattern applies to both the previewer area
+/// and the empty-state action button.
 struct LibraryViewfinderView: View {
     @State private var viewModel = LibraryViewfinderViewModel()
 
@@ -27,11 +28,6 @@ struct LibraryViewfinderView: View {
     /// Limited-access path — opens `PHPhotoLibrary.presentLimitedLibraryPicker`
     /// via the parent's VM. No SwiftUI equivalent exists for this UI.
     let onLimitedTap: () -> Void
-    /// Empty-state fallback when authorized — `EmptyStateView`'s internal
-    /// Button can't cleanly host a `PhotosPicker` without refactoring the
-    /// component, so we still route through the parent's imperative
-    /// `openSystemPicker()` for that specific edge case.
-    let onAuthorizedEmptyStateFallback: () -> Void
 
     var body: some View {
         Group {
@@ -41,54 +37,74 @@ struct LibraryViewfinderView: View {
                 ProgressView()
                     .tint(.white.opacity(0.7))
             } else if !viewModel.hasRecents {
-                EmptyStateView(
-                    icon: "photo.on.rectangle",
-                    title: "No Recent Photos Found",
-                    actionTitle: "Open Library",
-                    onAction: {
-                        if viewModel.authStatus == .limited {
-                            onLimitedTap()
-                        } else {
-                            onAuthorizedEmptyStateFallback()
-                        }
-                    }
-                )
+                emptyStateView
             } else {
-                let displayedAsset = viewModel.displayAsset(preferring: previewAsset)
-                let previewer = LibraryPreviewer(
-                    assetID: displayedAsset?.localIdentifier,
-                    initialImage: viewModel.thumbnail(for: displayedAsset),
-                    loadAsync: displayedAsset.map { asset in
-                        { await viewModel.requestThumbnail(for: asset) }
-                    }
-                )
-
-                if viewModel.authStatus == .limited {
-                    previewer.onTapGesture {
-                        // TODO: restore haptic feedback once Core Haptics
-                        // pre-warm is solved without re-introducing the
-                        // first-tap stall (see AssetGridView cell TODO).
-                        onLimitedTap()
-                    }
-                } else if viewModel.authStatus == .authorized {
-                    PhotosPicker(
-                        selection: $pickerSelection,
-                        maxSelectionCount: selectionLimit,
-                        matching: .images
-                    ) {
-                        previewer
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    // notDetermined etc — render previewer without a tap
-                    // action. (Onboarding flow handles permission request
-                    // elsewhere.)
-                    previewer
-                }
+                previewerArea
             }
         }
         .task {
             await viewModel.loadRecentsIfNeeded()
+        }
+    }
+
+    /// "No Recent Photos Found" — action is either `PhotosPicker` (authorized)
+    /// or `Button` calling the limited-access UIKit bridge.
+    @ViewBuilder
+    private var emptyStateView: some View {
+        if viewModel.authStatus == .limited {
+            EmptyStateView(icon: "photo.on.rectangle", title: "No Recent Photos Found") {
+                Button("Open Library") {
+                    onLimitedTap()
+                }
+                .font(.system(size: 14, weight: .bold))
+                .foregroundColor(.blue)
+            }
+        } else {
+            EmptyStateView(icon: "photo.on.rectangle", title: "No Recent Photos Found") {
+                PhotosPicker(
+                    selection: $pickerSelection,
+                    maxSelectionCount: selectionLimit,
+                    matching: .images
+                ) {
+                    Text("Open Library")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.blue)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    /// Previewer area — same auth-branching as the empty state.
+    @ViewBuilder
+    private var previewerArea: some View {
+        let displayedAsset = viewModel.displayAsset(preferring: previewAsset)
+        let previewer = LibraryPreviewer(
+            assetID: displayedAsset?.localIdentifier,
+            initialImage: viewModel.thumbnail(for: displayedAsset),
+            loadAsync: displayedAsset.map { asset in
+                { await viewModel.requestThumbnail(for: asset) }
+            }
+        )
+
+        if viewModel.authStatus == .limited {
+            previewer.onTapGesture {
+                // TODO: restore haptic feedback once Core Haptics pre-warm
+                // is solved without re-introducing the first-tap stall.
+                onLimitedTap()
+            }
+        } else if viewModel.authStatus == .authorized {
+            PhotosPicker(
+                selection: $pickerSelection,
+                maxSelectionCount: selectionLimit,
+                matching: .images
+            ) {
+                previewer
+            }
+            .buttonStyle(.plain)
+        } else {
+            // notDetermined etc — render previewer without a tap action.
+            previewer
         }
     }
 }

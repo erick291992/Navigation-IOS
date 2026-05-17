@@ -279,7 +279,11 @@ public struct EliteGeometricPickerView: View {
                     GeometryReader { geometry in
                         Color.black // Background for square letterboxing
                             .overlay(
-                                AsyncFlexibleAssetView(assetSource: .phAsset(asset))
+                                AsyncFlexibleAssetView(
+                                    id: asset.localIdentifier,
+                                    initialImage: viewModel.thumbnail(for: asset),
+                                    loadAsync: { await viewModel.requestThumbnail(for: asset) }
+                                )
                                     .scaleEffect(isSelected ? 0.95 : 1.0)
                                     .aspectRatio(contentMode: .fit) // 🎞️ No Zoom: Touch sides, letterbox top/bottom
                                     .frame(width: geometry.size.width) // 📐 Force Width to Column

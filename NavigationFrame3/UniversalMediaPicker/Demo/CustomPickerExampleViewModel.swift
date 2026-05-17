@@ -3,16 +3,16 @@ import PhotosUI
 
 // MARK: - Tier 3 ViewModel
 // This is everything a developer needs to manage the picker engine state.
-// No Elite UI dependencies — just raw MediaPickerEngine + CropView.
+// No Elite UI dependencies — just raw MediaPickerManager + CropView.
 
 @Observable
 class CustomPickerExampleViewModel {
 
     // MARK: - Services (constructor-default DI)
-    private let engine: MediaPickerEngine
+    private let manager: MediaPickerManager
 
-    init(engine: MediaPickerEngine = .shared) {
-        self.engine = engine
+    init(manager: MediaPickerManager = .shared) {
+        self.manager = manager
     }
 
     // MARK: - Published State
@@ -44,7 +44,7 @@ class CustomPickerExampleViewModel {
         
         Task {
             do {
-                let processed = try await engine.process(items)
+                let processed = try await manager.process(items)
                 await MainActor.run {
                     self.photosSelection = []     // Reset picker
                     self.itemsToCrop = processed
@@ -65,7 +65,7 @@ class CustomPickerExampleViewModel {
         flowState = .processing
         Task {
             do {
-                let item = try await engine.process(image)
+                let item = try await manager.process(image)
                 await MainActor.run {
                     self.itemsToCrop = [item]
                     self.croppedResults = [:]
@@ -80,7 +80,7 @@ class CustomPickerExampleViewModel {
     /// Called when CropView finishes cropping one image.
     func didFinishCrop(_ croppedImage: UIImage, at index: Int) {
         Task {
-            let result = try? await engine.process(croppedImage)
+            let result = try? await manager.process(croppedImage)
             await MainActor.run {
                 if let result = result {
                     self.croppedResults[index] = result.thumbnail

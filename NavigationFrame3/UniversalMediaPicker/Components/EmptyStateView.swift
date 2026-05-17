@@ -1,25 +1,34 @@
 import SwiftUI
 
-/// Generic empty-state view: icon + title + optional action button.
-/// Replaces the inline `emptyLibraryState` and `emptyHistoryState` patterns
-/// from the original monolithic UnifiedCreatorView.
-struct EmptyStateView: View {
+/// Generic empty-state view: icon + title + a parent-supplied action area.
+///
+/// The action area is a `@ViewBuilder` so the caller can hand in whatever
+/// tap target makes sense — a plain `Button`, a `PhotosPicker`, a link to
+/// Settings, etc. Use the no-action init for purely visual empty states.
+///
+/// Examples:
+/// ```swift
+/// // No action — just icon + title
+/// EmptyStateView(icon: "clock.arrow.circlepath", title: "No Session History")
+///
+/// // Button action
+/// EmptyStateView(icon: "photo.on.rectangle", title: "No Recent Photos") {
+///     Button("Open Library") { /* ... */ }
+///         .font(.system(size: 14, weight: .bold))
+///         .foregroundColor(.blue)
+/// }
+///
+/// // PhotosPicker as the action target
+/// EmptyStateView(icon: "photo.on.rectangle", title: "No Recent Photos") {
+///     PhotosPicker(selection: $sel, maxSelectionCount: 1, matching: .images) {
+///         Text("Open Library").foregroundColor(.blue)
+///     }
+/// }
+/// ```
+struct EmptyStateView<Action: View>: View {
     let icon: String
     let title: String
-    let actionTitle: String?
-    let onAction: (() -> Void)?
-
-    init(
-        icon: String,
-        title: String,
-        actionTitle: String? = nil,
-        onAction: (() -> Void)? = nil
-    ) {
-        self.icon = icon
-        self.title = title
-        self.actionTitle = actionTitle
-        self.onAction = onAction
-    }
+    @ViewBuilder let action: () -> Action
 
     var body: some View {
         Color.black.overlay(
@@ -31,17 +40,15 @@ struct EmptyStateView: View {
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.white.opacity(0.4))
 
-                if let actionTitle = actionTitle, let onAction = onAction {
-                    Button(actionTitle) {
-                        // TODO: restore haptic feedback once Core Haptics
-                        // pre-warm is solved without re-introducing the
-                        // first-tap stall (see AssetGridView cell TODO).
-                        onAction()
-                    }
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(.blue)
-                }
+                action()
             }
         )
+    }
+}
+
+/// Convenience init for the no-action case.
+extension EmptyStateView where Action == EmptyView {
+    init(icon: String, title: String) {
+        self.init(icon: icon, title: title) { EmptyView() }
     }
 }

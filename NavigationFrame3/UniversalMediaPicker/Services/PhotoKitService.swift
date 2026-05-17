@@ -209,31 +209,15 @@ public final class PhotoKitService: NSObject {
         }
     }
 
-    /// Presents `PHPickerViewController` via UIKit (avoids SwiftUI sheet collisions).
-    @MainActor
-    public func openSystemPicker(selectionLimit: Int, completion: @escaping ([PHAsset]) -> Void) {
-        var config = PHPickerConfiguration(photoLibrary: .shared())
-        config.selectionLimit = selectionLimit
-        config.filter = .images
-
-        let picker = PHPickerViewController(configuration: config)
-        picker.delegate = PhotoKitServicePickerDelegate.shared
-        PhotoKitServicePickerDelegate.shared.completion = completion
-
-        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let rootVC = windowScene.windows.first?.rootViewController else { return }
-
-        let topVC = findTopViewController(from: rootVC)
-        topVC.present(picker, animated: true)
-    }
-
     // MARK: - Thumbnail loading
     //
-    // Lane discipline (post-cell-refactor): only AssetGridViewModel calls
-    // these. Views (cells, previewers) take their image data as parameters
-    // from their parent's VM. The previewer + gallery-shortcut callers in
-    // MediaPickerViewComponents.swift are still on the old direct-call shape
-    // and will move next — see the post-prewarm cleanup backlog.
+    // Lane discipline: only view models call these. Views take their image
+    // data as parameters from their parent's VM. The imperative system-picker
+    // bridge (PHPickerViewController + PhotoKitServicePickerDelegate) was
+    // deleted on 2026-05-17 when EmptyStateView was refactored to support a
+    // PhotosPicker-shaped action — the main picker flow now uses SwiftUI's
+    // PhotosPicker end to end. The UIKit bridge survives only for
+    // openLimitedPicker (no SwiftUI equivalent for the manage-access UI).
 
     /// Synchronous peek into the process-wide `ThumbnailCache`. The grid VM
     /// passes the result to each cell as `initialImage` so the cell paints
@@ -410,24 +394,4 @@ private extension UIImage {
 
 private extension CGSize {
     var area: CGFloat { width * height }
-}
-
-// MARK: - PHPickerViewControllerDelegate adapter
-
-final class PhotoKitServicePickerDelegate: NSObject, PHPickerViewControllerDelegate {
-    static let shared = PhotoKitServicePickerDelegate()
-    var completion: (([PHAsset]) -> Void)?
-
-    func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-        picker.dismiss(animated: true)
-
-        let identifiers = results.compactMap(\.assetIdentifier)
-        let fetchResult = PHAsset.fetchAssets(withLocalIdentifiers: identifiers, options: nil)
-        var assets: [PHAsset] = []
-        fetchResult.enumerateObjects { asset, _, _ in
-            assets.append(asset)
-        }
-
-        completion?(assets)
-    }
 }

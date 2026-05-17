@@ -118,8 +118,7 @@ public struct PickerView: View {
                         accentColor: viewModel.configuration.style.accentColor,
                         selectionLimit: viewModel.configuration.selectionLimit,
                         pickerSelection: $systemPickerSelection,
-                        onLimitedTap: { viewModel.handleGalleryShortcut() },
-                        onAuthorizedEmptyStateFallback: { viewModel.openSystemPicker() }
+                        onLimitedTap: { viewModel.handleGalleryShortcut() }
                     )
                 }
             }
@@ -184,6 +183,9 @@ public struct PickerView: View {
                 },
                 onSelectionChange: { assets in
                     viewModel.updateSelection(assets)
+                },
+                onFirstAssetChanged: { newFirst in
+                    if let newFirst { viewModel.setPreview(newFirst) }
                 }
             )
 

@@ -15,7 +15,6 @@ public class EliteGeometricPickerViewModel {
     public let cameraService: CameraService
     public let photoKit: PhotoKitService
     private let historyManager: MediaHistoryManager
-    private let pickerEngine: MediaPickerEngine
     private let pickerManager: MediaPickerManager
     @ObservationIgnored private var tasks: [Task<Void, Never>] = []
     
@@ -51,7 +50,6 @@ public class EliteGeometricPickerViewModel {
         cameraService: CameraService = .shared,
         photoKit: PhotoKitService = .shared,
         historyManager: MediaHistoryManager = .shared,
-        pickerEngine: MediaPickerEngine = .shared,
         pickerManager: MediaPickerManager = .shared,
         onCompletion: @escaping ([MediaItem]) -> Void,
         onCancel: @escaping () -> Void
@@ -60,7 +58,6 @@ public class EliteGeometricPickerViewModel {
         self.cameraService = cameraService
         self.photoKit = photoKit
         self.historyManager = historyManager
-        self.pickerEngine = pickerEngine
         self.pickerManager = pickerManager
         self.onCompletion = onCompletion
         self.onCancel = onCancel
@@ -155,7 +152,7 @@ public class EliteGeometricPickerViewModel {
         } else if selectedMode == .library {
             let assetsToProcess = selectedAssets.isEmpty ? (previewAsset.map { [$0] } ?? []) : Array(selectedAssets)
             let task = Task {
-                if let processed = try? await pickerEngine.process(assetsToProcess) {
+                if let processed = try? await pickerManager.process(assetsToProcess) {
                     await MainActor.run {
                         self.processedItems = processed
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {

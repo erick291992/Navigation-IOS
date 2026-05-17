@@ -24,6 +24,10 @@ struct AssetGridView: View {
     let history: [MediaItem]
     let onAssetTap: (GridAsset) -> Void
     let onSelectionChange: ([GridAsset]) -> Void
+    /// Fires when the first asset in the loaded grid changes — typically
+    /// the result of an album switch (Recents → Favorites etc.). Parent
+    /// uses it to keep the top previewer in sync with the active album.
+    let onFirstAssetChanged: (PHAsset?) -> Void
 
     @State private var viewModel: AssetGridViewModel
 
@@ -33,7 +37,8 @@ struct AssetGridView: View {
         selectedMode: PickerMode,
         history: [MediaItem],
         onAssetTap: @escaping (GridAsset) -> Void,
-        onSelectionChange: @escaping ([GridAsset]) -> Void
+        onSelectionChange: @escaping ([GridAsset]) -> Void,
+        onFirstAssetChanged: @escaping (PHAsset?) -> Void
     ) {
         self.configuration = configuration
         self._currentAlbum = currentAlbum
@@ -41,6 +46,7 @@ struct AssetGridView: View {
         self.history = history
         self.onAssetTap = onAssetTap
         self.onSelectionChange = onSelectionChange
+        self.onFirstAssetChanged = onFirstAssetChanged
         self._viewModel = State(initialValue: AssetGridViewModel(selectionLimit: configuration.selectionLimit))
     }
 
@@ -126,6 +132,14 @@ struct AssetGridView: View {
             // AssetGridSelectionCache; this callback just keeps the parent's
             // observable mirror in sync.
             onSelectionChange(newSelection)
+        }
+        .onChange(of: viewModel.state.assets.first?.id) { _, _ in
+            // Bubble the new first asset up so the parent can refresh the
+            // top previewer to match the active album (Trigger 3 — switching
+            // Recents → Favorites → Screenshots etc. follows in the previewer).
+            // Fires on initial load too, but the parent's setPreview is
+            // idempotent for the same identifier so no harm.
+            onFirstAssetChanged(viewModel.state.assets.first?.phAsset)
         }
     }
 

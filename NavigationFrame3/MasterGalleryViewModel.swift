@@ -44,7 +44,7 @@ class MasterGalleryViewModel {
         Task {
             do {
                 print("🔄 Starting headless processing...")
-                let processed = try await MediaPickerEngine.shared.process(items)
+                let processed = try await MediaPickerManager.shared.process(items)
                 print("✅ Processed \(processed.count) items")
                 
                 await MainActor.run {
@@ -109,7 +109,7 @@ class MasterGalleryViewModel {
     func handleCropResult(_ image: UIImage, at index: Int) {
         print("✂️ Crop finished for index \(index)")
         Task {
-            let processed = try? await MediaPickerEngine.shared.process(image)
+            let processed = try? await MediaPickerManager.shared.process(image)
             await MainActor.run {
                 if let processed = processed {
                     print("✅ Saved crop for index \(index)")

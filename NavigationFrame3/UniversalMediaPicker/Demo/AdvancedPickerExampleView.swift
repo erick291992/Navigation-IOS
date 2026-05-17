@@ -77,7 +77,11 @@ struct AdvancedPickerExampleView: View {
                             
                             ZStack(alignment: .topTrailing) {
                                 // Image with scale-down bounce when selected
-                                AsyncFlexibleAssetView(assetSource: asset)
+                                AsyncFlexibleAssetView(
+                                    id: asset.id,
+                                    initialImage: vm.gridModel.thumbnail(for: asset),
+                                    loadAsync: { await vm.gridModel.requestThumbnail(for: asset) }
+                                )
                                     .scaleEffect(isSelected ? 0.95 : 1.0)
                                 
                                 // Sleek selection badges
@@ -182,37 +186,33 @@ struct AdvancedPickerExampleView: View {
     }
 }
 
-/// A simple, flexible thumbnail loader designed specifically for edge-to-edge grid layouts.
-/// Leaves scaling strictly to the parent views so columns remain perfectly balanced.
+/// Pure presentational thumbnail view for the demo's edge-to-edge grid.
+/// Same closure pattern as `AssetThumbnailCell`: parent provides `initialImage`
+/// (synchronous cache peek) + `loadAsync` (async fetch); cell paints
+/// `displayImage = asyncLoaded ?? initialImage` and uses `.task(id:)` so
+/// cell recycles auto-cancel the in-flight load.
 struct AsyncFlexibleAssetView: View {
-    let assetSource: GridAsset
-    @State private var thumbnail: UIImage?
-    
+    let id: String
+    let initialImage: UIImage?
+    let loadAsync: () async -> UIImage?
+
+    @State private var asyncLoaded: UIImage?
+    private var displayImage: UIImage? { asyncLoaded ?? initialImage }
+
     var body: some View {
         Group {
-            if let thumbnail = thumbnail {
-                Image(uiImage: thumbnail)
+            if let image = displayImage {
+                Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
             } else {
-                Color.black // Base background while loading
-                    .overlay(
-                        ProgressView().tint(.white).opacity(0.3)
-                    )
+                Color.black
+                    .overlay(ProgressView().tint(.white).opacity(0.3))
             }
         }
-        .onAppear {
-            if let item = assetSource.mediaItem {
-                self.thumbnail = item.thumbnail
-                return
-            }
-            
-            guard let asset = assetSource.phAsset else { return }
-            
-            // Load a 500x500 high-res thumbnail purely to guarantee sharpness
-            PhotoKitService.shared.loadThumbnail(for: asset, size: CGSize(width: 500, height: 500)) { img in
-                self.thumbnail = img
-            }
+        .task(id: id) {
+            guard displayImage == nil else { return }
+            asyncLoaded = await loadAsync()
         }
     }
 }
