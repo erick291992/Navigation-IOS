@@ -6,11 +6,13 @@ import SwiftUI
 struct ExitButton: View {
     let onTap: () -> Void
 
+    @State private var tapTrigger = 0
+
     var body: some View {
         VStack {
             HStack {
                 Button(action: {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    tapTrigger += 1
                     onTap()
                 }) {
                     Image(systemName: "xmark")
@@ -23,6 +25,7 @@ struct ExitButton: View {
                 }
                 .padding(20)
                 .contentShape(Rectangle())
+                .sensoryFeedback(.impact(weight: .light), trigger: tapTrigger)
 
                 Spacer()
             }

@@ -27,6 +27,8 @@ struct ShutterAndModeBarView: View {
     /// `PhotosPicker` — no callback needed for it.
     let onGalleryShortcut: () -> Void
 
+    @State private var flipTrigger = 0
+
     var body: some View {
         VStack(spacing: 20) {
             shutterRow
@@ -60,7 +62,7 @@ struct ShutterAndModeBarView: View {
                 Spacer()
                 if mode == .photo {
                     Button(action: {
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        flipTrigger += 1
                         onFlipCamera()
                     }) {
                         Circle()
@@ -72,6 +74,7 @@ struct ShutterAndModeBarView: View {
                             )
                     }
                     .frame(width: 48, height: 48)
+                    .sensoryFeedback(.impact(weight: .light), trigger: flipTrigger)
                 } else {
                     Color.clear.frame(width: 48, height: 48)
                 }
@@ -87,14 +90,15 @@ struct ShutterAndModeBarView: View {
                     title: mode.title,
                     isSelected: self.mode == mode,
                     accentColor: accentColor,
-                    action: {
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        onSelectMode(mode)
-                    }
+                    action: { onSelectMode(mode) }
                 )
             }
         }
         .frame(maxWidth: .infinity)
         .padding(.bottom, 4)
+        // Mode value is the natural trigger — fires .selection whenever the
+        // active mode flips. No counter needed; tapping the already-active
+        // mode is a no-op (no value change) so no spurious haptic.
+        .sensoryFeedback(.selection, trigger: mode)
     }
 }

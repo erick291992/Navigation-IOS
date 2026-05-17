@@ -7,7 +7,8 @@ import Photos
 struct AdvancedPickerExampleView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var vm = AdvancedPickerExampleViewModel()
-    
+    @State private var rejectionTrigger = 0
+
     // High-density premium edge-to-edge grid (1px spacing like Instagram)
     let columns = [
         GridItem(.flexible(), spacing: 1),
@@ -109,11 +110,8 @@ struct AdvancedPickerExampleView: View {
                             .contentShape(Rectangle())
                             .onTapGesture {
                                 if !isSelected && vm.gridModel.state.selectedAssets.count >= vm.maxSelection {
-                                    UINotificationFeedbackGenerator().notificationOccurred(.error)
-                                } else {
-                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                    rejectionTrigger += 1
                                 }
-                                
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                     vm.selectAsset(asset)
                                 }
@@ -155,6 +153,10 @@ struct AdvancedPickerExampleView: View {
             }
         }
         .navigationBarHidden(true)
+        // Selection-aware haptic: fires when the array actually changes.
+        // At-limit no-op taps fire `.error` via rejectionTrigger instead.
+        .sensoryFeedback(.selection, trigger: vm.gridModel.state.selectedAssets)
+        .sensoryFeedback(.error, trigger: rejectionTrigger)
         // MARK: - Modals
         .sheet(isPresented: Binding(
             get: { vm.flowState != .idle },

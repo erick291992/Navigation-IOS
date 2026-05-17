@@ -80,22 +80,17 @@ struct AssetGridView: View {
                         )
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            // TODO: restore haptic feedback once Core Haptics
-                            // pre-warm is solved without re-introducing the
-                            // first-tap stall. Previous approach (prewarm in
-                            // `MediaPickerModifier.onAppear` + shared static
-                            // `UIImpactFeedbackGenerator`) cured the stall on
-                            // simulator but reintroduced it intermittently —
-                            // needs proper device testing + a measured warm
-                            // window before re-adding. Diagnosis notes are in
-                            // chat history; root cause is Core Haptics engine
-                            // cold-start blocking the main thread for
-                            // ~400-1000 ms on first `.impactOccurred()`.
                             viewModel.trigger(.selectAsset(asset))
                             onAssetTap(asset)
                         }
                     }
                 }
+                // Selection-aware haptic: fires on .selection only when the
+                // tracked array actually changes. At-limit no-op taps don't
+                // change the array (toggleAssetSelection's guard rejects the
+                // append silently), so they don't fire. Same array, no haptic
+                // — exactly the UX requested.
+                .sensoryFeedback(.selection, trigger: viewModel.state.selectedAssets)
             }
         }
         .task {

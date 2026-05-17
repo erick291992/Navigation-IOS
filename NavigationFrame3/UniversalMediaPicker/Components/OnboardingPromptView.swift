@@ -9,6 +9,8 @@ struct OnboardingPromptView: View {
     let accentColor: Color
     let onGetStarted: () -> Void
 
+    @State private var tapTrigger = 0
+
     var body: some View {
         VStack(spacing: 30) {
             Image(systemName: "sparkles")
@@ -26,7 +28,7 @@ struct OnboardingPromptView: View {
             }
 
             Button(action: {
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                tapTrigger += 1
                 onGetStarted()
             }) {
                 Text("GET STARTED")
@@ -37,6 +39,7 @@ struct OnboardingPromptView: View {
                     .background(accentColor)
                     .cornerRadius(30)
             }
+            .sensoryFeedback(.impact(weight: .medium), trigger: tapTrigger)
         }
         .foregroundColor(.white)
     }

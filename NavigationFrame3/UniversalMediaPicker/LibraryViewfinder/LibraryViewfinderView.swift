@@ -29,6 +29,10 @@ struct LibraryViewfinderView: View {
     /// via the parent's VM. No SwiftUI equivalent exists for this UI.
     let onLimitedTap: () -> Void
 
+    /// Incremented on the previewer tap so `.sensoryFeedback` fires.
+    @State private var previewerTapTrigger = 0
+    @State private var emptyStateTapTrigger = 0
+
     var body: some View {
         Group {
             if viewModel.authStatus == .denied || viewModel.authStatus == .restricted {
@@ -54,11 +58,13 @@ struct LibraryViewfinderView: View {
         if viewModel.authStatus == .limited {
             EmptyStateView(icon: "photo.on.rectangle", title: "No Recent Photos Found") {
                 Button("Open Library") {
+                    emptyStateTapTrigger += 1
                     onLimitedTap()
                 }
                 .font(.system(size: 14, weight: .bold))
                 .foregroundColor(.blue)
             }
+            .sensoryFeedback(.impact(weight: .light), trigger: emptyStateTapTrigger)
         } else {
             EmptyStateView(icon: "photo.on.rectangle", title: "No Recent Photos Found") {
                 PhotosPicker(
@@ -88,11 +94,12 @@ struct LibraryViewfinderView: View {
         )
 
         if viewModel.authStatus == .limited {
-            previewer.onTapGesture {
-                // TODO: restore haptic feedback once Core Haptics pre-warm
-                // is solved without re-introducing the first-tap stall.
-                onLimitedTap()
-            }
+            previewer
+                .onTapGesture {
+                    previewerTapTrigger += 1
+                    onLimitedTap()
+                }
+                .sensoryFeedback(.impact(weight: .light), trigger: previewerTapTrigger)
         } else if viewModel.authStatus == .authorized {
             PhotosPicker(
                 selection: $pickerSelection,

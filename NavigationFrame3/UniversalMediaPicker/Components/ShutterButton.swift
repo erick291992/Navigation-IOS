@@ -14,9 +14,11 @@ struct ShutterButton: View {
     let mode: Mode
     let action: () -> Void
 
+    @State private var tapTrigger = 0
+
     var body: some View {
         Button(action: {
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            tapTrigger += 1
             action()
         }) {
             ZStack {
@@ -40,5 +42,6 @@ struct ShutterButton: View {
             }
         }
         .buttonStyle(ScaleButtonStyle())
+        .sensoryFeedback(.impact(weight: .medium), trigger: tapTrigger)
     }
 }

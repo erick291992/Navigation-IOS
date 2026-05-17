@@ -26,6 +26,10 @@ public class EliteGeometricPickerViewModel {
     public var isRecording = false
     public var previewAsset: PHAsset?
     public var previewHistoryItem: MediaItem?
+    /// Incremented when the user tries to add beyond `selectionLimit`.
+    /// View binds `.sensoryFeedback(.error, trigger: rejectionCount)` so
+    /// the haptic stays in the view layer.
+    public var rejectionCount: Int = 0
     public var zoomFactor: CGFloat { cameraService.zoomFactor }
     public var availableZoomFactors: [CGFloat] { cameraService.availableZoomFactors }
     
@@ -114,7 +118,7 @@ public class EliteGeometricPickerViewModel {
                     selectedAssets.append(asset)
                     previewAsset = asset
                 } else {
-                    UINotificationFeedbackGenerator().notificationOccurred(.error)
+                    rejectionCount += 1
                 }
             }
         } else {

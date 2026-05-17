@@ -10,7 +10,11 @@ public struct EliteGeometricPickerView: View {
     @State private var viewModel: EliteGeometricPickerViewModel
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismiss) private var dismiss
-    
+
+    @State private var cancelTrigger = 0
+    @State private var nextTrigger = 0
+    @State private var limitedPickerTrigger = 0
+
     public init(
         configuration: MediaPickerConfiguration,
         onCompletion: @escaping ([MediaItem]) -> Void,
@@ -79,9 +83,9 @@ public struct EliteGeometricPickerView: View {
                 // MARK: - Premium Navbar (Pro Max Hardened)
                 ZStack {
                     HStack {
-                        Button(action: { 
-                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                            viewModel.onCancelAction() 
+                        Button(action: {
+                            cancelTrigger += 1
+                            viewModel.onCancelAction()
                             dismiss()
                         }) {
                             Image(systemName: "xmark")
@@ -97,9 +101,9 @@ public struct EliteGeometricPickerView: View {
                         
                         Spacer()
                         
-                        Button(action: { 
-                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                            viewModel.handleNext() 
+                        Button(action: {
+                            nextTrigger += 1
+                            viewModel.handleNext()
                         }) {
                             Text("Next")
                                 .font(.system(size: 16, weight: .bold))
@@ -142,6 +146,15 @@ public struct EliteGeometricPickerView: View {
         .onChange(of: viewModel.selection) { _, items in
             viewModel.handleSystemPickerSelection(items)
         }
+        // .sensoryFeedback bundle — fires on natural state changes (mode, zoom,
+        // selection, rejection) and on counter increments for discrete events.
+        .sensoryFeedback(.selection, trigger: viewModel.selectedMode)
+        .sensoryFeedback(.selection, trigger: viewModel.zoomFactor)
+        .sensoryFeedback(.selection, trigger: viewModel.selectedAssets)
+        .sensoryFeedback(.error, trigger: viewModel.rejectionCount)
+        .sensoryFeedback(.impact(weight: .light), trigger: cancelTrigger)
+        .sensoryFeedback(.impact(weight: .medium), trigger: nextTrigger)
+        .sensoryFeedback(.impact(weight: .light), trigger: limitedPickerTrigger)
     }
     
     // MARK: - Mode Strip
@@ -151,7 +164,6 @@ public struct EliteGeometricPickerView: View {
                 Spacer().frame(width: 8)
                 ForEach(EliteGeometricPickerViewModel.CreatorMode.allCases, id: \.self) { mode in
                     Button(action: {
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         viewModel.selectMode(mode)
                     }) {
                         Text(mode.rawValue)
@@ -229,7 +241,6 @@ public struct EliteGeometricPickerView: View {
         HStack(spacing: 8) {
             ForEach(viewModel.availableZoomFactors, id: \.self) { factor in
                 Button(action: {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     viewModel.setZoom(factor)
                 }) {
                     Text(String(format: "%.1fx", factor))
@@ -310,7 +321,6 @@ public struct EliteGeometricPickerView: View {
                     .clipped()
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                         withAnimation {
                             viewModel.toggleAsset(asset)
                         }
@@ -321,7 +331,7 @@ public struct EliteGeometricPickerView: View {
             // MARK: - Limited Access Footer
             if viewModel.authStatus == .limited {
                 Button(action: {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    limitedPickerTrigger += 1
                     viewModel.openLimitedPicker()
                 }) {
                     VStack(spacing: 4) {

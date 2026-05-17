@@ -17,7 +17,6 @@ struct ZoomDialView: View {
             if isExpanded {
                 ForEach(availableZoomFactors, id: \.self) { factor in
                     Button(action: {
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         onSelectZoom(factor)
                         isExpanded = false
                     }) {
@@ -32,7 +31,6 @@ struct ZoomDialView: View {
                 }
             } else {
                 Button(action: {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                         isExpanded = true
                     }
@@ -52,5 +50,11 @@ struct ZoomDialView: View {
         )
         .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isExpanded)
+        // Zoom value changes are inherently a "selection" event — natural
+        // alignment with .selection feedback. Fires when the chosen factor
+        // changes (collapse-to-expand doesn't fire on its own — separate
+        // trigger for that on `isExpanded` below).
+        .sensoryFeedback(.selection, trigger: currentZoom)
+        .sensoryFeedback(.impact(weight: .light), trigger: isExpanded)
     }
 }

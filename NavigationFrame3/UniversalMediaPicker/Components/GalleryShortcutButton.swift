@@ -25,6 +25,8 @@ struct GalleryShortcutButton: View {
     /// Fires for limited, denied, restricted. Authorized uses PhotosPicker.
     let onLimitedOrDeniedTap: () -> Void
 
+    @State private var tapTrigger = 0
+
     var body: some View {
         if authStatus == .authorized {
             PhotosPicker(
@@ -37,14 +39,13 @@ struct GalleryShortcutButton: View {
             .buttonStyle(.plain)
         } else {
             Button(action: {
-                // TODO: restore haptic feedback once Core Haptics pre-warm
-                // is solved without re-introducing the first-tap stall.
-                // Same root cause as the cell + previewer-tap TODOs.
+                tapTrigger += 1
                 onLimitedOrDeniedTap()
             }) {
                 buttonContent
             }
             .disabled(authStatus == .notDetermined)
+            .sensoryFeedback(.impact(weight: .light), trigger: tapTrigger)
         }
     }
 
@@ -65,7 +66,6 @@ struct GalleryShortcutButton: View {
                         RoundedRectangle(cornerRadius: 10)
                             .stroke(Color.white.opacity(0.6), lineWidth: 2)
                     )
-                    .allowsHitTesting(false)
             } else if authStatus == .denied || authStatus == .restricted {
                 deniedState
             } else if authStatus == .authorized || authStatus == .limited {
@@ -74,6 +74,12 @@ struct GalleryShortcutButton: View {
                 placeholderState
             }
         }
+        // Explicit hit-test shape so `PhotosPicker` (and the limited/denied
+        // `Button`) get the full 48x48 tap target. Without this, the label's
+        // hit area can shrink to the image's visible bounds and miss
+        // user taps on the rounded-corner gaps.
+        .frame(width: 48, height: 48)
+        .contentShape(Rectangle())
     }
 
     private var deniedState: some View {
