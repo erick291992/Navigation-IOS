@@ -11,12 +11,12 @@ public class EliteGeometricPickerViewModel {
     private let onCompletion: ([MediaItem]) -> Void
     private let onCancel: () -> Void
     
-    // MARK: - Services
-    public let cameraService = CameraService.shared
-    public let photoKit = PhotoKitService.shared
-    private let historyManager = MediaHistoryManager.shared
-    private let pickerEngine = MediaPickerEngine.shared
-    private let pickerManager = MediaPickerManager.shared
+    // MARK: - Services (constructor-default DI; production omits, tests inject)
+    public let cameraService: CameraService
+    public let photoKit: PhotoKitService
+    private let historyManager: MediaHistoryManager
+    private let pickerEngine: MediaPickerEngine
+    private let pickerManager: MediaPickerManager
     @ObservationIgnored private var tasks: [Task<Void, Never>] = []
     
     // MARK: - Internal State
@@ -48,10 +48,20 @@ public class EliteGeometricPickerViewModel {
     
     public init(
         configuration: MediaPickerConfiguration,
+        cameraService: CameraService = .shared,
+        photoKit: PhotoKitService = .shared,
+        historyManager: MediaHistoryManager = .shared,
+        pickerEngine: MediaPickerEngine = .shared,
+        pickerManager: MediaPickerManager = .shared,
         onCompletion: @escaping ([MediaItem]) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.configuration = configuration
+        self.cameraService = cameraService
+        self.photoKit = photoKit
+        self.historyManager = historyManager
+        self.pickerEngine = pickerEngine
+        self.pickerManager = pickerManager
         self.onCompletion = onCompletion
         self.onCancel = onCancel
     }

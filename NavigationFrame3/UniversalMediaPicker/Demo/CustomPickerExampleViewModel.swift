@@ -8,8 +8,12 @@ import PhotosUI
 @Observable
 class CustomPickerExampleViewModel {
 
-    // MARK: - Services
-    private let engine = MediaPickerEngine.shared
+    // MARK: - Services (constructor-default DI)
+    private let engine: MediaPickerEngine
+
+    init(engine: MediaPickerEngine = .shared) {
+        self.engine = engine
+    }
 
     // MARK: - Published State
     var finishedItems: [MediaItem] = []       // Final results the dev consumes

@@ -10,8 +10,8 @@ import Observation
 @Observable
 class AdvancedPickerExampleViewModel {
     
-    // Core Managers
-    private let engine = MediaPickerEngine.shared
+    // Core Managers (constructor-default DI)
+    private let engine: MediaPickerEngine
     
     // We leverage AssetGridViewModel simply as a pure data source for PHAssets
     // meaning the developer doesn't have to write lower-level PhotoKit fetching logic themselves.
@@ -32,8 +32,9 @@ class AdvancedPickerExampleViewModel {
         case cropping(index: Int, total: Int)
     }
     
-    init(maxSelection: Int = 3) {
+    init(maxSelection: Int = 3, engine: MediaPickerEngine = .shared) {
         self.maxSelection = maxSelection
+        self.engine = engine
         self.gridModel = AssetGridViewModel(selectionLimit: maxSelection)
         self.gridModel.trigger(.loadInitialData) // Fetch photos immediately
     }

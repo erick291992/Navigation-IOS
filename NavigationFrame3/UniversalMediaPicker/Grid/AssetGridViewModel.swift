@@ -48,7 +48,7 @@ public struct AssetGridState {
 @MainActor
 @Observable
 public final class AssetGridViewModel: NSObject {
-    private let photoKit = PhotoKitService.shared
+    private let photoKit: PhotoKitService
     public let selectionLimit: Int
 
     public var state = AssetGridState()
@@ -59,8 +59,9 @@ public final class AssetGridViewModel: NSObject {
     /// `@Observable`; views never see it.
     @ObservationIgnored private var lastLoadedAlbum: PhotoLibraryService.AlbumInfo?
 
-    public init(selectionLimit: Int = 1) {
+    public init(selectionLimit: Int = 1, photoKit: PhotoKitService = .shared) {
         self.selectionLimit = selectionLimit
+        self.photoKit = photoKit
         super.init()
         // Restore selection from the cache so user-tapped photos survive
         // SwiftUI's upstream identity churn (see AssetGridSelectionCache).

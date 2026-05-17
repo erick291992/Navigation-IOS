@@ -16,10 +16,14 @@ import Observation
 @MainActor
 @Observable
 public final class LibraryViewfinderViewModel {
-    private let photoKit = PhotoKitService.shared
+    private let photoKit: PhotoKitService
 
     /// Per-VM loading flag for the recents fetch the VM itself initiates.
     public var isLoadingRecents = false
+
+    public init(photoKit: PhotoKitService = .shared) {
+        self.photoKit = photoKit
+    }
 
     // MARK: - Computed proxies
 

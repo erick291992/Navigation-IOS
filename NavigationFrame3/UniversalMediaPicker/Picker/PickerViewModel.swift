@@ -33,12 +33,17 @@ public final class PickerViewModel {
     private let onCancel: () -> Void
 
     // MARK: - Services (private — VMs forward, views never see)
+    //
+    // Constructor-default DI: production callers omit these params and get
+    // the `.shared` singletons; tests inject mocks via `init(...,
+    // photoKit: mockPhotoKit, ...)` without touching the type. No call-site
+    // changes needed when the rule is unified across the picker.
 
-    private let cameraService = CameraService.shared
-    private let photoKit = PhotoKitService.shared
-    private let historyManager = MediaHistoryManager.shared
-    private let pickerEngine = MediaPickerEngine.shared
-    private let pickerManager = MediaPickerManager.shared
+    private let cameraService: CameraService
+    private let photoKit: PhotoKitService
+    private let historyManager: MediaHistoryManager
+    private let pickerEngine: MediaPickerEngine
+    private let pickerManager: MediaPickerManager
 
     // MARK: - Cross-cutting picker state (the truth source for parameters down)
 
@@ -59,10 +64,20 @@ public final class PickerViewModel {
 
     public init(
         configuration: MediaPickerConfiguration,
+        cameraService: CameraService = .shared,
+        photoKit: PhotoKitService = .shared,
+        historyManager: MediaHistoryManager = .shared,
+        pickerEngine: MediaPickerEngine = .shared,
+        pickerManager: MediaPickerManager = .shared,
         onCompletion: @escaping ([MediaItem]) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.configuration = configuration
+        self.cameraService = cameraService
+        self.photoKit = photoKit
+        self.historyManager = historyManager
+        self.pickerEngine = pickerEngine
+        self.pickerManager = pickerManager
         self.onCompletion = onCompletion
         self.onCancel = onCancel
     }

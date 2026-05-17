@@ -10,7 +10,11 @@ import Observation
 @MainActor
 @Observable
 public final class CameraViewfinderViewModel {
-    private let cameraService = CameraService.shared
+    private let cameraService: CameraService
+
+    public init(cameraService: CameraService = .shared) {
+        self.cameraService = cameraService
+    }
 
     // MARK: - Computed proxies (no state owned here)
 
