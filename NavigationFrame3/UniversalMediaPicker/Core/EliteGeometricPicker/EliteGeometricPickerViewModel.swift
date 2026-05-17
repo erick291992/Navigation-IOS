@@ -15,6 +15,8 @@ public class EliteGeometricPickerViewModel {
     public let cameraService = CameraService.shared
     public let photoKit = PhotoKitService.shared
     private let historyManager = MediaHistoryManager.shared
+    private let pickerEngine = MediaPickerEngine.shared
+    private let pickerManager = MediaPickerManager.shared
     @ObservationIgnored private var tasks: [Task<Void, Never>] = []
     
     // MARK: - Internal State
@@ -143,7 +145,7 @@ public class EliteGeometricPickerViewModel {
         } else if selectedMode == .library {
             let assetsToProcess = selectedAssets.isEmpty ? (previewAsset.map { [$0] } ?? []) : Array(selectedAssets)
             let task = Task {
-                if let processed = try? await MediaPickerEngine.shared.process(assetsToProcess) {
+                if let processed = try? await pickerEngine.process(assetsToProcess) {
                     await MainActor.run {
                         self.processedItems = processed
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
@@ -179,7 +181,7 @@ public class EliteGeometricPickerViewModel {
         cameraService.capture { [weak self] image in
             guard let self = self, let image = image else { return }
             let task = Task {
-                if let processed = try? await MediaPickerManager.shared.process(image) {
+                if let processed = try? await self.pickerManager.process(image) {
                     await MainActor.run {
                         self.processedItems = [processed]
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
@@ -195,7 +197,7 @@ public class EliteGeometricPickerViewModel {
     public func handleSystemPickerSelection(_ items: [PhotosPickerItem]) {
         guard !items.isEmpty else { return }
         let task = Task {
-            if let results = try? await MediaPickerManager.shared.process(items) {
+            if let results = try? await pickerManager.process(items) {
                 await MainActor.run {
                     onCompletion(results)
                 }

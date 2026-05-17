@@ -7,6 +7,7 @@ import Observation
 public class CropFlowViewModel {
     // MARK: - Configuration & Callbacks
     private let manager: MediaPickerManager
+    private let historyManager: MediaHistoryManager
     private let configuration: MediaPickerConfiguration
     private var onCompletion: ([MediaItem]) -> Void
     private var onCancel: () -> Void
@@ -29,11 +30,13 @@ public class CropFlowViewModel {
         configuration: MediaPickerConfiguration,
         initialItems: [MediaItem] = [],
         manager: MediaPickerManager = .shared,
+        historyManager: MediaHistoryManager = .shared,
         onCompletion: @escaping ([MediaItem]) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.configuration = configuration
         self.manager = manager
+        self.historyManager = historyManager
         self.onCompletion = onCompletion
         self.onCancel = onCancel
         self.items = initialItems
@@ -113,7 +116,7 @@ public class CropFlowViewModel {
             return nil
         }
         
-        MediaHistoryManager.shared.addToHistory(finalItems)
+        historyManager.addToHistory(finalItems)
         onCompletion(finalItems)
         items = []
         croppedResults = [:]

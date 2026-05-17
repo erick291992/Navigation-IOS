@@ -7,7 +7,10 @@ import PhotosUI
 
 @Observable
 class CustomPickerExampleViewModel {
-    
+
+    // MARK: - Services
+    private let engine = MediaPickerEngine.shared
+
     // MARK: - Published State
     var finishedItems: [MediaItem] = []       // Final results the dev consumes
     var flowState: FlowState = .idle
@@ -37,7 +40,7 @@ class CustomPickerExampleViewModel {
         
         Task {
             do {
-                let processed = try await MediaPickerEngine.shared.process(items)
+                let processed = try await engine.process(items)
                 await MainActor.run {
                     self.photosSelection = []     // Reset picker
                     self.itemsToCrop = processed
@@ -58,7 +61,7 @@ class CustomPickerExampleViewModel {
         flowState = .processing
         Task {
             do {
-                let item = try await MediaPickerEngine.shared.process(image)
+                let item = try await engine.process(image)
                 await MainActor.run {
                     self.itemsToCrop = [item]
                     self.croppedResults = [:]
@@ -73,7 +76,7 @@ class CustomPickerExampleViewModel {
     /// Called when CropView finishes cropping one image.
     func didFinishCrop(_ croppedImage: UIImage, at index: Int) {
         Task {
-            let result = try? await MediaPickerEngine.shared.process(croppedImage)
+            let result = try? await engine.process(croppedImage)
             await MainActor.run {
                 if let result = result {
                     self.croppedResults[index] = result.thumbnail
