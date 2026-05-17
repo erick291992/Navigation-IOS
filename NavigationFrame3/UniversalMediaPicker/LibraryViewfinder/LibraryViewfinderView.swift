@@ -37,7 +37,11 @@ struct LibraryViewfinderView: View {
         Group {
             if viewModel.authStatus == .denied || viewModel.authStatus == .restricted {
                 PermissionNeededView(type: .library, accentColor: accentColor)
-            } else if viewModel.isLoadingRecents {
+            } else if viewModel.loadPhase != .loaded {
+                // `.idle` (haven't tried yet — first frame before .task fires)
+                // and `.loading` (fetch in flight) both show the spinner.
+                // Prevents the one-frame "No Recent Photos" flash that the
+                // earlier `isLoadingRecents`-only condition allowed.
                 ProgressView()
                     .tint(.white.opacity(0.7))
             } else if !viewModel.hasRecents {

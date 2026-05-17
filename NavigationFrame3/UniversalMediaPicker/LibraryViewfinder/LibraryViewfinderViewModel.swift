@@ -18,11 +18,26 @@ import Observation
 public final class LibraryViewfinderViewModel {
     private let photoKit: PhotoKitService
 
-    /// Per-VM loading flag for the recents fetch the VM itself initiates.
-    public var isLoadingRecents = false
+    /// Load progress for recents. One state variable, three explicit
+    /// states — replaces an earlier two-boolean shape (isLoadingRecents +
+    /// hasAttemptedLoad) that had four combinations but only three valid
+    /// ones. Mirrors Apple's `AsyncImage.Phase` idiom: idle → loading →
+    /// loaded, no impossible "loaded but still loading" combo
+    /// representable.
+    public enum LoadPhase: Equatable {
+        case idle      // not yet attempted (view shows spinner)
+        case loading   // fetch in flight (view shows spinner)
+        case loaded    // attempted; data lives in `recentAssets` (or doesn't, if genuinely empty)
+    }
+
+    public var loadPhase: LoadPhase
 
     public init(photoKit: PhotoKitService = .shared) {
         self.photoKit = photoKit
+        // If the modifier's prewarm already populated recents before this
+        // VM mounted, skip `.idle` entirely — no spinner flash, view
+        // renders the previewer on its very first frame.
+        self.loadPhase = photoKit.recentAssets.isEmpty ? .idle : .loaded
     }
 
     // MARK: - Computed proxies
@@ -48,15 +63,23 @@ public final class LibraryViewfinderViewModel {
         photoKit.openLimitedPicker()
     }
 
-    /// Called from the view's `.task`. Idempotent — guards on data presence
-    /// so warm caches (from the modifier prewarm) don't trigger a duplicate
-    /// fetch and spurious spinner.
+    /// Called from the view's `.task`. Idempotent — re-entry while
+    /// `.loaded` is a no-op. Always settles `loadPhase` to `.loaded` on
+    /// exit (including early-return guards) so the view can transition
+    /// out of its initial spinner state regardless of which branch we took.
     public func loadRecentsIfNeeded() async {
-        guard !hasRecents else { return }
-        guard authStatus == .authorized || authStatus == .limited else { return }
-        isLoadingRecents = true
-        defer { isLoadingRecents = false }
+        guard loadPhase != .loaded else { return }     // already settled
+        guard authStatus == .authorized || authStatus == .limited else {
+            loadPhase = .loaded                          // no auth to fetch — attempt is done
+            return
+        }
+        guard !hasRecents else {
+            loadPhase = .loaded                          // warm prewarm raced past us
+            return
+        }
+        loadPhase = .loading
         await photoKit.fetchRecentAssets()
+        loadPhase = .loaded
     }
 
     // MARK: - Previewer image (called by LibraryViewfinderView per previewer)
