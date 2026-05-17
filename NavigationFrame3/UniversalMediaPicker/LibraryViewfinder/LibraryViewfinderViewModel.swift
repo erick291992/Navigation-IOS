@@ -1,5 +1,6 @@
 import Foundation
 import Photos
+import UIKit
 import Observation
 
 /// `@MainActor @Observable` view model for `LibraryViewfinderView`.
@@ -52,5 +53,29 @@ public final class LibraryViewfinderViewModel {
         isLoadingRecents = true
         defer { isLoadingRecents = false }
         await photoKit.fetchRecentAssets()
+    }
+
+    // MARK: - Previewer image (called by LibraryViewfinderView per previewer)
+
+    /// Synchronous thumbnail peek. The view passes the result to
+    /// `LibraryPreviewer` as `initialImage` so the previewer paints on its
+    /// first frame without an async hop (and flips to a tapped asset's
+    /// cached image instantly while the high-res upgrade loads).
+    public func thumbnail(for asset: PHAsset?) -> UIImage? {
+        guard let asset else { return nil }
+        return photoKit.cachedThumbnail(for: asset)
+    }
+
+    /// Async high-res fetch for the previewer at `previewerTargetSize`.
+    /// The view passes this as `loadAsync`; the previewer awaits it in
+    /// `.task(id:)`, which auto-cancels when the displayed asset changes
+    /// (user tapped a different grid cell) and starts a new fetch keyed
+    /// to the new asset.
+    public func requestThumbnail(for asset: PHAsset) async -> UIImage? {
+        await withCheckedContinuation { continuation in
+            photoKit.loadThumbnail(for: asset, size: PhotoKitService.previewerTargetSize) { image in
+                continuation.resume(returning: image)
+            }
+        }
     }
 }

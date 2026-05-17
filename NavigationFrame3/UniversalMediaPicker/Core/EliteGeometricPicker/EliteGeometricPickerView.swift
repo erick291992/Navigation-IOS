@@ -185,7 +185,11 @@ public struct EliteGeometricPickerView: View {
                     if viewModel.authStatus == .denied || viewModel.authStatus == .restricted {
                         PermissionNeededView(type: .library, accentColor: viewModel.configuration.style.accentColor)
                     } else if let asset = viewModel.previewAsset ?? viewModel.recentAssets.first {
-                        LibraryPreviewer(asset: asset)
+                        LibraryPreviewer(
+                            assetID: asset.localIdentifier,
+                            initialImage: viewModel.thumbnail(for: asset),
+                            loadAsync: { await viewModel.requestThumbnail(for: asset) }
+                        )
                             .id(asset.localIdentifier)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {

@@ -207,4 +207,24 @@ public class EliteGeometricPickerViewModel {
     public func openLimitedPicker() {
         photoKit.openLimitedPicker()
     }
+
+    // MARK: - Previewer image (called by EliteGeometricPickerView per previewer)
+
+    /// Synchronous thumbnail peek — parent feeds the result to
+    /// `LibraryPreviewer.initialImage` for first-frame paint.
+    public func thumbnail(for asset: PHAsset?) -> UIImage? {
+        guard let asset else { return nil }
+        return photoKit.cachedThumbnail(for: asset)
+    }
+
+    /// Async high-res fetch at the previewer size. Parent passes a closure
+    /// wrapping this as `LibraryPreviewer.loadAsync`; the previewer awaits
+    /// it in `.task(id:)` for auto-cancel on asset change.
+    public func requestThumbnail(for asset: PHAsset) async -> UIImage? {
+        await withCheckedContinuation { continuation in
+            photoKit.loadThumbnail(for: asset, size: PhotoKitService.previewerTargetSize) { image in
+                continuation.resume(returning: image)
+            }
+        }
+    }
 }

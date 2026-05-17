@@ -201,13 +201,35 @@ public struct PermissionNeededView: View {
     }
 }
 
+/// Pure presentational previewer — knows nothing about PhotoKit or
+/// ThumbnailCache. The parent (LibraryViewfinderView) wires it to
+/// LibraryViewfinderViewModel, which routes through PhotoKitService.
+///
+/// Two image inputs (same shape as AssetThumbnailCell):
+/// - `initialImage`: parent-provided synchronous read (cache peek). Paints
+///   instantly when the displayed asset changes so the user sees the new
+///   image on the same frame as their tap.
+/// - `loadAsync`: parent-provided async upgrade loader. Fetches the
+///   high-res version (1000pt) and replaces `initialImage` when it arrives.
+///   Unlike the grid cell, this ALWAYS runs even when `initialImage`
+///   exists — the cached image is smaller (cell-sized) and we want to
+///   upgrade to the previewer's larger size.
+///
+/// `assetID` is the `.task(id:)` key. When it changes (user taps a
+/// different grid cell), SwiftUI cancels the in-flight upgrade and starts
+/// a new one against the new asset; the local `@State asyncLoaded` resets
+/// so `initialImage` (the new asset's cache peek) paints first.
 struct LibraryPreviewer: View {
-    let asset: PHAsset?
-    @State private var image: UIImage?
-    
+    let assetID: String?
+    let initialImage: UIImage?
+    let loadAsync: (() async -> UIImage?)?
+
+    @State private var asyncLoaded: UIImage?
+    private var displayImage: UIImage? { asyncLoaded ?? initialImage }
+
     var body: some View {
         ZStack {
-            if let image = image {
+            if let image = displayImage {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
@@ -218,26 +240,15 @@ struct LibraryPreviewer: View {
                 ProgressView().tint(.white)
             }
         }
-        .onChange(of: asset) { _, newValue in loadImage(for: newValue) }
-        .onAppear { loadImage(for: asset) }
-    }
-    
-    private func loadImage(for asset: PHAsset?) {
-        guard let asset = asset else { return }
-
-        // Paint the cached cell-sized thumbnail synchronously so the
-        // previewer flips images on the same frame as the tap. Otherwise
-        // the previewer waits 1-2s for the 1000pt high-res PHImageManager
-        // fetch and visually appears unresponsive. The cached image is
-        // smaller (~400px) but `.scaledToFill` makes the swap perceptually
-        // instant; the high-res replacement below upgrades sharpness when
-        // it arrives.
-        if let cached = ThumbnailCache.shared.object(forKey: ThumbnailCache.key(for: asset)) {
-            self.image = cached
-        }
-
-        PhotoKitService.shared.loadThumbnail(for: asset, size: CGSize(width: 1000, height: 1000)) { img in
-            if let img { self.image = img }
+        .task(id: assetID) {
+            // Reset so the new asset's `initialImage` (cached peek) paints
+            // immediately instead of leaving the previous tap's high-res
+            // image hanging while the new fetch runs.
+            asyncLoaded = nil
+            guard let loadAsync else { return }
+            if let loaded = await loadAsync() {
+                asyncLoaded = loaded
+            }
         }
     }
 }

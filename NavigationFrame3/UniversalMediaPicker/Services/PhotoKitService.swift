@@ -55,6 +55,12 @@ public final class PhotoKitService: NSObject {
     /// misses PhotoKit's warm pool and reintroduces the cold-start lag.
     public static let gridThumbnailTargetSize = CGSize(width: 400, height: 400)
 
+    /// Pixel size the library viewfinder's previewer requests. Larger than
+    /// the grid size so the top image is sharp at the ~48% viewfinder
+    /// height. Lives here as a constant so the previewer VM and any future
+    /// previewer prewarm reference the same number.
+    public static let previewerTargetSize = CGSize(width: 1000, height: 1000)
+
     public var recentAssets: [PHAsset] = []
     public var authStatus: PHAuthorizationStatus = .notDetermined
     public var albums: [PhotoLibraryService.AlbumInfo] = []

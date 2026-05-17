@@ -43,11 +43,18 @@ struct LibraryViewfinderView: View {
                     }
                 )
             } else {
-                LibraryPreviewer(asset: viewModel.displayAsset(preferring: previewAsset))
-                    .onTapGesture {
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        onOpenSystemPicker()
+                let displayedAsset = viewModel.displayAsset(preferring: previewAsset)
+                LibraryPreviewer(
+                    assetID: displayedAsset?.localIdentifier,
+                    initialImage: viewModel.thumbnail(for: displayedAsset),
+                    loadAsync: displayedAsset.map { asset in
+                        { await viewModel.requestThumbnail(for: asset) }
                     }
+                )
+                .onTapGesture {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    onOpenSystemPicker()
+                }
             }
         }
         .task {
