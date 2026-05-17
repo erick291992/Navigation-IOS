@@ -39,10 +39,9 @@ public class MediaPickerManager {
         let thumbnail = generateThumbnail(for: image)
         
         let mediaItem = MediaItem(data: data, thumbnail: thumbnail, contentType: .image, originalURL: nil)
-        // MediaHistoryManager.shared.addToHistory([mediaItem]) // REMOVED: Managed by Flow Controllers
         return mediaItem
     }
-    
+
     /// Processes an array of PhotosPickerItems into MediaItems.
     public func process(_ items: [PhotosPickerItem]) async throws -> [MediaItem] {
         var results: [MediaItem] = []
@@ -62,10 +61,9 @@ public class MediaPickerManager {
         let thumbnail = generateThumbnail(for: image)
         
         let mediaItem = MediaItem(data: data, thumbnail: thumbnail, contentType: .image, originalURL: nil)
-        // MediaHistoryManager.shared.addToHistory([mediaItem]) // REMOVED: Managed by Flow Controllers
         return mediaItem
     }
-    
+
     /// Processes a single PHAsset into a MediaItem.
     public func process(_ asset: PHAsset) async throws -> MediaItem {
         let image = await withCheckedContinuation { continuation in
@@ -112,7 +110,6 @@ public class MediaPickerManager {
         let thumbnail = UIImage(cgImage: cgImage)
         
         let mediaItem = MediaItem(data: data, thumbnail: thumbnail, contentType: .video, originalURL: url)
-        // MediaHistoryManager.shared.addToHistory([mediaItem]) // REMOVED: Managed by Flow Controllers
         return mediaItem
     }
     

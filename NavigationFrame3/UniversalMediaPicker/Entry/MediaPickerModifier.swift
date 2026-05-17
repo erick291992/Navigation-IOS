@@ -3,10 +3,12 @@ import PhotosUI
 
 // MARK: - Infrastructure Exception
 //
-// `MediaPickerModifier` is the picker module's entry-point ViewModifier. It
-// is the ONLY place in the picker module that calls services directly from
-// view code. The strict View → ViewModel → Service rule (see Coding
-// Conventions §1.7 of the rebuild plan) does not apply here because:
+// `MediaPickerModifier` is the picker module's entry-point ViewModifier and
+// one of TWO documented places in the module that calls services directly
+// from view code (the other being `CameraPreviewView`, the UIKit
+// `UIViewRepresentable` bridge for the live camera feed). The strict
+// View → ViewModel → Service rule documented in
+// `UniversalMediaPicker/DATA_FLOW_PATTERNS.md` does not apply here because:
 //
 // 1. The modifier fires BEFORE any picker ViewModel exists. The
 //    `PickerViewModel` is constructed inside the sheet's content closure when
@@ -18,7 +20,10 @@ import PhotosUI
 //    just move to a smaller surface. We accept the exception here and
 //    document it explicitly.
 //
-// Every other file in the picker module follows the strict rule.
+// Every other file in the picker module follows the strict rule. For the
+// full set of data-flow conventions (View → VM → Service, when to use
+// `@Binding` vs callbacks, why VMs are `@MainActor` but workers are
+// nonisolated, etc.), see `UniversalMediaPicker/DATA_FLOW_PATTERNS.md`.
 
 public struct MediaPickerModifier: ViewModifier {
     @Binding var isPresented: Bool
