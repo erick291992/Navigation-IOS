@@ -78,13 +78,19 @@ public final class PhotoKitService: NSObject {
 
     // MARK: - Prewarm (called by MediaPickerModifier infrastructure)
 
-    /// Warms the recent-assets cache when authorization is already granted.
-    /// Does NOT prompt — first-time users hit the auth prompt at their
-    /// intent moment (when they actually open the picker).
+    /// Warms recents + the album list when authorization is already
+    /// granted. Does NOT prompt — first-time users hit the auth prompt at
+    /// their intent moment (when they actually open the picker).
+    ///
+    /// Both warms run sequentially: recents first (fast, drives the
+    /// viewfinder + gallery shortcut), then the album list (powers the
+    /// dropdown). Running them sequentially keeps PhotoKit from
+    /// contending with itself on a single underlying queue.
     public func prewarm(limit: Int = 30) async {
         let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         guard status == .authorized || status == .limited else { return }
         await fetchRecentAssets(limit: limit)
+        await loadAlbumsIfNeeded()
     }
 
     // MARK: - Recent assets
