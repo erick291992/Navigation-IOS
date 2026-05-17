@@ -20,7 +20,14 @@ struct GalleryShortcutButton: View {
 
     var body: some View {
         Button(action: {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            // TODO: restore haptic feedback once Core Haptics pre-warm is
+            // solved without re-introducing the first-tap stall. Same root
+            // cause as AssetGridView's cell-tap TODO — first
+            // `UIImpactFeedbackGenerator(...).impactOccurred()` of a session
+            // cold-starts the Core Haptics engine and blocks main ~400-1000ms,
+            // which makes this 48x48 button visually stuck "pressed" until
+            // the system picker finally presents. Removed to match the cell
+            // decision; restore together when a measured prewarm exists.
             onTap()
         }) {
             ZStack {

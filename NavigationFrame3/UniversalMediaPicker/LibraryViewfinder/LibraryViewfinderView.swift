@@ -52,7 +52,13 @@ struct LibraryViewfinderView: View {
                     }
                 )
                 .onTapGesture {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    // TODO: restore haptic feedback once Core Haptics
+                    // pre-warm is solved without re-introducing the first-tap
+                    // stall. Same root cause as the cell + gallery-shortcut
+                    // TODOs — first `.impactOccurred()` of a session blocks
+                    // main ~400-1000ms cold-starting Core Haptics, making
+                    // the previewer tap visually unresponsive until the
+                    // system picker presents.
                     onOpenSystemPicker()
                 }
             }
