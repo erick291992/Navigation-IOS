@@ -63,6 +63,66 @@ Internal helpers (small structs used only inside one file) stay with their paren
 
 Not the other way around. You navigate to the feature, then the file describes the role within it.
 
+### Identifier naming — be descriptive at the call site
+
+**Avoid generic names** like `state`, `data`, `info`, `manager`, `helper`, `model`, `service` (when not the full type name), or single-word abbreviations of multi-word types. Generic names read fine *inside* the type that owns them but become ambiguous at call sites elsewhere.
+
+**Rule of thumb:** the name should be self-describing when read at any call site, without needing to look up the type.
+
+❌ **Bad** — generic, ambiguous at call site:
+```swift
+// Inside AssetGridViewModel:
+public var state = AssetGridState()       // ← "state" of what?
+
+// At call site (in AssetGridView.swift):
+viewModel.state.assets          // ambiguous — could be view's @State, SwiftUI state, …
+viewModel.state.selectedAssets
+viewModel.state.isLoading
+```
+
+```swift
+// Inside PickerViewModel:
+private let photoKit: PhotoKitService    // ← reads like Apple's framework
+
+// At call site:
+photoKit.loadAlbumsIfNeeded()    // is this Apple's PhotoKit or our service?
+```
+
+✅ **Good** — descriptive, self-explaining everywhere:
+```swift
+// Inside AssetGridViewModel:
+public var assetGridState = AssetGridState()    // ← name matches the type
+
+// At call site:
+viewModel.assetGridState.assets         // obviously the grid's own state struct
+viewModel.assetGridState.selectedAssets
+viewModel.assetGridState.isLoading
+```
+
+```swift
+// Inside PickerViewModel:
+private let photoKitService: PhotoKitService    // ← matches the type name
+
+// At call site:
+photoKitService.loadAlbumsIfNeeded()    // clearly our facade, not Apple's framework
+```
+
+**Common offenders to watch for:**
+
+| Generic | Better |
+|---|---|
+| `state` (when it's a struct of state) | `assetGridState`, `pickerState`, `flowState` |
+| `data` | `userData`, `responseData`, `mediaItemData` |
+| `info` | `albumInfo`, `errorInfo`, `deviceInfo` |
+| `manager` (when it's a Service) | The full type name — `mediaPickerManager` or `historyManager` |
+| `service` (when calling site needs disambiguation) | Domain-prefixed — `photoKitService`, `cameraService` |
+| `photoKit`, `mediaPicker`, `camera` (when the actual type is named `…Service` or `…Manager`) | Match the type — `photoKitService`, `mediaPickerManager`, `cameraService` |
+| Single-letter or abbreviated VMs (`vm`, `gm`) at call sites | Full name — `viewModel`, `gridModel` |
+
+**Why this matters more than it seems:** code is read at the call site, not at the declaration. A property named `state` reads fine on the line where it's declared (you can see the type next to it). On line 200 of another file, `viewModel.state.assets` is a small puzzle every time someone reads it. Descriptive names eliminate the puzzle without costing anything.
+
+**Exception — local variables in tight scope:** inside a 5-line function, `let state = ...` is fine because the type is visible right above. The rule is about properties/parameters that get accessed from elsewhere.
+
 ---
 
 ## 2. Separation of concerns — the View → ViewModel → Service rule
@@ -899,6 +959,8 @@ Use `// MARK: - Section` for any file with multiple logical sections (init, publ
 - ❌ Doing an unbounded fetch on the critical path when a bounded fast-path exists. See §3 "Bounded fast-path + background unbounded."
 - ❌ Async-fetching data inside a VM method when the same data is already sitting on the injected service. Read it synchronously in `init`. See §3 "Producer-consumer for warm state."
 - ❌ Setting initial state in `.onAppear` instead of `init`. `.onAppear` runs AFTER the first render → flicker. `init` runs BEFORE the first render → no flicker.
+- ❌ Generic property names like `state`, `data`, `info`, `manager` for properties that get read at remote call sites. Prefix with domain so `viewModel.state.assets` becomes `viewModel.assetGridState.assets`. See §1 "Identifier naming."
+- ❌ Stored-property name that doesn't match the type when the type has a meaningful suffix. `let photoKit: PhotoKitService` reads like Apple's framework at call sites. Match the type — `let photoKitService: PhotoKitService`.
 - ❌ Plural folder names for features (`Pickers/`, `Onboardings/`).
 - ❌ Multi-type files for public types (`Models.swift`, `Components.swift` grab-bags).
 - ❌ `// Added for ticket #X` or `// Used by Y` comments.
