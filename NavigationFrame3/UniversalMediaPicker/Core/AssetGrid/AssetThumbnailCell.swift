@@ -70,12 +70,24 @@ struct AssetThumbnailCell: View {
         }
         .contentShape(Rectangle())
         .task(id: source.id) {
+            let shouldLog = PickerPerfLog.shouldLogCell()
+            if shouldLog {
+                PickerPerfLog.event("gridCell.task → enter (initialImage=\(initialImage != nil), id=\(source.id.suffix(8)))")
+            }
             // Kick off the parent's async load only if we don't already have
             // an image to show and a loader was provided. `.task(id:)`
             // auto-cancels on cell recycle / disappear, so we don't waste
             // work loading thumbnails for cells that scrolled offscreen.
-            guard displayImage == nil, let loadAsync else { return }
+            guard displayImage == nil, let loadAsync else {
+                if shouldLog {
+                    PickerPerfLog.event("gridCell.task → skipped (cache hit, no async needed)")
+                }
+                return
+            }
             asyncLoaded = await loadAsync()
+            if shouldLog {
+                PickerPerfLog.event("gridCell.task → async loaded (id=\(source.id.suffix(8)))")
+            }
         }
     }
 

@@ -114,6 +114,11 @@ struct AssetGridView: View {
                 // Skip if we're in reuse mode — history is the data source there.
                 guard selectedMode != .reuse else { return }
                 if let newAlbum {
+                    PickerPerfLog.event("assetGridView.onChange(currentAlbum) → \(newAlbum.title)")
+                    // Reset the per-cell log counter so the next ~4 cells of the
+                    // new album are captured in the perf log without breaking the
+                    // session-cumulative timeline.
+                    PickerPerfLog.resetCellLogger()
                     viewModel.trigger(.selectAlbum(newAlbum))
                 }
             }

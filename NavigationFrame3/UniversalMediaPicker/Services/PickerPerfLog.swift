@@ -26,6 +26,12 @@ public enum PickerPerfLog {
     private static var lastEvent: CFAbsoluteTime = CFAbsoluteTimeGetCurrent()
     private static let queue = DispatchQueue(label: "picker.perflog")
 
+    /// Rate-limit per-cell `.task` logs so a 60-cell grid doesn't spam 180
+    /// lines per session. Counter resets on `reset(_:)` (sheet present) and
+    /// on `resetCellLogger()` (album switch).
+    private static var cellLogCount = 0
+    private static let cellLogLimit = 4
+
     public static func reset(_ label: String) {
         #if DEBUG
         guard isEnabled else { return }
@@ -33,8 +39,36 @@ public enum PickerPerfLog {
             let now = CFAbsoluteTimeGetCurrent()
             start = now
             lastEvent = now
+            cellLogCount = 0
             print("⏱ ── RESET: \(label) ──")
         }
+        #endif
+    }
+
+    /// Reset only the per-cell log counter without resetting the timeline.
+    /// Call this on album switch so the next ~4 cells of the new album log
+    /// without breaking the cumulative session timeline.
+    public static func resetCellLogger() {
+        #if DEBUG
+        guard isEnabled else { return }
+        queue.sync { cellLogCount = 0 }
+        #endif
+    }
+
+    /// Returns `true` if the calling cell should emit perf-log lines.
+    /// Increments an internal counter; once `cellLogLimit` cells have
+    /// logged within the current reset window, subsequent calls return
+    /// `false` until the next reset. Thread-safe.
+    public static func shouldLogCell() -> Bool {
+        #if DEBUG
+        guard isEnabled else { return false }
+        return queue.sync {
+            guard cellLogCount < cellLogLimit else { return false }
+            cellLogCount += 1
+            return true
+        }
+        #else
+        return false
         #endif
     }
 
