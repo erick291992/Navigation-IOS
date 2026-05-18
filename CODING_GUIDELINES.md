@@ -387,6 +387,57 @@ If the answer is "the downstream framework's queue," parallelism won't help — 
 
 A `Task { … }` block with no stored handle is "fire-and-forget" in the worst sense — it survives the view dismissing, retains `self` until completion, and leaks if the work is slow. If you need fire-and-forget on a `@MainActor` VM, use the task-array pattern above. The only exception is short-lived Tasks on long-lived singletons (e.g., `CameraService.flipCamera`) where leak risk is bounded.
 
+### Bounded fast-path + background unbounded (the "hybrid fetch" pattern)
+
+When you have an operation that has both a **fast bounded variant** and a **slow unbounded variant** of the same work — and the caller wants the bounded result on the critical path but eventually needs the unbounded result for downstream operations — split into two phases:
+
+1. **PHASE 1 (critical path):** await the bounded variant. User waits for this.
+2. **PHASE 2 (background):** spawn a fire-and-forget `Task` that does the unbounded variant. Store the result in observable state for downstream use. User does NOT wait.
+
+If downstream operations need the full result and might run before PHASE 2 completes, **`await` the stored Task** in those operations — not `nil`-check the result and no-op.
+
+**The canonical example in this codebase: `AssetGridViewModel.loadAssets`.**
+
+```swift
+private func loadAssets(for album) async {
+    // PHASE 1 — bounded fetch, fast (top-K path), on critical path
+    let firstPage = await photoKitService.fetchAssets(in: album, limit: 60)
+    state.assets = firstPage.map { .phAsset($0) }
+    state.isLoading = false                                  // ← user sees grid here
+
+    // PHASE 2 — unbounded fetch, slow (full sort), off critical path
+    let task = Task { [weak self] in
+        guard let self else { return }
+        let fullResult = await self.photoKitService.fetchAssetsResult(in: album)
+        self.fetchResult = fullResult                        // ← used by pagination
+    }
+    self.pendingFullFetch = task
+    tasks.append(task)
+}
+
+// Downstream operation that needs PHASE 2's result:
+private func loadNextPageCore() async {
+    // If the user scrolled past page 1 before PHASE 2 finished, await it.
+    if fetchResult == nil, let pending = pendingFullFetch {
+        await pending.value
+    }
+    guard let result = fetchResult else { return }
+    // ... use result for pagination
+}
+```
+
+**When this pattern applies:**
+
+- PhotoKit / AVFoundation / URLSession calls where there's a `fetchLimit` (or equivalent) fast path AND an unbounded version
+- Any API where "give me the first N" is implemented differently from "give me everything"
+- Generally: any operation where the bounded variant is dramatically cheaper than the unbounded
+
+**Why this matters:** PhotoKit's `PHAsset.fetchAssets(in:options:)` is a real-world example of this asymmetry. With `fetchLimit: 60`, PhotoKit uses a top-K algorithm — finds the 60 most-recent items without sorting the rest. Without `fetchLimit`, it does a full `creationDate`-descending sort over the entire library (which can be 50k+ entries). On a 33k-library, measured: bounded ≈ 150-400ms, unbounded ≈ 41-1126ms (and the unbounded variant *also* hogs PhotoKit's queue, delaying other PhotoKit requests like the library previewer image fetch).
+
+**What this is NOT:** this is not the same as "just paginate." Pagination is *how you consume* the result; the hybrid is *how you fetch* it. You can have pagination without the hybrid (just do one unbounded fetch upfront) — but you'll pay the unbounded cost on the critical path.
+
+**Anti-pattern to avoid:** doing the unbounded fetch on the critical path "because it's lazy." A `PHFetchResult` is lazy about *materializing* `PHAsset` objects, but it's NOT lazy about *the sort*. The sort happens upfront over the entire matching set. Treating "lazy result" as "lazy fetch" was the mistake the first pagination iteration made; see `project_picker_perf_state.md` for the measurement.
+
 ### Equality-guarded setters
 
 Every `@Observable` setter cascades to all observers, even when the value didn't change. For frequently-written state, guard:
@@ -704,6 +755,7 @@ Use `// MARK: - Section` for any file with multiple logical sections (init, publ
 | Action method called from a button / gesture | Caller is sync; no completion to await | Sync method + internal `Task { … }` + `tasks` array + deinit cancel. See §3 "Fire-and-forget Task pattern." |
 | `async let` to parallelize two methods | Is the downstream framework serial? Does parallel cause Observable cascade bursts? | If yes to either → sequential `await`s. Parallel `@MainActor` `async let` is rarely net-positive. See §3 "When parallelism helps." |
 | Heavy CPU work inside a VM | Will it block main if not detached? | Wrap in `Task.detached(priority: .userInitiated) { … }.value`. Never put `@MainActor` on a class whose methods do heavy CPU. |
+| Fetch with a bounded-fast / unbounded-slow API split (PhotoKit, URLSession, etc.) | Does the caller need the bounded for first paint AND the unbounded for downstream? | Use the hybrid fast-path + background unbounded pattern. Critical-path consumer awaits bounded; downstream consumers await the stored background Task. |
 | Public type | Where does it live? | `Models/`, one type per file. |
 | Internal helper struct | Where does it live? | Same file as the view/VM that uses it. |
 | Flow stage (multi-step UX) | Sheet, NavigationStack, or single-ZStack? | Single ZStack with flow-state enum. |
@@ -729,6 +781,8 @@ Use `// MARK: - Section` for any file with multiple logical sections (init, publ
 - ❌ View props typed as framework types when primitives would do.
 - ❌ Cache keys that omit modification timestamps for editable resources.
 - ❌ Naive prefetch on a shared queue-backed framework without first checking whether more-visible content competes for the same queue.
+- ❌ Treating a "lazy" result type as a "lazy" fetch. `PHFetchResult` is lazy about materializing items but NOT about sorting them. Same trap exists for any API that says "lazy" in the name — read the docs for what's actually deferred.
+- ❌ Doing an unbounded fetch on the critical path when a bounded fast-path exists. See §3 "Bounded fast-path + background unbounded."
 - ❌ Plural folder names for features (`Pickers/`, `Onboardings/`).
 - ❌ Multi-type files for public types (`Models.swift`, `Components.swift` grab-bags).
 - ❌ `// Added for ticket #X` or `// Used by Y` comments.

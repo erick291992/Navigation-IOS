@@ -83,6 +83,15 @@ struct AssetGridView: View {
                             viewModel.trigger(.selectAsset(asset))
                             onAssetTap(asset)
                         }
+                        // Pagination sentinel — when the cell `sentinelBuffer`
+                        // positions before the end appears, ask the VM to
+                        // load the next page. View only compares IDs (O(1));
+                        // the VM owns the actual page-load orchestration.
+                        .onAppear {
+                            if asset.id == viewModel.sentinelAssetID {
+                                viewModel.loadNextPageIfNeeded()
+                            }
+                        }
                     }
                 }
                 // Selection-aware haptic: fires on .selection only when the

@@ -196,8 +196,26 @@ public final class PhotoKitService: NSObject {
     }
 
     /// Fetch the assets contained in a specific album.
+    /// **Prefer the paginated pair** (`fetchAssetsResult(in:)` +
+    /// `materialize(from:range:)`) for the grid — see those methods below.
     public func fetchAssets(in album: PhotoLibraryService.AlbumInfo, limit: Int = 200) async -> [PHAsset] {
         await library.fetchAssets(in: album.collection, limit: limit)
+    }
+
+    /// Facade for `PhotoLibraryService.fetchAssetsResult` — see that method
+    /// for the rationale on returning the lazy `PHFetchResult` instead of an
+    /// eager array. Used by `AssetGridViewModel` to paginate the grid.
+    public func fetchAssetsResult(in album: PhotoLibraryService.AlbumInfo) async -> PHFetchResult<PHAsset> {
+        await library.fetchAssetsResult(in: album.collection)
+    }
+
+    /// Facade for `PhotoLibraryService.materialize` — used to incrementally
+    /// pull batches of `PHAsset` out of a previously-fetched result.
+    public func materialize(
+        from result: PHFetchResult<PHAsset>,
+        range: Range<Int>
+    ) async -> [PHAsset] {
+        await library.materialize(from: result, range: range)
     }
 
     // MARK: - UIKit-bridged picker presentations

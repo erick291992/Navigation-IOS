@@ -100,6 +100,11 @@ public final class PhotoLibraryService {
     }
 
     /// Fetches up to `limit` assets from a specific album, newest first.
+    /// **Prefer `fetchAssetsResult(in:)` + `materialize(from:range:)` for the
+    /// grid** — that pair lets the caller paginate access to a large library
+    /// snapshot instead of materializing 200 PHAssets up front. This eager
+    /// version is kept for callers that genuinely want a finite, immediate
+    /// array (e.g., one-off code paths).
     public func fetchAssets(in collection: PHAssetCollection, limit: Int = 200) async -> [PHAsset] {
         let options = PHFetchOptions()
         options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
@@ -111,6 +116,36 @@ public final class PhotoLibraryService {
             assets.append(asset)
         }
         return assets
+    }
+
+    /// Returns the raw, lazy `PHFetchResult<PHAsset>` for an album with NO
+    /// fetch limit. `PHFetchResult` is a lazy snapshot — even a library with
+    /// 50k+ photos costs essentially nothing to fetch this way; the
+    /// individual `PHAsset` instances aren't materialized until you ask for
+    /// them by index via `materialize(from:range:)`.
+    ///
+    /// Use this for pagination: keep the result, materialize a page of 60
+    /// up front, materialize the next 60 when the user scrolls near the end.
+    /// Once held, the snapshot's ordering is stable until you refetch.
+    public func fetchAssetsResult(in collection: PHAssetCollection) async -> PHFetchResult<PHAsset> {
+        let options = PHFetchOptions()
+        options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        return PHAsset.fetchAssets(in: collection, options: options)
+    }
+
+    /// Materializes a contiguous slice of a `PHFetchResult` into a concrete
+    /// `[PHAsset]` array. Off main per SE-0338 (this is a nonisolated async
+    /// function on a nonisolated class). `range` is clamped to the result's
+    /// bounds — passing past-the-end ranges is safe and just returns fewer
+    /// items.
+    public func materialize(
+        from result: PHFetchResult<PHAsset>,
+        range: Range<Int>
+    ) async -> [PHAsset] {
+        let clamped = range.lowerBound..<min(range.upperBound, result.count)
+        guard !clamped.isEmpty else { return [] }
+        let indexSet = IndexSet(integersIn: clamped)
+        return result.objects(at: indexSet)
     }
 
     /// Resolves `PHAsset` instances from local identifiers. Used after
