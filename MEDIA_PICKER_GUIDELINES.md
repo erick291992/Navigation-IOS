@@ -163,6 +163,60 @@ public func displayAsset(preferring preview: PHAsset?) -> PHAsset? {
 
 It just falls back to `recentAssets.first` if the parent somehow didn't pass a `previewAsset`. In practice the parent always does (init eager-sets it), so the fallback is a safety net rather than a primary path.
 
+### The three PhotoKit queries (side by side)
+
+There are **three** distinct PhotoKit fetches the picker issues — `recentAssets`, the grid's bounded first page, and the grid's unbounded pagination result. All three are rooted at "newest first" but they have different scopes, filters, and sizes:
+
+```
+QUERY 1 — recentAssets             QUERY 2 — grid page 1            QUERY 3 — grid pagination (lazy)
+──────────────────────────         ───────────────────────          ────────────────────────────────
+PHAsset.fetchAssets(               PHAsset.fetchAssets(             PHAsset.fetchAssets(
+    with: .image,                      in: currentAlbum,                in: currentAlbum,
+    options: {                         options: {                       options: {
+      sortDesc: creationDate↓            sortDesc: creationDate↓          sortDesc: creationDate↓
+      fetchLimit: 30                     fetchLimit: 60                   (NO fetchLimit — unbounded)
+    }                                  }                                }
+)                                  )                                )
+
+Scope: library-wide                Scope: one album                 Scope: one album
+Filter: images only                Filter: all media (img + video)  Filter: all media
+Size: 30 PHAssets                  Size: 60 PHAssets                Size: full result (lazy)
+Used by: previewer, gallery shortcut Used by: grid page 1           Used by: grid pagination
+                                                                      (materializes range 60..120,
+                                                                      120..180, etc.)
+```
+
+**There is no "skip the first" / offset logic.** The grid's page-1 fetch starts at index 0 of its sort order, not at index 1. So when the user is on Recents, `gridCells[0]` is the same PHAsset as `recentAssets[0]` whenever the most recent thing in the library is an image. The two queries return overlapping sets — the grid does NOT deduplicate against `recentAssets`. Each consumer issues its own fetch from scratch.
+
+**Pagination is not "fetch next 60 with offset" — it's "materialize a slice of the lazy result"** (query 3 above). `fetchAssetsResult` returns a `PHFetchResult<PHAsset>` over the whole album, lazy. `materialize(from: result, range: 60..<120)` extracts page 2; `range: 120..<180` extracts page 3. No offset arithmetic, no risk of cell 60 appearing twice across page boundaries. Page 1's first 60 (from query 2) are guaranteed equal to the first 60 of query 3's result because both share `sortDescriptors = [creationDate↓]`.
+
+### The "cell 0 paints instant" effect is incidental, not designed
+
+On cold sheet open, grid cell 0 paints instantly. The reason is subtle and worth knowing because it's an **implicit coupling** between two features that nothing forces to stay in sync:
+
+```
+T-2.5s   prewarmVisibleContent() step 2:
+           loadThumbnail(for: recentFirst, size: 1000×1000)
+         → ThumbnailCache key:   "<recentFirst.localIdentifier>|<modDate>"
+         → ThumbnailCache value: UIImage @ 1000×1000
+
+T=0      Grid cell 0 mounts. Its asset is gridCells[0].
+         Cell asks: cachedThumbnail(for: gridCells[0])
+         → ThumbnailCache lookup key: "<gridCells[0].localIdentifier>|<modDate>"
+
+         IF gridCells[0].localIdentifier == recentFirst.localIdentifier:
+             → CACHE HIT (the 1000pt image)
+             → Cell 0 paints instantly (downscaled visually to cell size)
+         ELSE:
+             → cache miss → cell 0 fires async fetch → trickles in with cells 1-59
+```
+
+When the user is on the Recents album AND the newest library asset is an image (not a video), `gridCells[0]` and `recentFirst` are the same `PHAsset` instance → same `ThumbnailCache` key → cell 0 hits cache. Otherwise (any other album; or Recents with a recent video first) cell 0 misses cache and trickles in like cells 1-59.
+
+This is a **happy accident**, not a designed feature. The previewer's prewarm is cached at a different size (1000pt) for a different consumer (the top viewfinder). Cell 0 benefits only because the cache key is per-asset, not per-size, and the largest-wins policy keeps the 1000pt entry — which is larger than the 400pt the grid would otherwise have cached. Step 2 of `prewarmVisibleContent` has an inline comment flagging this so future contributors don't break it accidentally by changing what the prewarm caches.
+
+If/when a deliberate per-cell prewarm ships (the deferred "16-cell prewarm" memo describes the plan), cell 0's instant-paint behavior will become a designed feature instead of a coincidence — but until then, treat it as "this works on Recents only because the universe aligned."
+
 ## Requirements
 
 - iOS 17+ (`.sensoryFeedback`, `@Observable`, `PhotosPicker`)

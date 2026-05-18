@@ -204,6 +204,16 @@ public final class PhotoKitService: NSObject {
         // 2. Pre-load library previewer's 1000pt bitmap into ThumbnailCache.
         //    When the picker mounts, LibraryViewfinderViewModel.thumbnail(for:)
         //    peeks the cache synchronously and paints on the first frame.
+        //
+        //    ⚠️ Implicit coupling: this cache write ALSO benefits the grid's
+        //    cell 0 on cold open. When the user is on the default Recents
+        //    album and the newest library asset is an image, `gridCells[0]`
+        //    shares a PHAsset identifier with `recentFirst` → same
+        //    ThumbnailCache key → cell 0 paints instantly via cache hit
+        //    (downscaled visually from 1000pt). Changing what this prewarm
+        //    caches (different asset, smaller size, or removing it) would
+        //    silently regress that effect. See MEDIA_PICKER_GUIDELINES.md
+        //    "The 'cell 0 paints instant' effect is incidental, not designed."
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             loadThumbnail(for: recentFirst, size: Self.previewerTargetSize) { _ in
                 continuation.resume()
