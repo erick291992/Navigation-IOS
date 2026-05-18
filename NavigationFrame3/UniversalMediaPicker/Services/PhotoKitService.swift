@@ -75,14 +75,15 @@ public final class PhotoKitService: NSObject {
     public static let gridInitialPageSize = 20
 
     /// How many of the initial-page cells to pre-decode into
-    /// `ThumbnailCache.shared` during prewarm. ≤ `gridInitialPageSize`.
-    /// Set to one viewport's worth (4 cols × 4 rows at typical sizes) so
-    /// the user's first visible content paints from cache on sheet open
-    /// rather than trickling in over PhotoKit's serial queue.
+    /// `ThumbnailCache.shared` during prewarm. Set equal to
+    /// `gridInitialPageSize` so the ENTIRE initial page is cache-hit on
+    /// sheet open — including the bottom row that sits just at the fold
+    /// (cells 17-19 at a 4-column grid are visible in the initial
+    /// viewport on many devices, so they need to be cache hits too).
     ///
-    /// Capped below the initial page so we never try to prewarm a cell
+    /// Must be ≤ `gridInitialPageSize`; we never try to prewarm a cell
     /// that wasn't fetched in step 1.
-    public static let gridInitialPrewarmCount = 16
+    public static let gridInitialPrewarmCount = 20
 
     public var recentAssets: [PHAsset] = []
     public var authStatus: PHAuthorizationStatus = .notDetermined
