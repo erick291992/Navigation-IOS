@@ -47,7 +47,7 @@ class AdvancedPickerExampleViewModel {
     
     // The developer calls this when the user taps their custom "Next" button
     func processSelectedAssets() {
-        let assets = gridModel.state.selectedAssets
+        let assets = gridModel.assetGridState.selectedAssets
         guard !assets.isEmpty else { return }
         
         flowState = .processing

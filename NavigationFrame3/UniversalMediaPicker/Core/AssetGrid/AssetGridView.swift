@@ -62,14 +62,14 @@ struct AssetGridView: View {
             // matches the real grid's column count + spacing so the layout
             // doesn't shift when real cells take over. Modern iOS pattern:
             // Photos, Files, Mail all do this.
-            if viewModel.state.assets.isEmpty {
+            if viewModel.assetGridState.assets.isEmpty {
                 skeletonGrid
             } else {
                 LazyVGrid(
                     columns: Array(repeating: GridItem(.flexible(), spacing: gridStyle.spacing), count: gridStyle.columnCount),
                     spacing: gridStyle.spacing
                 ) {
-                    ForEach(viewModel.state.assets, id: \.id) { asset in
+                    ForEach(viewModel.assetGridState.assets, id: \.id) { asset in
                         AssetThumbnailCell(
                             source: asset.phAsset != nil ? .phAsset(asset.phAsset!) : .mediaItem(asset.mediaItem!),
                             gridStyle: gridStyle,
@@ -99,14 +99,14 @@ struct AssetGridView: View {
                 // change the array (toggleAssetSelection's guard rejects the
                 // append silently), so they don't fire. Same array, no haptic
                 // — exactly the UX requested.
-                .sensoryFeedback(.selection, trigger: viewModel.state.selectedAssets)
+                .sensoryFeedback(.selection, trigger: viewModel.assetGridState.selectedAssets)
             }
         }
         .task {
             // Initial selection from cache is already loaded by VM.init —
             // emit it once so the parent (PickerView) can sync its mirror
             // and the NEXT button reflects any restored selection.
-            onSelectionChange(viewModel.state.selectedAssets)
+            onSelectionChange(viewModel.assetGridState.selectedAssets)
         }
         .onChange(of: currentAlbum) { _, newAlbum in
             // Parent updated currentAlbum (dropdown selection or initial bootstrap).
@@ -129,7 +129,7 @@ struct AssetGridView: View {
                 }
             }
         }
-        .onChange(of: viewModel.state.selectedAssets) { _, newSelection in
+        .onChange(of: viewModel.assetGridState.selectedAssets) { _, newSelection in
             // Mirror selection up to the parent so PickerView's NEXT button
             // count + handleShutter/handleNextTapped see the same selection
             // the user just made. The VM has already written through to
@@ -137,13 +137,13 @@ struct AssetGridView: View {
             // observable mirror in sync.
             onSelectionChange(newSelection)
         }
-        .onChange(of: viewModel.state.assets.first?.id) { _, _ in
+        .onChange(of: viewModel.assetGridState.assets.first?.id) { _, _ in
             // Bubble the new first asset up so the parent can refresh the
             // top previewer to match the active album (Trigger 3 — switching
             // Recents → Favorites → Screenshots etc. follows in the previewer).
             // Fires on initial load too, but the parent's setPreview is
             // idempotent for the same identifier so no harm.
-            onFirstAssetChanged(viewModel.state.assets.first?.phAsset)
+            onFirstAssetChanged(viewModel.assetGridState.assets.first?.phAsset)
         }
     }
 

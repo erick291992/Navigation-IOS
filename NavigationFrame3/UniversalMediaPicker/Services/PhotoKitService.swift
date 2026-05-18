@@ -65,6 +65,13 @@ public final class PhotoKitService: NSObject {
     public var authStatus: PHAuthorizationStatus = .notDetermined
     public var albums: [PhotoLibraryService.AlbumInfo] = []
 
+    /// First album's pre-fetched 60 PHAssets, populated by `prewarmVisibleContent`.
+    /// `AssetGridViewModel.init` reads this so the grid mounts with cells
+    /// already populated — no empty-state flash, no async wait for the picker's
+    /// own `loadAssets` to fire. When prewarm hasn't completed yet (cold race),
+    /// this is empty and the grid's own async fetch fills it normally.
+    public var prewarmedFirstAlbumAssets: [PHAsset] = []
+
     private let library = PhotoLibraryService.shared
 
     /// PhotoKit's prefetcher. Tell it "I'm about to ask for these N assets
@@ -119,15 +126,28 @@ public final class PhotoKitService: NSObject {
 
     // MARK: - Prewarm (called by MediaPickerModifier infrastructure)
 
-    /// Warms recents + the album list when authorization is already
-    /// granted. Does NOT prompt — first-time users hit the auth prompt at
-    /// their intent moment (when they actually open the picker).
+    /// Warms the picker's full sheet-open state when authorization is
+    /// already granted. Does NOT prompt — first-time users hit the auth
+    /// prompt at their intent moment (when they actually open the picker).
     ///
-    /// Both warms run sequentially: recents first (fast, drives the
-    /// viewfinder + gallery shortcut), then the album list (powers the
-    /// dropdown). Running them sequentially keeps PhotoKit from
-    /// contending with itself on a single underlying queue.
-    public func prewarm(limit: Int = 30) async {
+    /// Sequential phases (each one feeds the next):
+    ///   1. `fetchRecentAssets` — populates `recentAssets` (PHAsset refs)
+    ///   2. `loadAlbumsIfNeeded` — populates `albums` (PHAssetCollection refs)
+    ///   3. (if `warmVisibleContent`) `prewarmVisibleContent` —
+    ///      pre-fetches the first album's grid page + pre-loads the
+    ///      library previewer's 1000pt bitmap + gallery shortcut's 140pt
+    ///      bitmap into `ThumbnailCache`.
+    ///
+    /// Phase 3 moves the cold-PhotoKit cost OFF the picker's sheet-open
+    /// critical path and ONTO the modifier-host's view appearance, which
+    /// typically gives the user 1-3+ seconds to navigate before tapping
+    /// "open picker." When they tap, PhotoKit is fully warm: grid fetch
+    /// returns from internal cache, previewer + gallery shortcut paint
+    /// synchronously from `ThumbnailCache`.
+    ///
+    /// `warmVisibleContent: false` is the opt-out for callers that want
+    /// only metadata warming (rare).
+    public func prewarm(limit: Int = 30, warmVisibleContent: Bool = true) async {
         PickerPerfLog.event("photoKit.prewarm → enter")
         let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         guard status == .authorized || status == .limited else {
@@ -138,6 +158,63 @@ public final class PhotoKitService: NSObject {
         PickerPerfLog.event("photoKit.prewarm → recents loaded (\(recentAssets.count))")
         await loadAlbumsIfNeeded()
         PickerPerfLog.event("photoKit.prewarm → albums loaded (\(albums.count))")
+
+        guard warmVisibleContent else { return }
+        await prewarmVisibleContent()
+    }
+
+    /// Pre-fetch the first album's grid page (60 PHAssets, top-K path) AND
+    /// pre-load the library previewer's 1000pt bitmap AND pre-load the
+    /// gallery shortcut's 140pt bitmap into `ThumbnailCache`. Called as the
+    /// third phase of `prewarm` by default.
+    ///
+    /// Sequential is intentional — same lesson as the picker's own
+    /// `bootstrap()`: running these in parallel via `async let` would
+    /// pile multiple PhotoKit requests onto the serial queue at once and
+    /// risk contending with other work. Sequential keeps the queue clean.
+    private func prewarmVisibleContent() async {
+        PickerPerfLog.event("photoKit.prewarm.visible → start")
+
+        let firstAlbum: PhotoLibraryService.AlbumInfo? = await MainActor.run { self.albums.first }
+        let recentFirst: PHAsset? = await MainActor.run { self.recentAssets.first }
+
+        guard let firstAlbum, let recentFirst else {
+            PickerPerfLog.event("photoKit.prewarm.visible → skipped (no album or recent)")
+            return
+        }
+
+        // 1. Pre-fetch first album's grid page using PhotoKit's top-K
+        //    fast path. Store the result on `prewarmedFirstAlbumAssets`
+        //    so `AssetGridViewModel.init` can read it synchronously and
+        //    mount with cells already populated.
+        let firstPage = await library.fetchAssets(in: firstAlbum.collection, limit: 60)
+        await MainActor.run {
+            setCachedAssets(firstPage, targetSize: Self.gridThumbnailTargetSize)
+            self.prewarmedFirstAlbumAssets = firstPage
+        }
+        PickerPerfLog.event("photoKit.prewarm.visible → first album fetched + warmed (\(firstPage.count))")
+
+        // 2. Pre-load library previewer's 1000pt bitmap into ThumbnailCache.
+        //    When the picker mounts, LibraryViewfinderViewModel.thumbnail(for:)
+        //    peeks the cache synchronously and paints on the first frame.
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            loadThumbnail(for: recentFirst, size: Self.previewerTargetSize) { _ in
+                continuation.resume()
+            }
+        }
+        PickerPerfLog.event("photoKit.prewarm.visible → previewer 1000pt warmed")
+
+        // 3. Pre-load gallery shortcut's 140pt bitmap. ThumbnailCache's
+        //    largest-wins policy means this usually returns from the 1000pt
+        //    cache hit above (downscaled visually by SwiftUI) — but we still
+        //    issue the request to populate any size-specific PhotoKit caches.
+        let galleryThumbSize = CGSize(width: 140, height: 140)
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            loadThumbnail(for: recentFirst, size: galleryThumbSize) { _ in
+                continuation.resume()
+            }
+        }
+        PickerPerfLog.event("photoKit.prewarm.visible → gallery thumb 140pt warmed")
     }
 
     // MARK: - Recent assets

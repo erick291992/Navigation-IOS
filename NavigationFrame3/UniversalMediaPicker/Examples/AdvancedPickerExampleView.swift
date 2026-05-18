@@ -72,9 +72,9 @@ struct AdvancedPickerExampleView: View {
                 // MARK: - Premium Grid
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: 1) {
-                        ForEach(vm.gridModel.state.assets, id: \.id) { asset in
-                            let isSelected = vm.gridModel.state.selectedAssets.contains(asset)
-                            let selectionIndex = vm.gridModel.state.selectedAssets.firstIndex(of: asset)
+                        ForEach(vm.gridModel.assetGridState.assets, id: \.id) { asset in
+                            let isSelected = vm.gridModel.assetGridState.selectedAssets.contains(asset)
+                            let selectionIndex = vm.gridModel.assetGridState.selectedAssets.firstIndex(of: asset)
                             
                             ZStack(alignment: .topTrailing) {
                                 // Image with scale-down bounce when selected
@@ -109,7 +109,7 @@ struct AdvancedPickerExampleView: View {
                             .clipped()
                             .contentShape(Rectangle())
                             .onTapGesture {
-                                if !isSelected && vm.gridModel.state.selectedAssets.count >= vm.maxSelection {
+                                if !isSelected && vm.gridModel.assetGridState.selectedAssets.count >= vm.maxSelection {
                                     rejectionTrigger += 1
                                 }
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
@@ -122,7 +122,7 @@ struct AdvancedPickerExampleView: View {
             }
             
             // MARK: - Floating Action Bar
-            if !vm.gridModel.state.selectedAssets.isEmpty {
+            if !vm.gridModel.assetGridState.selectedAssets.isEmpty {
                 VStack {
                     Spacer()
                     Button(action: vm.processSelectedAssets) {
@@ -132,7 +132,7 @@ struct AdvancedPickerExampleView: View {
                             
                             Spacer()
                             
-                            Text("\(vm.gridModel.state.selectedAssets.count)")
+                            Text("\(vm.gridModel.assetGridState.selectedAssets.count)")
                                 .font(.system(size: 14, weight: .black))
                                 .frame(width: 24, height: 24)
                                 .background(Color.black.opacity(0.2))
@@ -155,7 +155,7 @@ struct AdvancedPickerExampleView: View {
         .navigationBarHidden(true)
         // Selection-aware haptic: fires when the array actually changes.
         // At-limit no-op taps fire `.error` via rejectionTrigger instead.
-        .sensoryFeedback(.selection, trigger: vm.gridModel.state.selectedAssets)
+        .sensoryFeedback(.selection, trigger: vm.gridModel.assetGridState.selectedAssets)
         .sensoryFeedback(.error, trigger: rejectionTrigger)
         // MARK: - Modals
         .sheet(isPresented: Binding(

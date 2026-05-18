@@ -78,6 +78,22 @@ public final class PickerViewModel {
         self.pickerManager = pickerManager
         self.onCompletion = onCompletion
         self.onCancel = onCancel
+
+        // Eager-init from the prewarmed singleton cache. When the modifier's
+        // prewarm has already completed (the common case), PhotoKitService
+        // already holds recentAssets, albums, and the warm thumbnail bitmap
+        // for recents.first. Reading them at init time means our first body
+        // evaluation sees the warm content — no async wait, no "popping in."
+        // When prewarm hasn't completed (cold race), these reads return nil/
+        // empty and the existing async path (bootstrap → loadGalleryThumb)
+        // fills them later.
+        if let firstRecent = photoKitService.recentAssets.first {
+            self.previewAsset = firstRecent
+            self.galleryThumbImage = photoKitService.cachedThumbnail(for: firstRecent)
+        }
+        if let firstAlbum = photoKitService.albums.first {
+            self.currentAlbum = firstAlbum
+        }
     }
 
     // MARK: - Computed proxies (read by PickerView via the strict View → VM rule)

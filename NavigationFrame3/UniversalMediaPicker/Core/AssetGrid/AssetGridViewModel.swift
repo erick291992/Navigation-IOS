@@ -42,7 +42,7 @@ public struct AssetGridState {
 // (`[GridAsset]`). On `init`, the VM restores selection from the cache; on
 // every selection mutation, the VM writes through to the cache. The VM
 // instance itself is NOT cached — `AssetGridView` creates a fresh one each
-// time via plain `@State`. The grid's loaded `state.assets` is also not
+// time via plain `@State`. The grid's loaded `assetGridState.assets` is also not
 // cached (PhotoKit re-fetches are fast; skeleton UI bridges the brief
 // reload). See `AssetGridSelectionCache.swift` for the full rationale.
 @MainActor
@@ -51,7 +51,7 @@ public final class AssetGridViewModel: NSObject {
     private let photoKitService: PhotoKitService
     public let selectionLimit: Int
 
-    public var state = AssetGridState()
+    public var assetGridState = AssetGridState()
 
     /// Internal cache of the album most recently passed to `.selectAlbum` /
     /// `.loadInitialData`. Used only by the PhotoKit change observer's
@@ -122,7 +122,28 @@ public final class AssetGridViewModel: NSObject {
         super.init()
         // Restore selection from the cache so user-tapped photos survive
         // SwiftUI's upstream identity churn (see AssetGridSelectionCache).
-        state.selectedAssets = AssetGridSelectionCache.selection(for: selectionLimit)
+        assetGridState.selectedAssets = AssetGridSelectionCache.selection(for: selectionLimit)
+
+        // Eager-init from the prewarmed singleton cache. When the modifier's
+        // prewarm.visible has already pre-fetched the first album's 60
+        // PHAssets, mount the grid with them immediately — no empty-state
+        // flash, no async wait for `loadAssets`. When prewarm hasn't
+        // completed (cold race), this is empty and the normal async path
+        // (selectAlbum → loadAssets) fills it.
+        //
+        // **Also set `lastLoadedAlbum`** so `loadNextPageCore` and the
+        // PHPhotoLibraryChangeObserver refresh path work for this initial
+        // album. SwiftUI's `.onChange(of: currentAlbum)` only fires on
+        // CHANGES, never on the initial value — so without setting
+        // `lastLoadedAlbum` here, the trigger(.selectAlbum) chain that
+        // normally populates it would never fire, leaving pagination and
+        // library-change refreshes broken for the initial album.
+        let prewarmed = photoKitService.prewarmedFirstAlbumAssets
+        if !prewarmed.isEmpty, let firstAlbum = photoKitService.albums.first {
+            assetGridState.assets = prewarmed.map { .phAsset($0) }
+            lastLoadedAlbum = firstAlbum
+        }
+
         PHPhotoLibrary.shared().register(self)
     }
 
@@ -138,10 +159,10 @@ public final class AssetGridViewModel: NSObject {
     /// list. Computed in the VM so the view stays dumb — it just compares
     /// `asset.id == sentinelAssetID` (O(1)) and fires `loadNextPageIfNeeded()`.
     public var sentinelAssetID: String? {
-        let count = state.assets.count
+        let count = assetGridState.assets.count
         guard count > 0 else { return nil }
         let sentinelIndex = max(0, count - Self.sentinelBuffer)
-        return state.assets[sentinelIndex].id
+        return assetGridState.assets[sentinelIndex].id
     }
 
     // MARK: - Session lifecycle
@@ -151,8 +172,8 @@ public final class AssetGridViewModel: NSObject {
     /// sheet is dismissed so the next open starts clean.
     public func prepareForNewSession() {
         writeSelection([])
-        state.isMultiSelectActive = false
-        state.errorMessage = nil
+        assetGridState.isMultiSelectActive = false
+        assetGridState.errorMessage = nil
     }
 
     /// Static convenience for callers that don't have a VM instance handy
@@ -179,10 +200,10 @@ public final class AssetGridViewModel: NSObject {
             Task { await loadInitialAlbum() }
 
         case .loadHistory(let items):
-            state.assets = [] // Clear instantly to prevent "Ghost Library" flashes
+            assetGridState.assets = [] // Clear instantly to prevent "Ghost Library" flashes
             Task {
                 let assets = items.map { GridAsset.mediaItem($0) }
-                state.assets = assets
+                assetGridState.assets = assets
             }
 
         case .selectAlbum(let album):
@@ -214,7 +235,7 @@ public final class AssetGridViewModel: NSObject {
     /// survival across SwiftUI churn). Every path that mutates
     /// `selectedAssets` must go through here.
     private func writeSelection(_ assets: [GridAsset]) {
-        state.selectedAssets = assets
+        assetGridState.selectedAssets = assets
         AssetGridSelectionCache.update(assets, for: selectionLimit)
     }
 
@@ -222,18 +243,18 @@ public final class AssetGridViewModel: NSObject {
     /// from the first one. Picker flow does not use this path — it manages
     /// `currentAlbum` externally and triggers `.selectAlbum` directly.
     private func loadInitialAlbum() async {
-        state.isLoading = true
+        assetGridState.isLoading = true
         await photoKitService.loadAlbumsIfNeeded()
         if let first = photoKitService.albums.first {
             lastLoadedAlbum = first
             await loadAssets(for: first)
         }
-        state.isLoading = false
+        assetGridState.isLoading = false
     }
 
     private func loadAssets(for album: PhotoLibraryService.AlbumInfo) async {
         PickerPerfLog.event("grid.loadAssets → enter (album=\(album.title))")
-        state.isLoading = true
+        assetGridState.isLoading = true
 
         // PHASE 1 — bounded top-`pageSize` fetch using PhotoKit's partial-sort
         // fast path. This is the ONLY thing the user waits on for first
@@ -246,16 +267,16 @@ public final class AssetGridViewModel: NSObject {
         // Skip assignment if the identifier set hasn't actually changed —
         // prevents SwiftUI from destroying and recreating every cell.
         let newIDs = firstPage.map(\.localIdentifier)
-        let oldIDs = state.assets.compactMap { $0.phAsset?.localIdentifier }
+        let oldIDs = assetGridState.assets.compactMap { $0.phAsset?.localIdentifier }
         if newIDs != oldIDs {
-            state.assets = firstPage.map { .phAsset($0) }
+            assetGridState.assets = firstPage.map { .phAsset($0) }
             // Tell PhotoKit to start preparing the cells' thumbnails NOW,
             // before SwiftUI lays them out — first paint reads from the
             // warm pool instead of paying the disk/decode/resize cost.
             photoKitService.setCachedAssets(firstPage, targetSize: PhotoKitService.gridThumbnailTargetSize)
             PickerPerfLog.event("grid.loadAssets → setCachedAssets done (warm started)")
         }
-        state.isLoading = false
+        assetGridState.isLoading = false
         // ↑ User sees the first 60 cells from here. NO PHASE 2 — it's
         //   deferred to the first sentinel hit in `loadNextPageCore`. This
         //   leaves PhotoKit's serial queue free for the library previewer
@@ -306,7 +327,7 @@ public final class AssetGridViewModel: NSObject {
         }
 
         guard let result = fetchResult else { return }
-        let currentCount = state.assets.count
+        let currentCount = assetGridState.assets.count
         guard currentCount < result.count else { return }    // end of library
 
         isLoadingPage = true
@@ -320,20 +341,20 @@ public final class AssetGridViewModel: NSObject {
 
         // Append to the grid. SwiftUI's LazyVGrid only lays out the cells
         // that just came on-screen — no re-layout of existing cells.
-        state.assets.append(contentsOf: nextPage.map { .phAsset($0) })
+        assetGridState.assets.append(contentsOf: nextPage.map { .phAsset($0) })
 
         // Extend the PHCachingImageManager warm pool to cover the new
         // assets too. setCachedAssets is no-op-safe when the asset set
         // hasn't changed; here it'll stop caching the old N and start
         // caching the new N + page assets.
-        let allMaterialized = state.assets.compactMap { $0.phAsset }
+        let allMaterialized = assetGridState.assets.compactMap { $0.phAsset }
         photoKitService.setCachedAssets(allMaterialized, targetSize: PhotoKitService.gridThumbnailTargetSize)
 
-        PickerPerfLog.event("grid.loadNextPage → appended (now=\(state.assets.count) total=\(result.count))")
+        PickerPerfLog.event("grid.loadNextPage → appended (now=\(assetGridState.assets.count) total=\(result.count))")
     }
 
     private func toggleAssetSelection(_ asset: GridAsset) {
-        var newSelection = state.selectedAssets
+        var newSelection = assetGridState.selectedAssets
         if let index = newSelection.firstIndex(of: asset) {
             newSelection.remove(at: index)
         } else if newSelection.count < selectionLimit {
@@ -343,11 +364,11 @@ public final class AssetGridViewModel: NSObject {
     }
 
     public func isSelected(_ asset: GridAsset) -> Bool {
-        state.selectedAssets.contains(asset)
+        assetGridState.selectedAssets.contains(asset)
     }
 
     public func selectionIndex(for asset: GridAsset) -> Int? {
-        if let index = state.selectedAssets.firstIndex(of: asset) {
+        if let index = assetGridState.selectedAssets.firstIndex(of: asset) {
             return index + 1 // 1-based index for badge
         }
         return nil
@@ -387,7 +408,7 @@ public final class AssetGridViewModel: NSObject {
 
     /// Lightweight refresh of the current album's assets. Called from the
     /// PhotoKit change observer. Uses `lastLoadedAlbum` (the album we most
-    /// recently loaded) — never touches `state.isLoading` or any other
+    /// recently loaded) — never touches `assetGridState.isLoading` or any other
     /// state that would cascade an `@Observable` re-eval through the grid.
     private func refreshCurrentAssets() async {
         guard let album = lastLoadedAlbum else { return }
@@ -402,12 +423,12 @@ public final class AssetGridViewModel: NSObject {
         // full-grid black flash. If the next fetch reports empty while we
         // hold a populated state, treat it as transient and wait for the
         // follow-up notification with the real set.
-        if result.count == 0 && !state.assets.isEmpty { return }
+        if result.count == 0 && !assetGridState.assets.isEmpty { return }
 
         // Re-materialize at LEAST as many cells as currently displayed so
         // the user doesn't lose scroll position. If the library shrunk
         // (e.g., user deleted photos), clamp to the new total.
-        let currentCount = state.assets.count
+        let currentCount = assetGridState.assets.count
         let refreshCount = min(max(currentCount, Self.pageSize), result.count)
         let materialized = await photoKitService.materialize(
             from: result,
@@ -415,11 +436,11 @@ public final class AssetGridViewModel: NSObject {
         )
 
         let newIDs = materialized.map(\.localIdentifier)
-        let oldIDs = state.assets.compactMap { $0.phAsset?.localIdentifier }
+        let oldIDs = assetGridState.assets.compactMap { $0.phAsset?.localIdentifier }
         guard newIDs != oldIDs else { return }
 
         self.fetchResult = result
-        state.assets = materialized.map { .phAsset($0) }
+        assetGridState.assets = materialized.map { .phAsset($0) }
         photoKitService.setCachedAssets(materialized, targetSize: PhotoKitService.gridThumbnailTargetSize)
     }
 }
