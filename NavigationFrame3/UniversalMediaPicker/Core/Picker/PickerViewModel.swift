@@ -81,15 +81,24 @@ public final class PickerViewModel {
 
         // Eager-init from the prewarmed singleton cache. When the modifier's
         // prewarm has already completed (the common case), PhotoKitService
-        // already holds recentAssets, albums, and the warm thumbnail bitmap
-        // for recents.first. Reading them at init time means our first body
-        // evaluation sees the warm content — no async wait, no "popping in."
-        // When prewarm hasn't completed (cold race), these reads return nil/
-        // empty and the existing async path (bootstrap → loadGalleryThumb)
-        // fills them later.
-        if let firstRecent = photoKitService.recentAssets.first {
-            self.previewAsset = firstRecent
-            self.galleryThumbImage = photoKitService.cachedThumbnail(for: firstRecent)
+        // holds albums + prewarmedFirstAlbumAssets + the warm thumbnail
+        // bitmaps. Reading them at init time means our first body evaluation
+        // sees the warm content — no async wait, no "popping in." When
+        // prewarm hasn't completed (cold race), these reads return nil/empty
+        // and the grid's loadAssets path (via onFirstAssetChanged →
+        // handleFirstAlbumAssetChanged) fills them later.
+        //
+        // Both `previewAsset` AND `galleryThumbImage` are seeded from the
+        // ALBUM's first asset — they share a single source of truth (the
+        // currently-active album), not separate library-wide vs album-scoped
+        // queries. The shortcut's thumbnail follows the album visually
+        // (matches what the user is currently looking at) while its TAP
+        // behavior is unchanged (opens Apple's PhotosPicker for full-library
+        // browsing). See MEDIA_PICKER_GUIDELINES.md "The three PhotoKit
+        // queries (side by side)" for the rationale.
+        if let firstAlbumAsset = photoKitService.prewarmedFirstAlbumAssets.first {
+            self.previewAsset = firstAlbumAsset
+            self.galleryThumbImage = photoKitService.cachedThumbnail(for: firstAlbumAsset)
         }
         if let firstAlbum = photoKitService.albums.first {
             self.currentAlbum = firstAlbum
@@ -113,7 +122,6 @@ public final class PickerViewModel {
     // MARK: - Computed proxies (read by PickerView via the strict View → VM rule)
 
     public var authStatus: PHAuthorizationStatus { photoKitService.authStatus }
-    public var recentAssets: [PHAsset] { photoKitService.recentAssets }
     public var history: [MediaItem] { historyManager.history }
     public var albums: [PhotoLibraryService.AlbumInfo] { photoKitService.albums }
 
@@ -129,26 +137,15 @@ public final class PickerViewModel {
     /// dumb (a view never decides what runs in parallel vs serially — that
     /// belongs to the VM).
     ///
-    /// **Sequential is intentional here, not lazy.** An earlier version of
-    /// this method used `async let` to issue both bootstraps in parallel.
-    /// On a real device that caused main-thread contention with the
-    /// sibling `LibraryViewfinderView.task` and with SwiftUI's grid
-    /// layout pass — the parallel bootstrap delayed the grid's mount by
-    /// ~950ms and the layout by ~225ms in exchange for getting the
-    /// gallery-shortcut thumbnail (a small corner image) ~300ms earlier.
-    /// Net perceived perf was worse because the grid and library
-    /// previewer are the visually dominant content. Same lesson as the
-    /// reverted ThumbnailCache prime in `PhotoKitService.setCachedAssets`:
-    /// don't starve visible content to optimize peripheral content. See
-    /// `project_picker_perf_state.md` in memory for the measurement.
-    ///
-    /// If a future change needs the gallery thumb earlier specifically,
-    /// the right fix is to *prioritize the visible-content requests
-    /// first* (previewer, grid) and only then issue the gallery-thumb
-    /// request — not to fan everything out in parallel.
+    /// Used to also call `loadGalleryThumbIfNeeded()` to refresh the
+    /// shortcut from a separate library-wide recents fetch. After the
+    /// unification, the gallery thumb is eager-set in `init` from
+    /// `prewarmedFirstAlbumAssets.first` (same source as the previewer)
+    /// and follows the album via `handleFirstAlbumAssetChanged(_:)`. The
+    /// cold-race fallback inside `handleFirstAlbumAssetChanged` covers the
+    /// case where init read empty values.
     public func bootstrap() async {
         await loadInitialAlbumIfNeeded()
-        await loadGalleryThumbIfNeeded()
     }
 
     // MARK: - Intent: album bootstrap (initial-album setup for the picker flow)
@@ -196,9 +193,34 @@ public final class PickerViewModel {
         selectedMode = mode
     }
 
-    public func setPreview(_ asset: PHAsset) {
+    /// Called from `PickerView.onFirstAssetChanged` when the grid's first
+    /// asset changes (album swap, or initial population on cold-race).
+    /// Updates BOTH the previewer's asset AND the gallery-shortcut thumbnail
+    /// so they stay in sync — both follow the active album. The shortcut's
+    /// tap behavior (opens Apple's PhotosPicker) is unchanged; only its
+    /// thumbnail image visually mirrors the album the user is browsing.
+    ///
+    /// Warm path: `cachedThumbnail` hits and `galleryThumbImage` is set
+    /// synchronously on this turn of the run loop. Cold-race fallback:
+    /// cache miss → spawn a tracked Task that async-fetches at the gallery
+    /// thumb size.
+    public func handleFirstAlbumAssetChanged(_ asset: PHAsset) {
         previewAsset = asset
         previewHistoryItem = nil
+        if let cached = photoKitService.cachedThumbnail(for: asset) {
+            galleryThumbImage = cached
+            return
+        }
+        let task = Task { [weak self] in
+            guard let self else { return }
+            let image = await withCheckedContinuation { (continuation: CheckedContinuation<UIImage?, Never>) in
+                self.photoKitService.loadThumbnail(for: asset, size: self.galleryThumbSize) { image in
+                    continuation.resume(returning: image)
+                }
+            }
+            self.galleryThumbImage = image
+        }
+        tasks.append(task)
     }
 
     // MARK: - Intent: gallery thumbnail (shutter-bar shortcut)
@@ -216,49 +238,6 @@ public final class PickerViewModel {
     /// the grid's 400x400 prewarm is returned and SwiftUI downscales
     /// visually — perceptually identical, one fewer disk fetch.
     private let galleryThumbSize = CGSize(width: 140, height: 140)
-
-    /// Loads (or refreshes) the gallery-shortcut thumbnail from
-    /// `recentAssets.first`. Sync peek first; falls through to an async
-    /// fetch on miss. Clears the image when there's no recent asset.
-    /// Called from `bootstrap()` where the await composes naturally; views
-    /// should use `refreshGalleryThumb()` instead so the spawn is tracked.
-    public func loadGalleryThumbIfNeeded() async {
-        guard let asset = recentAssets.first else {
-            galleryThumbImage = nil
-            return
-        }
-        if let cached = photoKitService.cachedThumbnail(for: asset) {
-            galleryThumbImage = cached
-            return
-        }
-        galleryThumbImage = await withCheckedContinuation { continuation in
-            photoKitService.loadThumbnail(for: asset, size: galleryThumbSize) { image in
-                continuation.resume(returning: image)
-            }
-        }
-    }
-
-    /// Sync wrapper around `loadGalleryThumbIfNeeded` for view callbacks
-    /// (`.onChange`, tap handlers). Spawns a tracked Task so the view's
-    /// body stays a single call and a mid-flight dismiss cancels cleanly.
-    public func refreshGalleryThumb() {
-        let task = Task { [weak self] in
-            guard let self else { return }
-            await self.loadGalleryThumbIfNeeded()
-        }
-        tasks.append(task)
-    }
-
-    /// Called from `PickerView.onChange(of: recentAssets)`. Owns the
-    /// orchestration so the view body stays a single VM call: seed the
-    /// preview to the first recent if we don't already have one, then
-    /// refresh the gallery-shortcut thumbnail.
-    public func handleRecentAssetsChanged() {
-        if previewAsset == nil, let first = recentAssets.first {
-            setPreview(first)
-        }
-        refreshGalleryThumb()
-    }
 
     // MARK: - Intent: shutter / NEXT / cancel
 

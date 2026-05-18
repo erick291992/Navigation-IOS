@@ -50,9 +50,6 @@ public struct PickerView: View {
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active { viewModel.refreshAuthIfNeeded() }
         }
-        .onChange(of: viewModel.recentAssets) { _, _ in
-            viewModel.handleRecentAssetsChanged()
-        }
         .onChange(of: systemPickerSelection) { _, items in
             guard !items.isEmpty else { return }
             // Reset BEFORE handing items off so the next pick of the same
@@ -169,7 +166,7 @@ public struct PickerView: View {
                     viewModel.updateSelection(assets)
                 },
                 onFirstAssetChanged: { newFirst in
-                    if let newFirst { viewModel.setPreview(newFirst) }
+                    if let newFirst { viewModel.handleFirstAlbumAssetChanged(newFirst) }
                 }
             )
 

@@ -84,10 +84,17 @@ public final class EliteGeometricPickerViewModel {
     
     // MARK: - Actions
     
+    /// Elite Geometric uses `photoKitService.recentAssets` as its full grid
+    /// data source (unlike the main picker, which uses recents only for the
+    /// gallery-shortcut button). So we explicitly request a larger limit
+    /// than the service's default (1) — without this, our grid would only
+    /// have one cell.
+    private static let eliteGeometricRecentsLimit = 30
+
     public func setup() {
         let fetchTask = Task { [weak self] in
             guard let self else { return }
-            await self.photoKitService.fetchRecentAssets()
+            await self.photoKitService.fetchRecentAssets(limit: Self.eliteGeometricRecentsLimit)
             // Read recentAssets AFTER the fetch completes (pre-existing race).
             if self.previewAsset == nil, let first = self.recentAssets.first {
                 self.previewAsset = first
@@ -105,7 +112,7 @@ public final class EliteGeometricPickerViewModel {
         if photoKitService.authStatus == .authorized || photoKitService.authStatus == .limited {
             let task = Task { [weak self] in
                 guard let self else { return }
-                await self.photoKitService.fetchRecentAssets()
+                await self.photoKitService.fetchRecentAssets(limit: Self.eliteGeometricRecentsLimit)
             }
             tasks.append(task)
         }

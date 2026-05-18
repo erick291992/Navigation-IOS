@@ -195,7 +195,14 @@ public final class PhotoKitService: NSObject {
     ///
     /// `warmVisibleContent: false` is the opt-out for callers that want
     /// only metadata warming (rare).
-    public func prewarm(limit: Int = 30, warmVisibleContent: Bool = true) async {
+    ///
+    /// `limit` defaults to 1 because the main picker's only consumer of
+    /// `recentAssets` is the gallery-shortcut button (which needs just the
+    /// library-wide newest photo). The previewer follows the album's first
+    /// asset via `prewarmedFirstAlbumAssets`, not `recentAssets`. Callers
+    /// that need more (e.g. `EliteGeometricPickerViewModel` uses recents as
+    /// its grid source) pass a larger limit explicitly.
+    public func prewarm(limit: Int = 1, warmVisibleContent: Bool = true) async {
         PickerPerfLog.event("photoKit.prewarm → enter")
         let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         guard status == .authorized || status == .limited else {
@@ -224,10 +231,9 @@ public final class PhotoKitService: NSObject {
         PickerPerfLog.event("photoKit.prewarm.visible → start")
 
         let firstAlbum: PhotoLibraryService.AlbumInfo? = await MainActor.run { self.albums.first }
-        let recentFirst: PHAsset? = await MainActor.run { self.recentAssets.first }
 
-        guard let firstAlbum, let recentFirst else {
-            PickerPerfLog.event("photoKit.prewarm.visible → skipped (no album or recent)")
+        guard let firstAlbum else {
+            PickerPerfLog.event("photoKit.prewarm.visible → skipped (no album)")
             return
         }
 
@@ -242,33 +248,37 @@ public final class PhotoKitService: NSObject {
         }
         PickerPerfLog.event("photoKit.prewarm.visible → first album fetched + warmed (\(firstPage.count))")
 
+        guard let firstAlbumAsset = firstPage.first else {
+            // Album is empty — no first asset to prewarm previewer/shortcut against.
+            // Grid prewarm in step 4 would also be a no-op; skip the rest.
+            PickerPerfLog.event("photoKit.prewarm.visible → skipped further steps (album empty)")
+            return
+        }
+
         // 2. Pre-load library previewer's 1000pt bitmap into ThumbnailCache.
-        //    When the picker mounts, LibraryViewfinderViewModel.thumbnail(for:)
-        //    peeks the cache synchronously and paints on the first frame.
-        //
-        //    ⚠️ Implicit coupling: this cache write ALSO benefits the grid's
-        //    cell 0 on cold open. When the user is on the default Recents
-        //    album and the newest library asset is an image, `gridCells[0]`
-        //    shares a PHAsset identifier with `recentFirst` → same
-        //    ThumbnailCache key → cell 0 paints instantly via cache hit
-        //    (downscaled visually from 1000pt). Changing what this prewarm
-        //    caches (different asset, smaller size, or removing it) would
-        //    silently regress that effect. See MEDIA_PICKER_GUIDELINES.md
-        //    "The 'cell 0 paints instant' effect is incidental, not designed."
+        //    Uses the album's first asset (same source as
+        //    `prewarmedFirstAlbumAssets.first` which `PickerViewModel.init`
+        //    reads for `previewAsset`). Cell 0 of the grid IS this asset,
+        //    so the largest-wins cache means cell 0 also benefits from the
+        //    1000pt entry (downscaled visually to grid size). This coupling
+        //    is intentional in the unified architecture — previewer + grid
+        //    cell 0 share one cache entry by design, not by accident.
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            loadThumbnail(for: recentFirst, size: Self.previewerTargetSize) { _ in
+            loadThumbnail(for: firstAlbumAsset, size: Self.previewerTargetSize) { _ in
                 continuation.resume()
             }
         }
         PickerPerfLog.event("photoKit.prewarm.visible → previewer 1000pt warmed")
 
-        // 3. Pre-load gallery shortcut's 140pt bitmap. ThumbnailCache's
-        //    largest-wins policy means this usually returns from the 1000pt
-        //    cache hit above (downscaled visually by SwiftUI) — but we still
-        //    issue the request to populate any size-specific PhotoKit caches.
+        // 3. Pre-load gallery shortcut's 140pt bitmap. Uses the album's
+        //    first asset (matches PickerViewModel.galleryThumbImage's
+        //    eager-init source). Largest-wins cache means this usually
+        //    returns from the 1000pt cache hit above (downscaled visually
+        //    by SwiftUI) — but we still issue the request to populate any
+        //    size-specific PhotoKit caches.
         let galleryThumbSize = CGSize(width: 140, height: 140)
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            loadThumbnail(for: recentFirst, size: galleryThumbSize) { _ in
+            loadThumbnail(for: firstAlbumAsset, size: galleryThumbSize) { _ in
                 continuation.resume()
             }
         }
@@ -358,9 +368,10 @@ public final class PhotoKitService: NSObject {
     /// firing alongside `photoLibraryDidChange`) await a single shared Task
     /// instead of issuing redundant PhotoKit fetches. The first caller's
     /// `limit` wins — subsequent callers receive whatever the in-flight fetch
-    /// was configured with. In practice every call site uses `limit: 30`
-    /// (default), so divergence is theoretical.
-    public func fetchRecentAssets(limit: Int = 30) async {
+    /// was configured with. Most call sites use the default (1), so divergence
+    /// is rare; `EliteGeometricPickerViewModel` is the explicit exception that
+    /// requests a larger limit because its grid is built from `recentAssets`.
+    public func fetchRecentAssets(limit: Int = 1) async {
         let task: Task<Void, Never> = await MainActor.run {
             if let existing = inFlightRecentsFetch {
                 return existing
