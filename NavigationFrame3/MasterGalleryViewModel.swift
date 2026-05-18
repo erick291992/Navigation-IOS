@@ -3,15 +3,22 @@ import PhotosUI
 
 @Observable
 class MasterGalleryViewModel {
+    enum FlowState: Equatable {
+        case idle
+        case processing
+        case camera
+        case cropping(index: Int, total: Int)
+    }
+
     var pickedItems: [MediaItem] = []
     var showModifierPicker = false
     @ObservationIgnored
     var pickerId = UUID()
     var cropMode: MediaCrop = .square
     var selectionLimit: Int = 1
-    
+
     // Tier 3: Headless State
-    var flowState: MediaPickerState.FlowState = .idle
+    var flowState: FlowState = .idle
     var headlessSelection: [PhotosPickerItem] = []
     var headlessItems: [MediaItem] = []
     var headlessResults: [Int: UIImage] = [:]

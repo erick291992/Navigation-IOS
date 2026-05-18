@@ -16,7 +16,6 @@ public class CropFlowViewModel {
     public var items: [MediaItem] = []
     public var croppedResults: [Int: UIImage] = [:]
     public var flowState: FlowState = .idle
-    public var errorMessage: String?
     
     public enum FlowState: Equatable {
         case idle
@@ -67,7 +66,6 @@ public class CropFlowViewModel {
                 }
             } catch {
                 await MainActor.run {
-                    self.errorMessage = "Failed to process photo"
                     self.flowState = .idle
                 }
             }

@@ -12,8 +12,8 @@ public class EliteGeometricPickerViewModel {
     private let onCancel: () -> Void
     
     // MARK: - Services (constructor-default DI; production omits, tests inject)
-    public let cameraService: CameraService
-    public let photoKitService: PhotoKitService
+    private let cameraService: CameraService
+    private let photoKitService: PhotoKitService
     private let historyManager: MediaHistoryManager
     private let pickerManager: MediaPickerManager
     @ObservationIgnored private var tasks: [Task<Void, Never>] = []

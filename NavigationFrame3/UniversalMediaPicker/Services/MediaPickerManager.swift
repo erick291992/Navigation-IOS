@@ -15,9 +15,11 @@ import AVFoundation
 public class MediaPickerManager {
     public static let shared = MediaPickerManager()
 
-    private let photoKitService = PhotoKitService.shared
+    private let photoKitService: PhotoKitService
 
-    private init() {}
+    private init(photoKitService: PhotoKitService = .shared) {
+        self.photoKitService = photoKitService
+    }
     
     /// Processes a PhotosPickerItem into a MediaItem.
     public func process(_ item: PhotosPickerItem) async throws -> MediaItem {

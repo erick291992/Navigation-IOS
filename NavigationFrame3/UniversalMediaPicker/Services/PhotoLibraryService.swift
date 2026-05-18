@@ -148,17 +148,6 @@ public final class PhotoLibraryService {
         return result.objects(at: indexSet)
     }
 
-    /// Resolves `PHAsset` instances from local identifiers. Used after
-    /// `PHPickerViewController` returns identifiers for the user's selection.
-    public func fetchAssets(withLocalIdentifiers identifiers: [String]) async -> [PHAsset] {
-        let fetchResult = PHAsset.fetchAssets(withLocalIdentifiers: identifiers, options: nil)
-        var assets: [PHAsset] = []
-        fetchResult.enumerateObjects { asset, _, _ in
-            assets.append(asset)
-        }
-        return assets
-    }
-
     // MARK: - Private helpers
 
     private func makeAlbumInfo(from collection: PHAssetCollection) -> AlbumInfo? {
