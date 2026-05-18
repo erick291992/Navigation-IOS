@@ -191,7 +191,7 @@ public class EliteGeometricPickerViewModel {
         }
     }
     
-    public func onShutterTab() {
+    public func onShutterTap() {
         if selectedMode == .photo {
             capturePhoto()
         } else if selectedMode == .video {

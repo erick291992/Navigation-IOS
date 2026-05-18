@@ -6,7 +6,7 @@ import Photos
 /// their own top-tier UIs on top of the Tier 3 engine.
 struct AdvancedPickerExampleView: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var vm = AdvancedPickerExampleViewModel()
+    @State private var viewModel = AdvancedPickerExampleViewModel()
     @State private var rejectionTrigger = 0
 
     // High-density premium edge-to-edge grid (1px spacing like Instagram)
@@ -36,7 +36,7 @@ struct AdvancedPickerExampleView: View {
                         Text("Select Media")
                             .font(.system(size: 18, weight: .bold))
                             .foregroundColor(.white)
-                        Text("Select up to \(vm.maxSelection)")
+                        Text("Select up to \(viewModel.maxSelection)")
                             .font(.system(size: 12))
                             .foregroundColor(.gray)
                     }
@@ -51,10 +51,10 @@ struct AdvancedPickerExampleView: View {
                 .background(Color.black.opacity(0.95))
                 
                 // MARK: - Processed Results Preview
-                if !vm.finishedItems.isEmpty {
+                if !viewModel.finishedItems.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
-                            ForEach(vm.finishedItems) { item in
+                            ForEach(viewModel.finishedItems) { item in
                                 Image(uiImage: item.thumbnail)
                                     .resizable()
                                     .scaledToFill()
@@ -72,16 +72,16 @@ struct AdvancedPickerExampleView: View {
                 // MARK: - Premium Grid
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: 1) {
-                        ForEach(vm.gridModel.assetGridState.assets, id: \.id) { asset in
-                            let isSelected = vm.gridModel.assetGridState.selectedAssets.contains(asset)
-                            let selectionIndex = vm.gridModel.assetGridState.selectedAssets.firstIndex(of: asset)
+                        ForEach(viewModel.gridViewModel.assetGridState.assets, id: \.id) { asset in
+                            let isSelected = viewModel.gridViewModel.assetGridState.selectedAssets.contains(asset)
+                            let selectionIndex = viewModel.gridViewModel.assetGridState.selectedAssets.firstIndex(of: asset)
                             
                             ZStack(alignment: .topTrailing) {
                                 // Image with scale-down bounce when selected
                                 AsyncFlexibleAssetView(
                                     id: asset.id,
-                                    initialImage: vm.gridModel.thumbnail(for: asset),
-                                    loadAsync: { await vm.gridModel.requestThumbnail(for: asset) }
+                                    initialImage: viewModel.gridViewModel.thumbnail(for: asset),
+                                    loadAsync: { await viewModel.gridViewModel.requestThumbnail(for: asset) }
                                 )
                                     .scaleEffect(isSelected ? 0.95 : 1.0)
                                 
@@ -109,11 +109,11 @@ struct AdvancedPickerExampleView: View {
                             .clipped()
                             .contentShape(Rectangle())
                             .onTapGesture {
-                                if !isSelected && vm.gridModel.assetGridState.selectedAssets.count >= vm.maxSelection {
+                                if !isSelected && viewModel.gridViewModel.assetGridState.selectedAssets.count >= viewModel.maxSelection {
                                     rejectionTrigger += 1
                                 }
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                    vm.selectAsset(asset)
+                                    viewModel.selectAsset(asset)
                                 }
                             }
                         }
@@ -122,17 +122,17 @@ struct AdvancedPickerExampleView: View {
             }
             
             // MARK: - Floating Action Bar
-            if !vm.gridModel.assetGridState.selectedAssets.isEmpty {
+            if !viewModel.gridViewModel.assetGridState.selectedAssets.isEmpty {
                 VStack {
                     Spacer()
-                    Button(action: vm.processSelectedAssets) {
+                    Button(action: viewModel.processSelectedAssets) {
                         HStack {
                             Text("Continue")
                                 .font(.system(size: 16, weight: .bold))
                             
                             Spacer()
                             
-                            Text("\(vm.gridModel.assetGridState.selectedAssets.count)")
+                            Text("\(viewModel.gridViewModel.assetGridState.selectedAssets.count)")
                                 .font(.system(size: 14, weight: .black))
                                 .frame(width: 24, height: 24)
                                 .background(Color.black.opacity(0.2))
@@ -155,27 +155,27 @@ struct AdvancedPickerExampleView: View {
         .navigationBarHidden(true)
         // Selection-aware haptic: fires when the array actually changes.
         // At-limit no-op taps fire `.error` via rejectionTrigger instead.
-        .sensoryFeedback(.selection, trigger: vm.gridModel.assetGridState.selectedAssets)
+        .sensoryFeedback(.selection, trigger: viewModel.gridViewModel.assetGridState.selectedAssets)
         .sensoryFeedback(.error, trigger: rejectionTrigger)
         // MARK: - Modals
         .sheet(isPresented: Binding(
-            get: { vm.flowState != .idle },
-            set: { if !$0 { vm.cancelFlow() } }
+            get: { viewModel.flowState != .idle },
+            set: { if !$0 { viewModel.cancelFlow() } }
         )) {
-            if case .cropping(let index, _) = vm.flowState {
+            if case .cropping(let index, _) = viewModel.flowState {
                 NavigationStack {
                     CropView(
-                        item: vm.itemsToCrop[index],
-                        crop: vm.cropMode,
+                        item: viewModel.itemsToCrop[index],
+                        crop: viewModel.cropMode,
                         onDone: { result in
-                            vm.didFinishCrop(result, at: index)
+                            viewModel.didFinishCrop(result, at: index)
                         },
                         onCancel: {
-                            vm.cancelFlow()
+                            viewModel.cancelFlow()
                         }
                     )
                 }
-            } else if vm.flowState == .processing {
+            } else if viewModel.flowState == .processing {
                 VStack(spacing: 20) {
                     ProgressView()
                         .tint(.green)

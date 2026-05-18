@@ -9,10 +9,10 @@ import PhotosUI
 class CustomPickerExampleViewModel {
 
     // MARK: - Services (constructor-default DI)
-    private let manager: MediaPickerManager
+    private let pickerManager: MediaPickerManager
 
-    init(manager: MediaPickerManager = .shared) {
-        self.manager = manager
+    init(pickerManager: MediaPickerManager = .shared) {
+        self.pickerManager = pickerManager
     }
 
     deinit {
@@ -52,7 +52,7 @@ class CustomPickerExampleViewModel {
         let task = Task { [weak self] in
             guard let self else { return }
             do {
-                let processed = try await self.manager.process(items)
+                let processed = try await self.pickerManager.process(items)
                 await MainActor.run {
                     self.photosSelection = []     // Reset picker
                     self.itemsToCrop = processed
@@ -75,7 +75,7 @@ class CustomPickerExampleViewModel {
         let task = Task { [weak self] in
             guard let self else { return }
             do {
-                let item = try await self.manager.process(image)
+                let item = try await self.pickerManager.process(image)
                 await MainActor.run {
                     self.itemsToCrop = [item]
                     self.croppedResults = [:]
@@ -92,7 +92,7 @@ class CustomPickerExampleViewModel {
     func didFinishCrop(_ croppedImage: UIImage, at index: Int) {
         let task = Task { [weak self] in
             guard let self else { return }
-            let result = try? await self.manager.process(croppedImage)
+            let result = try? await self.pickerManager.process(croppedImage)
             await MainActor.run {
                 if let result = result {
                     self.croppedResults[index] = result.thumbnail

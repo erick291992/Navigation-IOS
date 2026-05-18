@@ -11,11 +11,11 @@ import Observation
 class AdvancedPickerExampleViewModel {
 
     // Core Managers (constructor-default DI)
-    private let manager: MediaPickerManager
+    private let pickerManager: MediaPickerManager
     
     // We leverage AssetGridViewModel simply as a pure data source for PHAssets
     // meaning the developer doesn't have to write lower-level PhotoKit fetching logic themselves.
-    let gridModel: AssetGridViewModel
+    let gridViewModel: AssetGridViewModel
     
     var flowState: FlowState = .idle
     var finishedItems: [MediaItem] = []
@@ -32,11 +32,11 @@ class AdvancedPickerExampleViewModel {
         case cropping(index: Int, total: Int)
     }
     
-    init(maxSelection: Int = 3, manager: MediaPickerManager = .shared) {
+    init(maxSelection: Int = 3, pickerManager: MediaPickerManager = .shared) {
         self.maxSelection = maxSelection
-        self.manager = manager
-        self.gridModel = AssetGridViewModel(selectionLimit: maxSelection)
-        self.gridModel.trigger(.loadInitialData) // Fetch photos immediately
+        self.pickerManager = pickerManager
+        self.gridViewModel = AssetGridViewModel(selectionLimit: maxSelection)
+        self.gridViewModel.trigger(.loadInitialData) // Fetch photos immediately
     }
 
     deinit {
@@ -49,12 +49,12 @@ class AdvancedPickerExampleViewModel {
     // MARK: - Actions
 
     func selectAsset(_ asset: GridAsset) {
-        gridModel.trigger(.toggleAssetSelection(asset))
+        gridViewModel.trigger(.toggleAssetSelection(asset))
     }
 
     // The developer calls this when the user taps their custom "Next" button
     func processSelectedAssets() {
-        let assets = gridModel.assetGridState.selectedAssets
+        let assets = gridViewModel.assetGridState.selectedAssets
         guard !assets.isEmpty else { return }
 
         flowState = .processing
@@ -66,7 +66,7 @@ class AdvancedPickerExampleViewModel {
                 let phAssets = assets.compactMap { $0.phAsset }
 
                 // Pass raw PHAssets straight to the Tier 3 Engine!
-                let processed = try await self.manager.process(phAssets)
+                let processed = try await self.pickerManager.process(phAssets)
 
                 await MainActor.run {
                     self.itemsToCrop = processed
@@ -85,7 +85,7 @@ class AdvancedPickerExampleViewModel {
     func didFinishCrop(_ croppedImage: UIImage, at index: Int) {
         let task = Task { [weak self] in
             guard let self else { return }
-            let result = try? await self.manager.process(croppedImage)
+            let result = try? await self.pickerManager.process(croppedImage)
             await MainActor.run {
                 if let result = result {
                     self.croppedResults[index] = result.thumbnail
@@ -115,6 +115,6 @@ class AdvancedPickerExampleViewModel {
         flowState = .idle
         itemsToCrop = []
         croppedResults = [:]
-        gridModel.trigger(.clearSelection)
+        gridViewModel.trigger(.clearSelection)
     }
 }

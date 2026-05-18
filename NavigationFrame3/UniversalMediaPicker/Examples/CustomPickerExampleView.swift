@@ -12,7 +12,7 @@ import PhotosUI
 // 4. You get back finished [MediaItem] to use however you want
 
 struct CustomPickerExampleView: View {
-    @State private var vm = CustomPickerExampleViewModel()
+    @State private var viewModel = CustomPickerExampleViewModel()
     
     var body: some View {
         ScrollView {
@@ -36,7 +36,7 @@ struct CustomPickerExampleView: View {
                 // SECTION 3: Results
                 // Display the finished MediaItems however you want
                 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                if !vm.finishedItems.isEmpty {
+                if !viewModel.finishedItems.isEmpty {
                     resultsSection
                 }
             }
@@ -58,8 +58,8 @@ struct CustomPickerExampleView: View {
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         .fullScreenCover(isPresented: isCameraBinding) {
             CameraPicker(
-                onCapture: { image in vm.didCapturePhoto(image) },
-                onCancel: { vm.cancelFlow() }
+                onCapture: { image in viewModel.didCapturePhoto(image) },
+                onCancel: { viewModel.cancelFlow() }
             )
             .ignoresSafeArea()
         }
@@ -69,15 +69,15 @@ struct CustomPickerExampleView: View {
     
     private var isCroppingBinding: Binding<Bool> {
         Binding(
-            get: { if case .cropping = vm.flowState { return true } else { return false } },
-            set: { if !$0 { vm.cancelFlow() } }
+            get: { if case .cropping = viewModel.flowState { return true } else { return false } },
+            set: { if !$0 { viewModel.cancelFlow() } }
         )
     }
     
     private var isCameraBinding: Binding<Bool> {
         Binding(
-            get: { if case .camera = vm.flowState { return true } else { return false } },
-            set: { if !$0 { vm.cancelFlow() } }
+            get: { if case .camera = viewModel.flowState { return true } else { return false } },
+            set: { if !$0 { viewModel.cancelFlow() } }
         )
     }
     
@@ -108,7 +108,7 @@ struct CustomPickerExampleView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             
             // Crop mode picker
-            Picker("Crop Mode", selection: $vm.cropMode) {
+            Picker("Crop Mode", selection: $viewModel.cropMode) {
                 Text("Square").tag(MediaCrop.square)
                 Text("Portrait 4:5").tag(MediaCrop.portrait)
                 Text("Landscape 16:9").tag(MediaCrop.landscape)
@@ -119,7 +119,7 @@ struct CustomPickerExampleView: View {
             .pickerStyle(.segmented)
             
             // Selection limit
-            Stepper("Max Photos: \(vm.maxSelection)", value: $vm.maxSelection, in: 1...10)
+            Stepper("Max Photos: \(viewModel.maxSelection)", value: $viewModel.maxSelection, in: 1...10)
                 .padding(12)
                 .background(Color(uiColor: .secondarySystemGroupedBackground))
                 .cornerRadius(12)
@@ -139,8 +139,8 @@ struct CustomPickerExampleView: View {
                 // │ Design this however you want              │
                 // └─────────────────────────────────────────┘
                 PhotosPicker(
-                    selection: $vm.photosSelection,
-                    maxSelectionCount: vm.maxSelection,
+                    selection: $viewModel.photosSelection,
+                    maxSelectionCount: viewModel.maxSelection,
                     matching: .images
                 ) {
                     customButton(
@@ -150,8 +150,8 @@ struct CustomPickerExampleView: View {
                     )
                 }
                 .buttonStyle(.plain)
-                .onChange(of: vm.photosSelection) { _, newValue in
-                    vm.didSelectPhotos(newValue)
+                .onChange(of: viewModel.photosSelection) { _, newValue in
+                    viewModel.didSelectPhotos(newValue)
                 }
                 
                 // ┌─────────────────────────────────────────┐
@@ -159,7 +159,7 @@ struct CustomPickerExampleView: View {
                 // │ Design this however you want              │
                 // └─────────────────────────────────────────┘
                 Button {
-                    vm.flowState = .camera
+                    viewModel.flowState = .camera
                 } label: {
                     customButton(
                         title: "Camera",
@@ -175,14 +175,14 @@ struct CustomPickerExampleView: View {
     private var resultsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("RESULTS (\(vm.finishedItems.count))")
+                Text("RESULTS (\(viewModel.finishedItems.count))")
                     .font(.caption.bold())
                     .foregroundColor(.secondary)
                 
                 Spacer()
                 
                 Button("Clear") {
-                    vm.finishedItems = []
+                    viewModel.finishedItems = []
                 }
                 .font(.caption.bold())
                 .foregroundColor(.red)
@@ -190,7 +190,7 @@ struct CustomPickerExampleView: View {
             
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    ForEach(vm.finishedItems) { item in
+                    ForEach(viewModel.finishedItems) { item in
                         Image(uiImage: item.thumbnail)
                             .resizable()
                             .scaledToFill()
@@ -210,22 +210,22 @@ struct CustomPickerExampleView: View {
     
     @ViewBuilder
     private var cropSheet: some View {
-        if case .cropping(let index, let total) = vm.flowState,
-           index < vm.itemsToCrop.count {
-            let item = vm.itemsToCrop[index]
+        if case .cropping(let index, let total) = viewModel.flowState,
+           index < viewModel.itemsToCrop.count {
+            let item = viewModel.itemsToCrop[index]
             CropView(
                 item: item,
-                crop: vm.cropMode,
+                crop: viewModel.cropMode,
                 subtitle: total > 1 ? "\(index + 1) of \(total)" : nil,
-                thumbnails: total > 1 ? vm.itemsToCrop.map { $0.thumbnail } : nil,
+                thumbnails: total > 1 ? viewModel.itemsToCrop.map { $0.thumbnail } : nil,
                 activeIndex: total > 1 ? index : nil,
-                croppedIndices: vm.croppedResults.isEmpty ? [] : Set(vm.croppedResults.keys),
-                onJump: total > 1 ? { vm.jumpToCropIndex($0) } : nil,
+                croppedIndices: viewModel.croppedResults.isEmpty ? [] : Set(viewModel.croppedResults.keys),
+                onJump: total > 1 ? { viewModel.jumpToCropIndex($0) } : nil,
                 onDone: { croppedImage in
-                    vm.didFinishCrop(croppedImage, at: index)
+                    viewModel.didFinishCrop(croppedImage, at: index)
                 },
                 onCancel: {
-                    vm.cancelFlow()
+                    viewModel.cancelFlow()
                 }
             )
             .id(index) // Force reset when jumping between images

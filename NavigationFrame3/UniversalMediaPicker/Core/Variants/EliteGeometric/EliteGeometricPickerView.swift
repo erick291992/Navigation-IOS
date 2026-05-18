@@ -394,7 +394,7 @@ public struct EliteGeometricPickerView: View {
                 }
                 
                 Button(action: {
-                    viewModel.onShutterTab()
+                    viewModel.onShutterTap()
                 }) {
                     Circle()
                         .strokeBorder(Color.white, lineWidth: 4)

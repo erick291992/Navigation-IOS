@@ -70,8 +70,14 @@ struct AssetGridView: View {
                     spacing: gridStyle.spacing
                 ) {
                     ForEach(viewModel.assetGridState.assets, id: \.id) { asset in
+                        let thumbnailSource: AssetThumbnailCell.AssetThumbnailSource = {
+                            switch asset {
+                            case .phAsset(let ph): return .phAsset(ph)
+                            case .mediaItem(let item): return .mediaItem(item)
+                            }
+                        }()
                         AssetThumbnailCell(
-                            source: asset.phAsset != nil ? .phAsset(asset.phAsset!) : .mediaItem(asset.mediaItem!),
+                            source: thumbnailSource,
                             gridStyle: gridStyle,
                             selectionIndex: viewModel.selectionIndex(for: asset),
                             accentColor: configuration.style.accentColor,

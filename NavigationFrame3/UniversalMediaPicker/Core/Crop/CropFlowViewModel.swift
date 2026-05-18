@@ -6,7 +6,7 @@ import Observation
 @Observable
 public class CropFlowViewModel {
     // MARK: - Configuration & Callbacks
-    private let manager: MediaPickerManager
+    private let pickerManager: MediaPickerManager
     private let historyManager: MediaHistoryManager
     private let configuration: MediaPickerConfiguration
     private var onCompletion: ([MediaItem]) -> Void
@@ -28,13 +28,13 @@ public class CropFlowViewModel {
     public init(
         configuration: MediaPickerConfiguration,
         initialItems: [MediaItem] = [],
-        manager: MediaPickerManager = .shared,
+        pickerManager: MediaPickerManager = .shared,
         historyManager: MediaHistoryManager = .shared,
         onCompletion: @escaping ([MediaItem]) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.configuration = configuration
-        self.manager = manager
+        self.pickerManager = pickerManager
         self.historyManager = historyManager
         self.onCompletion = onCompletion
         self.onCancel = onCancel
@@ -59,7 +59,7 @@ public class CropFlowViewModel {
         let task = Task { [weak self] in
             guard let self else { return }
             do {
-                let mediaItem = try await self.manager.process(image)
+                let mediaItem = try await self.pickerManager.process(image)
                 await MainActor.run {
                     self.items = [mediaItem]
                     self.moveToNextUncropped()
