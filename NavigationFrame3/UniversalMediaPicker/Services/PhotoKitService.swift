@@ -108,10 +108,18 @@ public final class PhotoKitService: NSObject {
     /// Reused by both `startCachingImages` (prewarm) and `requestImage`
     /// (per-cell read) so PhotoKit treats the warm and the read as the same
     /// request shape — drift here silently misses the warm pool.
+    ///
+    /// `isNetworkAccessAllowed = true` lets PhotoKit fetch thumbnails for
+    /// iCloud-only assets (common when the user has "Optimize iPhone
+    /// Storage" enabled — older photos live only in iCloud with metadata
+    /// stubs locally). Without it, `.highQualityFormat` returns nil for
+    /// iCloud-only assets, and those cells render as empty black squares
+    /// forever. Apple's Photos.app sets this for the same reason.
     @ObservationIgnored private let thumbnailRequestOptions: PHImageRequestOptions = {
         let opts = PHImageRequestOptions()
         opts.isSynchronous = false
         opts.deliveryMode = .highQualityFormat
+        opts.isNetworkAccessAllowed = true
         return opts
     }()
 
