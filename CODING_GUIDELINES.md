@@ -438,6 +438,118 @@ private func loadNextPageCore() async {
 
 **Anti-pattern to avoid:** doing the unbounded fetch on the critical path "because it's lazy." A `PHFetchResult` is lazy about *materializing* `PHAsset` objects, but it's NOT lazy about *the sort*. The sort happens upfront over the entire matching set. Treating "lazy result" as "lazy fetch" was the mistake the first pagination iteration made; see `project_picker_perf_state.md` for the measurement.
 
+### Refinement: lazy PHASE 2 (defer-until-user-intent)
+
+**PHASE 2 doesn't have to fire eagerly in the background.** When the same operation that drives PHASE 2 is on a **shared queue-backed framework** (PhotoKit, AVFoundation, URLSession), eager-firing PHASE 2 right after PHASE 1 can starve other visible content competing for that same queue — even though PHASE 2 is "in the background."
+
+The refinement: **defer PHASE 2 until the user actually demonstrates intent for its results.** For the picker's pagination case, that's "user scrolls past cell 50" (the sentinel). The Task that does the unbounded fetch is spawned inside `loadNextPageCore` on first call, not at the end of `loadAssets`:
+
+```swift
+// loadAssets — PHASE 1 only, no PHASE 2 spawn
+private func loadAssets(for album) async {
+    let firstPage = await photoKitService.fetchAssets(in: album, limit: 60)
+    state.assets = firstPage.map { .phAsset($0) }
+    state.isLoading = false
+    // No PHASE 2 here — deferred to first sentinel hit.
+}
+
+// loadNextPageCore — lazy spawn of PHASE 2
+private func loadNextPageCore() async {
+    if fetchResult == nil {
+        if pendingFullFetch == nil {
+            let task = Task { [weak self] in
+                guard let self else { return }
+                let fullResult = await self.photoKitService.fetchAssetsResult(in: album)
+                self.fetchResult = fullResult
+            }
+            pendingFullFetch = task
+            tasks.append(task)
+        }
+        if let pending = pendingFullFetch {
+            await pending.value
+        }
+    }
+    // ... materialize next page ...
+}
+```
+
+**When to use eager PHASE 2 vs lazy PHASE 2:**
+
+| | Eager PHASE 2 (fires in `loadAssets`) | Lazy PHASE 2 (fires in `loadNextPage`) |
+|---|---|---|
+| PHASE 2 work is on a CPU pool, no queue contention | ✅ Better — pre-warm pays off | Either works |
+| PHASE 2 competes with visible content on a shared framework queue | ❌ Risk of starving visible content | ✅ Better — visible content gets the queue free |
+| User likely to scroll past page 1 quickly | Either works | Either works |
+| User often picks first-page result and dismisses | Eager wastes work | ✅ Better — never pays the cost |
+
+For our picker (PhotoKit serial queue + library previewer + gallery thumb competing for it), **lazy was the right choice** — measured the eager version delaying the previewer by 100-300ms.
+
+### Producer-consumer for warm state (prewarm + eager-init)
+
+**Pattern: an `@Observable` service "produces" warm state during host-view appearance; downstream VMs "consume" that state synchronously at their own `init` time.** This is how the picker's `~250ms first paint` is achieved.
+
+**Producer side** — service exposes prewarmed state as observable properties, populated by a prewarm method called early:
+
+```swift
+@Observable
+public final class PhotoKitService: NSObject {
+    public var recentAssets: [PHAsset] = []
+    public var albums: [PhotoLibraryService.AlbumInfo] = []
+    public var prewarmedFirstAlbumAssets: [PHAsset] = []   // ← cached for consumer
+
+    public func prewarm() async {
+        await fetchRecentAssets()      // fills recentAssets
+        await loadAlbumsIfNeeded()      // fills albums
+        await prewarmVisibleContent()   // fills prewarmedFirstAlbumAssets + ThumbnailCache
+    }
+}
+
+// Called from the public modifier at the host-view appearance:
+.task {
+    await PhotoKitService.shared.prewarm()
+}
+```
+
+**Consumer side** — VMs read those properties synchronously at `init` to set their own state. No async wait, no body-eval-then-onAppear cycle:
+
+```swift
+@MainActor @Observable
+public final class PickerViewModel {
+    public var previewAsset: PHAsset?
+    public var galleryThumbImage: UIImage?
+    public var currentAlbum: PhotoLibraryService.AlbumInfo?
+
+    public init(..., photoKitService: PhotoKitService = .shared, ...) {
+        // ... existing assignments ...
+        // Eager-init from warm singleton state. Reads return nil if prewarm
+        // hasn't completed (cold race) — async fallback path handles that case.
+        if let firstRecent = photoKitService.recentAssets.first {
+            self.previewAsset = firstRecent
+            self.galleryThumbImage = photoKitService.cachedThumbnail(for: firstRecent)
+        }
+        if let firstAlbum = photoKitService.albums.first {
+            self.currentAlbum = firstAlbum
+        }
+    }
+}
+```
+
+**Why this beats `.onAppear`:**
+
+If you set initial state in `.onAppear { vm.fillFromCache() }`, the view's FIRST body evaluation sees empty state → renders placeholder → onAppear fires → state updates → view re-evaluates → renders populated state. Two renders, visible flicker.
+
+Init-based eager-fill: view's first evaluation sees populated state → renders correctly on the first frame. One render, no flicker.
+
+**Watch out for internal-state invariants:**
+
+If the normal data path also sets internal bookkeeping properties (e.g., `lastLoadedAlbum`, `lastFetchedAt`), the eager-init path must set them too. Otherwise async paths that depend on that bookkeeping break silently. In the picker, eager-init had to set `AssetGridViewModel.lastLoadedAlbum` because pagination's `loadNextPageCore` reads it — without that line, pagination silently broke for the initial album.
+
+**The "cold race" fallback:**
+
+When the user opens the picker before prewarm completes, the eager-init reads return nil/empty. The existing async path (bootstrap → loadAssets → etc.) still runs and fills the state normally. Eager-init is a **fast path for the warm case**, not a replacement for the async path.
+
+**Anti-pattern to avoid:** having the VM async-fetch data that's already sitting on the injected service. If the service has it and the VM needs it, read it synchronously in init. Don't duplicate the async fetch.
+
 ### Equality-guarded setters
 
 Every `@Observable` setter cascades to all observers, even when the value didn't change. For frequently-written state, guard:
@@ -756,6 +868,8 @@ Use `// MARK: - Section` for any file with multiple logical sections (init, publ
 | `async let` to parallelize two methods | Is the downstream framework serial? Does parallel cause Observable cascade bursts? | If yes to either → sequential `await`s. Parallel `@MainActor` `async let` is rarely net-positive. See §3 "When parallelism helps." |
 | Heavy CPU work inside a VM | Will it block main if not detached? | Wrap in `Task.detached(priority: .userInitiated) { … }.value`. Never put `@MainActor` on a class whose methods do heavy CPU. |
 | Fetch with a bounded-fast / unbounded-slow API split (PhotoKit, URLSession, etc.) | Does the caller need the bounded for first paint AND the unbounded for downstream? | Use the hybrid fast-path + background unbounded pattern. Critical-path consumer awaits bounded; downstream consumers await the stored background Task. |
+| Bounded fast-path returns but PHASE 2 unbounded fetch competes with visible content | Does PHASE 2 hit a shared serial queue (PhotoKit, AVFoundation)? | Lazy PHASE 2 — defer the spawn to first user-intent trigger (sentinel, button) instead of eager-background after PHASE 1. |
+| Initial VM state derivable from injected service properties | Is the data already on a singleton at VM construction time? | Eager-init in VM `init` — read the singleton synchronously and assign. Don't async-fetch what's already there. |
 | Public type | Where does it live? | `Models/`, one type per file. |
 | Internal helper struct | Where does it live? | Same file as the view/VM that uses it. |
 | Flow stage (multi-step UX) | Sheet, NavigationStack, or single-ZStack? | Single ZStack with flow-state enum. |
@@ -783,6 +897,8 @@ Use `// MARK: - Section` for any file with multiple logical sections (init, publ
 - ❌ Naive prefetch on a shared queue-backed framework without first checking whether more-visible content competes for the same queue.
 - ❌ Treating a "lazy" result type as a "lazy" fetch. `PHFetchResult` is lazy about materializing items but NOT about sorting them. Same trap exists for any API that says "lazy" in the name — read the docs for what's actually deferred.
 - ❌ Doing an unbounded fetch on the critical path when a bounded fast-path exists. See §3 "Bounded fast-path + background unbounded."
+- ❌ Async-fetching data inside a VM method when the same data is already sitting on the injected service. Read it synchronously in `init`. See §3 "Producer-consumer for warm state."
+- ❌ Setting initial state in `.onAppear` instead of `init`. `.onAppear` runs AFTER the first render → flicker. `init` runs BEFORE the first render → no flicker.
 - ❌ Plural folder names for features (`Pickers/`, `Onboardings/`).
 - ❌ Multi-type files for public types (`Models.swift`, `Components.swift` grab-bags).
 - ❌ `// Added for ticket #X` or `// Used by Y` comments.
