@@ -259,6 +259,17 @@ public final class AssetGridViewModel: NSObject {
         let newIDs = firstPage.map(\.localIdentifier)
         let oldIDs = assetGridState.assets.compactMap { $0.phAsset?.localIdentifier }
         if newIDs != oldIDs {
+            // Invalidate stale pagination state from the previous album so
+            // `loadNextPageCore` lazy-spawns a fresh PHASE 2 for THIS album
+            // instead of materializing rows from the previous album's
+            // PHFetchResult. Without this, scrolling in Selfies after
+            // switching from Recents would append Recents photos (because
+            // `fetchResult` still pointed at the Recents PHFetchResult set
+            // on the prior album's scroll-triggered PHASE 2).
+            pendingFullFetch?.cancel()
+            pendingFullFetch = nil
+            fetchResult = nil
+
             assetGridState.assets = firstPage.map { .phAsset($0) }
             // Tell PhotoKit to start preparing the cells' thumbnails NOW,
             // before SwiftUI lays them out — first paint reads from the
