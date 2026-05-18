@@ -98,6 +98,13 @@ public final class PhotoKitService: NSObject {
     @ObservationIgnored private var cachedAssets: [PHAsset] = []
     @ObservationIgnored private var cachedSize: CGSize = .zero
 
+    /// In-flight `fetchRecentAssets` handle for coalescing. When multiple
+    /// callers race (e.g. `openLimitedPicker` completion + library change
+    /// observer firing back-to-back), the second and later callers await
+    /// the first caller's Task instead of issuing redundant PhotoKit
+    /// requests. Touched only on `MainActor` (check/store + clear).
+    @ObservationIgnored private var inFlightRecentsFetch: Task<Void, Never>?
+
     /// Nonisolated — init does only thread-safe PhotoKit calls
     /// (`authorizationStatus(for:)` and `register(_:)` are both documented
     /// thread-safe) plus one write to `authStatus` before the instance is
@@ -222,7 +229,30 @@ public final class PhotoKitService: NSObject {
     /// Resolves auth state, requests if needed, then fetches and stores the
     /// most recent `limit` assets. Nonisolated async: awaiting hops to the
     /// cooperative pool; the heavy fetch runs off-main inside `PhotoLibraryService`.
+    ///
+    /// **Coalesced.** Concurrent callers (e.g. `openLimitedPicker` completion
+    /// firing alongside `photoLibraryDidChange`) await a single shared Task
+    /// instead of issuing redundant PhotoKit fetches. The first caller's
+    /// `limit` wins — subsequent callers receive whatever the in-flight fetch
+    /// was configured with. In practice every call site uses `limit: 30`
+    /// (default), so divergence is theoretical.
     public func fetchRecentAssets(limit: Int = 30) async {
+        let task: Task<Void, Never> = await MainActor.run {
+            if let existing = inFlightRecentsFetch {
+                return existing
+            }
+            let newTask = Task { [weak self] in
+                guard let self else { return }
+                await self.performRecentAssetsFetch(limit: limit)
+                await MainActor.run { self.inFlightRecentsFetch = nil }
+            }
+            inFlightRecentsFetch = newTask
+            return newTask
+        }
+        await task.value
+    }
+
+    private func performRecentAssetsFetch(limit: Int) async {
         let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         await MainActor.run { setAuthStatus(status) }
 
