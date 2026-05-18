@@ -61,6 +61,19 @@ public final class PhotoKitService: NSObject {
     /// previewer prewarm reference the same number.
     public static let previewerTargetSize = CGSize(width: 1000, height: 1000)
 
+    /// Initial page size for the grid — how many PHAssets we mount on first
+    /// paint. Deliberately small (~one viewport at a 4-column grid) so the
+    /// cells that fire `.task` on initial mount don't pile 60 requests onto
+    /// PhotoKit's serial queue at once. Pagination fills the rest as the
+    /// user scrolls; off-screen cells aren't even mounted by LazyVGrid until
+    /// they near the viewport, so the deferred cost is genuinely deferred.
+    ///
+    /// Used by both `prewarmVisibleContent` (step 1 fetch) and
+    /// `AssetGridViewModel.loadAssets` (the bounded first fetch). Single
+    /// source of truth — drift would mean prewarm caches a different set
+    /// than the grid mounts.
+    public static let gridInitialPageSize = 20
+
     public var recentAssets: [PHAsset] = []
     public var authStatus: PHAuthorizationStatus = .notDetermined
     public var albums: [PhotoLibraryService.AlbumInfo] = []
@@ -194,7 +207,7 @@ public final class PhotoKitService: NSObject {
         //    fast path. Store the result on `prewarmedFirstAlbumAssets`
         //    so `AssetGridViewModel.init` can read it synchronously and
         //    mount with cells already populated.
-        let firstPage = await library.fetchAssets(in: firstAlbum.collection, limit: 60)
+        let firstPage = await library.fetchAssets(in: firstAlbum.collection, limit: Self.gridInitialPageSize)
         await MainActor.run {
             setCachedAssets(firstPage, targetSize: Self.gridThumbnailTargetSize)
             self.prewarmedFirstAlbumAssets = firstPage

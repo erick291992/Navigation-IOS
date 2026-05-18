@@ -93,15 +93,18 @@ public final class AssetGridViewModel: NSObject {
     /// completes. Cancelled via the `tasks` array on deinit.
     @ObservationIgnored private var pendingFullFetch: Task<Void, Never>?
 
-    /// Cells per page. 60 covers ~3-4 screens at a 4-column grid — enough
-    /// that scrolling doesn't immediately trigger another fetch, small
-    /// enough that initial paint isn't blocked materializing 200+ assets.
-    private static let pageSize = 60
+    /// Pagination batch size — used for every page AFTER the first. Larger
+    /// than the initial page so deep scrolling doesn't trigger pagination
+    /// every other row. The initial page size lives on `PhotoKitService`
+    /// (`gridInitialPageSize`) because the prewarm references it too.
+    private static let paginationPageSize = 60
 
     /// How many cells before the end of the materialized list to start
-    /// loading the next page. 10 cells ≈ 2.5 rows of buffer — gives PhotoKit
-    /// time to materialize before the user actually scrolls past the end.
-    private static let sentinelBuffer = 10
+    /// loading the next page. 4 cells = 1 row of buffer at a 4-column grid
+    /// — small enough that the sentinel lives just past the initial 20-cell
+    /// viewport (not inside it), large enough to give PhotoKit a row of
+    /// lead time before the user actually scrolls to the bottom.
+    private static let sentinelBuffer = 4
 
     // MARK: - Fire-and-forget task storage
     //
@@ -240,12 +243,15 @@ public final class AssetGridViewModel: NSObject {
         PickerPerfLog.event("grid.loadAssets → enter (album=\(album.title))")
         assetGridState.isLoading = true
 
-        // PHASE 1 — bounded top-`pageSize` fetch using PhotoKit's partial-sort
-        // fast path. This is the ONLY thing the user waits on for first
-        // paint. A bounded fetch is dramatically faster than the unbounded
-        // sort on large libraries because PhotoKit uses a top-K algorithm
-        // and never has to establish ordering for the rest of the album.
-        let firstPage = await photoKitService.fetchAssets(in: album, limit: Self.pageSize)
+        // PHASE 1 — bounded top-`gridInitialPageSize` fetch using PhotoKit's
+        // partial-sort fast path. This is the ONLY thing the user waits on
+        // for first paint. A bounded fetch is dramatically faster than the
+        // unbounded sort on large libraries because PhotoKit uses a top-K
+        // algorithm and never has to establish ordering for the rest of the
+        // album. We also keep this batch small (~one viewport) so the cells
+        // mounted on initial paint don't pile dozens of requestImage calls
+        // onto PhotoKit's serial queue at once.
+        let firstPage = await photoKitService.fetchAssets(in: album, limit: PhotoKitService.gridInitialPageSize)
         PickerPerfLog.event("grid.loadAssets → PHASE 1 fetched (\(firstPage.count))")
 
         // Skip assignment if the identifier set hasn't actually changed —
@@ -261,7 +267,7 @@ public final class AssetGridViewModel: NSObject {
             PickerPerfLog.event("grid.loadAssets → setCachedAssets done (warm started)")
         }
         assetGridState.isLoading = false
-        // ↑ User sees the first 60 cells from here. NO PHASE 2 — it's
+        // ↑ User sees the first ~20 cells from here. NO PHASE 2 — it's
         //   deferred to the first sentinel hit in `loadNextPageCore`. This
         //   leaves PhotoKit's serial queue free for the library previewer
         //   and gallery shortcut to load without contention.
@@ -317,7 +323,7 @@ public final class AssetGridViewModel: NSObject {
         isLoadingPage = true
         defer { isLoadingPage = false }
 
-        let nextRange = currentCount..<min(currentCount + Self.pageSize, result.count)
+        let nextRange = currentCount..<min(currentCount + Self.paginationPageSize, result.count)
         PickerPerfLog.event("grid.loadNextPage → start (range=\(nextRange.lowerBound)..<\(nextRange.upperBound))")
 
         let nextPage = await photoKitService.materialize(from: result, range: nextRange)
@@ -413,7 +419,7 @@ public final class AssetGridViewModel: NSObject {
         // the user doesn't lose scroll position. If the library shrunk
         // (e.g., user deleted photos), clamp to the new total.
         let currentCount = assetGridState.assets.count
-        let refreshCount = min(max(currentCount, Self.pageSize), result.count)
+        let refreshCount = min(max(currentCount, Self.paginationPageSize), result.count)
         let materialized = await photoKitService.materialize(
             from: result,
             range: 0..<refreshCount
