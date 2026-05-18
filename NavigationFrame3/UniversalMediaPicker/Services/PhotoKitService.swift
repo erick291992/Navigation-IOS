@@ -74,6 +74,16 @@ public final class PhotoKitService: NSObject {
     /// than the grid mounts.
     public static let gridInitialPageSize = 20
 
+    /// How many of the initial-page cells to pre-decode into
+    /// `ThumbnailCache.shared` during prewarm. ≤ `gridInitialPageSize`.
+    /// Set to one viewport's worth (4 cols × 4 rows at typical sizes) so
+    /// the user's first visible content paints from cache on sheet open
+    /// rather than trickling in over PhotoKit's serial queue.
+    ///
+    /// Capped below the initial page so we never try to prewarm a cell
+    /// that wasn't fetched in step 1.
+    public static let gridInitialPrewarmCount = 16
+
     public var recentAssets: [PHAsset] = []
     public var authStatus: PHAuthorizationStatus = .notDetermined
     public var albums: [PhotoLibraryService.AlbumInfo] = []
@@ -117,6 +127,15 @@ public final class PhotoKitService: NSObject {
     /// the first caller's Task instead of issuing redundant PhotoKit
     /// requests. Touched only on `MainActor` (check/store + clear).
     @ObservationIgnored private var inFlightRecentsFetch: Task<Void, Never>?
+
+    /// Cancellable handle for `prewarmVisibleContent`'s step 4 (grid-cell
+    /// thumbnail prewarm). The modifier calls `cancelGridPrewarm()` from
+    /// `.onChange(of: isPresented)` the moment the sheet is about to open
+    /// — that way, if the user is fast enough to tap before step 4
+    /// finishes (the cold-race case), the in-flight prewarm stops queuing
+    /// new requests instead of competing with sheet-open's own PhotoKit
+    /// requests. Touched only on `MainActor`.
+    @ObservationIgnored private var gridPrewarmTask: Task<Void, Never>?
 
     /// Nonisolated — init does only thread-safe PhotoKit calls
     /// (`authorizationStatus(for:)` and `register(_:)` are both documented
@@ -245,6 +264,57 @@ public final class PhotoKitService: NSObject {
             }
         }
         PickerPerfLog.event("photoKit.prewarm.visible → gallery thumb 140pt warmed")
+
+        // 4. Pre-decode the first ~16 grid cells (one viewport's worth)
+        //    into ThumbnailCache.shared so the grid paints its visible
+        //    viewport instantly when the sheet opens. Runs LAST so the
+        //    previewer + gallery shortcut (steps 2 + 3) get PhotoKit's
+        //    serial queue first — that was the lesson from an earlier
+        //    failed attempt that ran grid prewarm before the visible
+        //    content and starved the previewer.
+        //
+        //    Stored as a cancellable Task so the modifier can abort it
+        //    via cancelGridPrewarm() the moment the sheet is about to
+        //    present — that's the cold-race protection. Task.isCancelled
+        //    is checked between requests; PhotoKit's in-flight work isn't
+        //    abortable, but no further requests get queued.
+        let primeCount = min(Self.gridInitialPrewarmCount, firstPage.count)
+        guard primeCount > 0 else {
+            PickerPerfLog.event("photoKit.prewarm.visible → step 4 skipped (no cells)")
+            return
+        }
+        PickerPerfLog.event("photoKit.prewarm.visible → step 4 start (\(primeCount) cells)")
+
+        let prewarmTask = Task { [weak self] in
+            guard let self else { return }
+            for asset in firstPage.prefix(primeCount) {
+                if Task.isCancelled {
+                    PickerPerfLog.event("photoKit.prewarm.visible → step 4 cancelled")
+                    return
+                }
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    self.loadThumbnail(for: asset, size: Self.gridThumbnailTargetSize) { _ in
+                        continuation.resume()
+                    }
+                }
+            }
+            PickerPerfLog.event("photoKit.prewarm.visible → step 4 done")
+        }
+        await MainActor.run { self.gridPrewarmTask = prewarmTask }
+        await prewarmTask.value
+        await MainActor.run { self.gridPrewarmTask = nil }
+    }
+
+    /// Cancels any in-flight grid-cell prewarm (step 4 of
+    /// `prewarmVisibleContent`). Called from `MediaPickerModifier`'s
+    /// `.onChange(of: isPresented)` when the sheet is about to open, so
+    /// in-flight prewarm doesn't compete with sheet-open's own PhotoKit
+    /// requests during the cold-race scenario (user taps before prewarm
+    /// finishes). No-op if prewarm has already completed or never ran.
+    @MainActor
+    public func cancelGridPrewarm() {
+        gridPrewarmTask?.cancel()
+        gridPrewarmTask = nil
     }
 
     // MARK: - Recent assets

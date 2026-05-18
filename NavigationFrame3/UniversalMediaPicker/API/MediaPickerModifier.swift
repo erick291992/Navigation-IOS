@@ -57,7 +57,15 @@ public struct MediaPickerModifier: ViewModifier {
                 PickerPerfLog.event("modifier.task → prewarm completed")
             }
             .onChange(of: isPresented) { _, newValue in
-                if newValue { PickerPerfLog.reset("sheet presenting") }
+                if newValue {
+                    PickerPerfLog.reset("sheet presenting")
+                    // Cold-race protection: if the user tapped before the
+                    // grid prewarm (step 4) finished, abort it now so its
+                    // remaining requests don't compete with sheet-open's
+                    // own PhotoKit traffic. No-op if prewarm already
+                    // completed or never ran.
+                    PhotoKitService.shared.cancelGridPrewarm()
+                }
             }
             .sheet(isPresented: $isPresented, onDismiss: {
                 // Per-session reset: clear the user's selection cache so the
