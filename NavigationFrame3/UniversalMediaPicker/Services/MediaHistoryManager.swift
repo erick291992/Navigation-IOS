@@ -2,8 +2,11 @@ import Foundation
 import SwiftUI
 import Observation
 
-/// A persistent manager to track media assets picked during the current app session.
-/// Enables the "Recents/History" feature in the Unified Creator.
+/// Session-scoped reuse history for the picker's REUSE mode.
+///
+/// Holds the items the user has picked during the current app session so the
+/// REUSE viewfinder/grid can offer them as one-tap re-picks. Capped at 50.
+/// Lives for the app's lifetime; clears on `clear()` or process exit.
 @MainActor
 @Observable
 public final class MediaHistoryManager {

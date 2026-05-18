@@ -122,7 +122,7 @@ public struct EliteGeometricPickerView: View {
                         .font(.system(size: 16, weight: .black))
                         .foregroundColor(.white)
                 }
-                .padding(.top, 44) // 🛡️ Dynamic Island / StatusBar Clearance
+                .padding(.top, 44) // Clears Dynamic Island / status bar
                 .frame(height: 100, alignment: .bottom) // Combined height for nav
                 .background(Color.black)
                 .zIndex(100)
@@ -296,8 +296,8 @@ public struct EliteGeometricPickerView: View {
                                     loadAsync: { await viewModel.requestThumbnail(for: asset) }
                                 )
                                     .scaleEffect(isSelected ? 0.95 : 1.0)
-                                    .aspectRatio(contentMode: .fit) // 🎞️ No Zoom: Touch sides, letterbox top/bottom
-                                    .frame(width: geometry.size.width) // 📐 Force Width to Column
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: geometry.size.width)
                                     .clipped()
                             )
                             .overlay(alignment: .topTrailing) {
@@ -317,7 +317,9 @@ public struct EliteGeometricPickerView: View {
                                 }
                             }
                     }
-                    .aspectRatio(1284.0/2778.0, contentMode: .fit) // 📱 Match iPhone Screen Ratio (0.46)
+                    // 1284/2778 ≈ 0.46 is the iPhone Pro/Pro Max screen ratio —
+                    // cells letterbox to match a typical phone-aspect photo.
+                    .aspectRatio(1284.0/2778.0, contentMode: .fit)
                     .clipped()
                     .contentShape(Rectangle())
                     .onTapGesture {

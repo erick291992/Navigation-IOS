@@ -14,8 +14,8 @@ public enum AssetGridAction {
 
 // MARK: - State Lens
 //
-// `currentAlbum` and `albums` are NOT stored here in the rebuild. They're
-// owned by `PickerViewModel` (the picker-level coordinator) and flow into
+// `currentAlbum` and `albums` are NOT stored here. They're owned by
+// `PickerViewModel` (the picker-level coordinator) and flow into
 // `AssetGridView` via `@Binding` — Apple's `Picker(selection:)` pattern.
 // The grid VM itself is concerned only with the assets it's been told to
 // load and the user's selection state.
@@ -27,8 +27,7 @@ public struct AssetGridState {
 
 // MARK: - ViewModel
 //
-// `@MainActor` at the class level — matches the rebuild's other view models
-// (PickerViewModel, CameraViewfinderViewModel, LibraryViewfinderViewModel).
+// `@MainActor` at the class level — matches the picker's other view models.
 // Every method (including async ones) is MainActor-isolated, so observable
 // state writes happen on MainActor by construction. Async methods that await
 // non-isolated service functions (PhotoKitService is not @MainActor) still

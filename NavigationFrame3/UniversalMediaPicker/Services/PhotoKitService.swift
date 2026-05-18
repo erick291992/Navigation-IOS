@@ -318,12 +318,9 @@ public final class PhotoKitService: NSObject {
     // MARK: - Thumbnail loading
     //
     // Lane discipline: only view models call these. Views take their image
-    // data as parameters from their parent's VM. The imperative system-picker
-    // bridge (PHPickerViewController + PhotoKitServicePickerDelegate) was
-    // deleted on 2026-05-17 when EmptyStateView was refactored to support a
-    // PhotosPicker-shaped action — the main picker flow now uses SwiftUI's
-    // PhotosPicker end to end. The UIKit bridge survives only for
-    // openLimitedPicker (no SwiftUI equivalent for the manage-access UI).
+    // data as parameters from their parent's VM. The only UIKit-bridged
+    // surface that survives in this service is `openLimitedPicker`, because
+    // PhotoKit's manage-access picker has no SwiftUI equivalent.
 
     /// Synchronous peek into the process-wide `ThumbnailCache`. The grid VM
     /// passes the result to each cell as `initialImage` so the cell paints
@@ -422,7 +419,9 @@ public final class PhotoKitService: NSObject {
 
     /// Equality-guarded auth setter. `@Observable` instruments every setter
     /// call — writing the same value still notifies subscribers and cascades
-    /// a re-eval (root cause of the flicker fixed in PR #7).
+    /// a re-eval through every view that observes `authStatus`, which has
+    /// caused visible flicker when `PHPhotoLibraryChangeObserver` fires
+    /// rapidly during normal library activity.
     @MainActor
     private func setAuthStatus(_ newStatus: PHAuthorizationStatus) {
         guard newStatus != authStatus else { return }

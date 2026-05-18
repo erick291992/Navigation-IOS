@@ -161,7 +161,8 @@ public struct CropView: View {
                     isProcessing = false 
                 }
                 .onChange(of: item) { _, _ in
-                    // 🛡️ Ironclad Reset: Force spinner OFF the moment the data swaps
+                    // Reset transient transform + spinner state when the
+                    // displayed item swaps (jump-to-index or auto-advance).
                     isProcessing = false
                     scale = 1.0
                     lastScale = 1.0

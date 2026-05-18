@@ -2,7 +2,7 @@ import SwiftUI
 import Photos
 import PhotosUI
 
-/// The picker shell that replaces the monolithic `UnifiedCreatorView`.
+/// The picker shell.
 ///
 /// Holds ONLY its own `PickerViewModel`. Every subview is self-contained
 /// (instantiates its own VM internally). Cross-cutting state flows DOWN as
@@ -38,7 +38,6 @@ public struct PickerView: View {
             }
             .ignoresSafeArea(.container, edges: .top)
 
-            // 🛡️ Sovereign Layer: Always on Top
             ExitButton { viewModel.handleCancel() }
                 .zIndex(100)
         }
@@ -52,8 +51,6 @@ public struct PickerView: View {
             if newPhase == .active { viewModel.refreshAuthIfNeeded() }
         }
         .onChange(of: viewModel.recentAssets) { _, _ in
-            // VM owns the orchestration (seed preview + refresh gallery
-            // thumb); view's only job is to forward the trigger.
             viewModel.handleRecentAssetsChanged()
         }
         .onChange(of: systemPickerSelection) { _, items in

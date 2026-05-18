@@ -134,9 +134,10 @@ public final class CameraService: NSObject {
 
     // MARK: - Private (state writers + computed helpers)
 
-    /// Equality-guarded `isSourceReady` setter (per `PICKER_PERF_FIX_HANDOFF.md` §5.5).
-    /// Without the guard, `setup()` was firing an `@Observable` cascade on every
-    /// throwaway VM construction during the upstream identity churn.
+    /// Equality-guarded `isSourceReady` setter. Without the guard, `setup()`
+    /// fires an `@Observable` cascade on every throwaway VM construction
+    /// during SwiftUI's upstream identity churn — each one re-evaluates every
+    /// downstream consumer of `isSourceReady`.
     @MainActor
     private func setIsSourceReady(_ value: Bool) {
         guard isSourceReady != value else { return }

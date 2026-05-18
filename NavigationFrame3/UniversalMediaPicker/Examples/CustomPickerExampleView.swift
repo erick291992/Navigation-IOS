@@ -17,25 +17,9 @@ struct CustomPickerExampleView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                
                 headerSection
-                
-                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                // SECTION 1: Configuration
-                // The developer picks crop mode & selection limit
-                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                configSection
-                
-                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                // SECTION 2: Custom Trigger Buttons
-                // YOUR design — the engine doesn't care what these look like
-                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                actionButtons
-                
-                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                // SECTION 3: Results
-                // Display the finished MediaItems however you want
-                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                configSection      // crop mode + selection limit
+                actionButtons      // gallery + camera triggers (consumer's own design)
                 if !viewModel.finishedItems.isEmpty {
                     resultsSection
                 }
@@ -45,17 +29,9 @@ struct CustomPickerExampleView: View {
         .background(Color(uiColor: .systemGroupedBackground))
         .navigationTitle("Custom Picker (Tier 3)")
         .navigationBarTitleDisplayMode(.large)
-        
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // WIRING: CropView Sheet
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         .sheet(isPresented: isCroppingBinding) {
             cropSheet
         }
-        
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // WIRING: Camera Full Screen
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         .fullScreenCover(isPresented: isCameraBinding) {
             CameraPicker(
                 onCapture: { image in viewModel.didCapturePhoto(image) },
@@ -134,10 +110,7 @@ struct CustomPickerExampleView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             
             HStack(spacing: 16) {
-                // ┌─────────────────────────────────────────┐
-                // │ Gallery Button — wraps Apple PhotosPicker │
-                // │ Design this however you want              │
-                // └─────────────────────────────────────────┘
+                // Gallery button — wraps Apple's PhotosPicker.
                 PhotosPicker(
                     selection: $viewModel.photosSelection,
                     maxSelectionCount: viewModel.maxSelection,
@@ -154,10 +127,7 @@ struct CustomPickerExampleView: View {
                     viewModel.didSelectPhotos(newValue)
                 }
                 
-                // ┌─────────────────────────────────────────┐
-                // │ Camera Button — opens CameraPicker        │
-                // │ Design this however you want              │
-                // └─────────────────────────────────────────┘
+                // Camera button — opens the UIKit-bridged CameraPicker.
                 Button {
                     viewModel.flowState = .camera
                 } label: {

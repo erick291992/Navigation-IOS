@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// UIKit bridge for Camera capture. 
-/// Designed to be swappable with a pure SwiftUI Camera API once Apple provides one.
+/// UIKit bridge for the system camera capture sheet
+/// (`UIImagePickerController` with `.sourceType = .camera`).
 struct CameraPicker: UIViewControllerRepresentable {
     let onCapture: (UIImage) -> Void
     let onCancel: () -> Void
