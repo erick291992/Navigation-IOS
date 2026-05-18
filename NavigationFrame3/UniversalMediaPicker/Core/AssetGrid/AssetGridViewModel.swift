@@ -93,6 +93,13 @@ public final class AssetGridViewModel: NSObject {
     /// completes. Cancelled via the `tasks` array on deinit.
     @ObservationIgnored private var pendingFullFetch: Task<Void, Never>?
 
+    /// In-flight `loadAssets` task for the current album. When the user
+    /// switches albums (or rapid-taps multiple albums in succession), each
+    /// new selection cancels this so the previous album's prewarm + swap
+    /// doesn't race with the new one. Tracked in `tasks` too so deinit
+    /// cancels it.
+    @ObservationIgnored private var loadAssetsTask: Task<Void, Never>?
+
     /// Pagination batch size — used for every page AFTER the first. Larger
     /// than the initial page so deep scrolling doesn't trigger pagination
     /// every other row. The initial page size lives on `PhotoKitService`
@@ -198,7 +205,16 @@ public final class AssetGridViewModel: NSObject {
 
         case .selectAlbum(let album):
             lastLoadedAlbum = album
-            Task { await loadAssets(for: album) }
+            // Cancel any prior album-load (rapid-tap supersedes): the
+            // previous album's prewarm + swap would otherwise race with
+            // the new one, leaving the grid in an inconsistent state.
+            loadAssetsTask?.cancel()
+            let task = Task { [weak self] in
+                guard let self else { return }
+                await self.loadAssets(for: album)
+            }
+            loadAssetsTask = task
+            tasks.append(task)
 
         case .selectAsset(let asset):
             if selectionLimit > 1 {
@@ -252,6 +268,11 @@ public final class AssetGridViewModel: NSObject {
         // mounted on initial paint don't pile dozens of requestImage calls
         // onto PhotoKit's serial queue at once.
         let firstPage = await photoKitService.fetchAssets(in: album, limit: PhotoKitService.gridInitialPageSize)
+        if Task.isCancelled {
+            PickerPerfLog.event("grid.loadAssets → cancelled after PHASE 1 fetch")
+            assetGridState.isLoading = false
+            return
+        }
         PickerPerfLog.event("grid.loadAssets → PHASE 1 fetched (\(firstPage.count))")
 
         // Skip assignment if the identifier set hasn't actually changed —
@@ -270,12 +291,34 @@ public final class AssetGridViewModel: NSObject {
             pendingFullFetch = nil
             fetchResult = nil
 
-            assetGridState.assets = firstPage.map { .phAsset($0) }
-            // Tell PhotoKit to start preparing the cells' thumbnails NOW,
-            // before SwiftUI lays them out — first paint reads from the
-            // warm pool instead of paying the disk/decode/resize cost.
+            // Tell PhotoKit to start preparing the cells' thumbnails NOW so
+            // requestImage calls hit the warm pool. Order matters: this
+            // happens BEFORE the prewarm loop so PhotoKit can serve the
+            // prewarm requests from a warmed state.
             photoKitService.setCachedAssets(firstPage, targetSize: PhotoKitService.gridThumbnailTargetSize)
             PickerPerfLog.event("grid.loadAssets → setCachedAssets done (warm started)")
+
+            // Prewarm the visible viewport's thumbnails into ThumbnailCache
+            // BEFORE replacing assetGridState.assets, so the new album
+            // reveals with a fully-painted viewport instead of empty
+            // squares trickling in. The old album stays visible during
+            // this ~1.3s window — the trade-off is "longer transition,
+            // clean reveal" vs "fast transition, visible trickle." Same
+            // total wall-clock either way; different perception. See
+            // MEDIA_PICKER_GUIDELINES.md for the rationale.
+            let primeCount = min(PhotoKitService.gridInitialPrewarmCount, firstPage.count)
+            PickerPerfLog.event("grid.loadAssets → prewarm start (\(primeCount) cells)")
+            await photoKitService.prewarmGridCells(firstPage.prefix(primeCount))
+            if Task.isCancelled {
+                PickerPerfLog.event("grid.loadAssets → cancelled after prewarm")
+                assetGridState.isLoading = false
+                return
+            }
+            PickerPerfLog.event("grid.loadAssets → prewarm done")
+
+            // NOW swap the visible content. Cells mount with cache hits
+            // for the prewarmed viewport.
+            assetGridState.assets = firstPage.map { .phAsset($0) }
         }
         assetGridState.isLoading = false
         // ↑ User sees the first ~20 cells from here. NO PHASE 2 — it's

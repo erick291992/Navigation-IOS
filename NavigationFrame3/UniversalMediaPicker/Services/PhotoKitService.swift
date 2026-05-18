@@ -317,6 +317,28 @@ public final class PhotoKitService: NSObject {
         gridPrewarmTask = nil
     }
 
+    /// Decodes the given PHAssets' thumbnails into `ThumbnailCache.shared`
+    /// at the grid's target size. Sequential through PhotoKit's serial
+    /// queue; honors `Task.isCancelled` between requests so the caller can
+    /// abort partway through (e.g. rapid album switching supersedes the
+    /// prewarm for the previous album).
+    ///
+    /// Used by:
+    /// - `prewarmVisibleContent` step 4 (cold-open prewarm in modifier idle)
+    /// - `AssetGridViewModel.loadAssets` (album-switch prewarm before the
+    ///   visible swap, so the new album reveals with a populated viewport
+    ///   instead of empty squares trickling in)
+    public func prewarmGridCells(_ assets: some Collection<PHAsset>) async {
+        for asset in assets {
+            if Task.isCancelled { return }
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                loadThumbnail(for: asset, size: Self.gridThumbnailTargetSize) { _ in
+                    continuation.resume()
+                }
+            }
+        }
+    }
+
     // MARK: - Recent assets
 
     /// Resolves auth state, requests if needed, then fetches and stores the
