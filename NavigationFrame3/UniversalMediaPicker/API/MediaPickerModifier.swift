@@ -8,7 +8,7 @@ import PhotosUI
 // from view code (the other being `CameraPreviewView`, the UIKit
 // `UIViewRepresentable` bridge for the live camera feed). The strict
 // View → ViewModel → Service rule documented in
-// `UniversalMediaPicker/DATA_FLOW_PATTERNS.md` does not apply here because:
+// `DATA_FLOW_PATTERNS.md` (at the project root) does not apply here because:
 //
 // 1. The modifier fires BEFORE any picker ViewModel exists. The
 //    `PickerViewModel` is constructed inside the sheet's content closure when
@@ -23,7 +23,7 @@ import PhotosUI
 // Every other file in the picker module follows the strict rule. For the
 // full set of data-flow conventions (View → VM → Service, when to use
 // `@Binding` vs callbacks, why VMs are `@MainActor` but workers are
-// nonisolated, etc.), see `UniversalMediaPicker/DATA_FLOW_PATTERNS.md`.
+// nonisolated, etc.), see `DATA_FLOW_PATTERNS.md` (at the project root).
 
 public struct MediaPickerModifier: ViewModifier {
     @Binding var isPresented: Bool

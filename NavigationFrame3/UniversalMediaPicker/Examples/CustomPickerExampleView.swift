@@ -1,14 +1,14 @@
 import SwiftUI
 import PhotosUI
 
-// MARK: - Tier 3 Example View
-// This is a complete, self-contained example of building your OWN picker UI
-// using the MediaPickerEngine. No Elite UI is used — you control everything.
+// MARK: - Custom Picker Example
+// A complete, self-contained example of building your OWN picker UI using
+// `MediaPickerManager`. No Elite UI is used — you control everything.
 //
 // WHAT THIS DEMONSTRATES:
 // 1. Your own gallery button design → pipes into Apple's PhotosPicker
 // 2. Your own camera button design → pipes into CameraPicker
-// 3. Engine processes the raw data → feeds into CropView for cropping
+// 3. MediaPickerManager processes the raw data → feeds into CropView for cropping
 // 4. You get back finished [MediaItem] to use however you want
 
 struct CustomPickerExampleView: View {

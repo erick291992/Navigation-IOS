@@ -206,11 +206,7 @@ That's principled, not chaotic. The mix only looks chaotic until you know the de
 
 ### Known inconsistencies to clean up
 
-- **`EmptyStateView`** has its own internal `Button` with an `onAction` closure. This is Pattern 1 inside a Pattern 1 wrapper, fine, but it prevents the empty state from being wrapped in `PhotosPicker` cleanly. Refactor opportunity: have `EmptyStateView` take a `@ViewBuilder` for the action area, so the parent can supply either a `Button` or a `PhotosPicker`. Then the imperative `openSystemPicker` fallback could be deleted.
-
-- **`MediaPickerEngine`** is a 1:1 pass-through wrapper over `MediaPickerManager`. Not a data-flow pattern issue, but a layering smell — it adds a tier without adding behavior. Queued for deletion.
-
-- **Demo files (`AdvancedPickerExampleView.swift:213`)** still have one direct `PhotoKitService.shared.loadThumbnail` call from view code — the only remaining View → Service violation. Migrate to the parent VM (`AdvancedPickerExampleViewModel`) using the same shape as `AssetGridViewModel.thumbnail(for:)`.
+_All previously-tracked inconsistencies in this section have been resolved as of 2026-05-17 (`EmptyStateView` refactored to `@ViewBuilder`, `MediaPickerEngine` deleted, `AdvancedPickerExampleView` migrated to its VM). Add new items here as they arise._
 
 ### Bottom line
 

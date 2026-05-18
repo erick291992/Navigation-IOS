@@ -6,7 +6,7 @@ import AVFoundation
 // `CameraPreviewView` is the picker module's UIKit-bridge for the live
 // camera feed. It is one of TWO documented places in the module that calls
 // services directly from view code (the other being `MediaPickerModifier`).
-// The strict View → ViewModel → Service rule (see DATA_FLOW_PATTERNS.md)
+// The strict View → ViewModel → Service rule (see DATA_FLOW_PATTERNS.md at the project root)
 // does NOT apply here because:
 //
 // 1. The whole purpose of `UIViewRepresentable` is to bridge a UIKit
