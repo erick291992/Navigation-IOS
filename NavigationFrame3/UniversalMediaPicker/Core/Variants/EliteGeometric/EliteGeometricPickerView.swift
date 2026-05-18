@@ -187,11 +187,11 @@ public struct EliteGeometricPickerView: View {
     @ViewBuilder
     private var viewfinderArea: some View {
         ZStack(alignment: .bottom) {
-            // 1. Photo/Video Viewfinder (Persistent & Warm)
+            // MARK: Photo/Video viewfinder (persistent & warm)
             CameraPreviewView()
                 .opacity((viewModel.selectedMode == .photo || viewModel.selectedMode == .video) ? 1 : 0)
-            
-            // 2. Library Preview (Overlay)
+
+            // MARK: Library preview overlay
             if viewModel.selectedMode == .library {
                 Group {
                     if viewModel.authStatus == .denied || viewModel.authStatus == .restricted {
@@ -212,7 +212,7 @@ public struct EliteGeometricPickerView: View {
                 .transition(.opacity)
             }
             
-            // 3. Reuse Preview (Overlay)
+            // MARK: Reuse preview overlay
             if viewModel.selectedMode == .reuse {
                 Group {
                     if let item = viewModel.previewHistoryItem ?? viewModel.history.first {
@@ -227,7 +227,7 @@ public struct EliteGeometricPickerView: View {
                 .transition(.opacity)
             }
             
-            // 4. Zoom Dial Overlay
+            // MARK: Zoom dial overlay
             if viewModel.selectedMode == .photo {
                 zoomDial
                     .padding(.bottom, 12)

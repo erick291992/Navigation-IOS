@@ -56,7 +56,7 @@ public struct CameraPreviewView: UIViewRepresentable {
 }
 
 /// Native UIView subclass to seamlessly host the AV layer and automatically handle layout resizes.
-public class VideoPreviewUIView: UIView {
+public final class VideoPreviewUIView: UIView {
     public override class var layerClass: AnyClass {
         return AVCaptureVideoPreviewLayer.self
     }

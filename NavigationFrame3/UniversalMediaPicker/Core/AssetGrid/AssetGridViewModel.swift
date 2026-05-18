@@ -8,7 +8,6 @@ public enum AssetGridAction {
     case loadHistory([MediaItem])
     case selectAlbum(PhotoLibraryService.AlbumInfo)
     case selectAsset(GridAsset)
-    case toggleMultiSelect
     case toggleAssetSelection(GridAsset)
     case clearSelection
 }
@@ -23,9 +22,7 @@ public enum AssetGridAction {
 public struct AssetGridState {
     public var assets: [GridAsset] = []
     public var selectedAssets: [GridAsset] = [] // Ordered for numbered badges
-    public var isMultiSelectActive: Bool = false
     public var isLoading: Bool = false
-    public var errorMessage: String?
 }
 
 // MARK: - ViewModel
@@ -167,15 +164,6 @@ public final class AssetGridViewModel: NSObject {
 
     // MARK: - Session lifecycle
 
-    /// Resets the per-session UI state (selection, multi-select flag, error)
-    /// without throwing away the loaded asset list. Call this when a picker
-    /// sheet is dismissed so the next open starts clean.
-    public func prepareForNewSession() {
-        writeSelection([])
-        assetGridState.isMultiSelectActive = false
-        assetGridState.errorMessage = nil
-    }
-
     /// Static convenience for callers that don't have a VM instance handy
     /// (e.g., `MediaPickerModifier`'s `.sheet(onDismiss:)`). Clears the
     /// selection cache directly without needing to construct a VM. The
@@ -216,9 +204,6 @@ public final class AssetGridViewModel: NSObject {
             } else {
                 writeSelection([asset])
             }
-
-        case .toggleMultiSelect:
-            break
 
         case .toggleAssetSelection(let asset):
             toggleAssetSelection(asset)

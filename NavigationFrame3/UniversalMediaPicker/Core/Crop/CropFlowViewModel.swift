@@ -4,7 +4,7 @@ import Observation
 
 @MainActor
 @Observable
-public class CropFlowViewModel {
+public final class CropFlowViewModel {
     // MARK: - Configuration & Callbacks
     private let pickerManager: MediaPickerManager
     private let historyManager: MediaHistoryManager

@@ -5,7 +5,7 @@ import Observation
 
 @MainActor
 @Observable
-public class EliteGeometricPickerViewModel {
+public final class EliteGeometricPickerViewModel {
     // MARK: - Configuration & Callbacks
     public let configuration: MediaPickerConfiguration
     private let onCompletion: ([MediaItem]) -> Void

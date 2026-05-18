@@ -12,7 +12,7 @@ import AVFoundation
 /// `try await pickerManager.process(...)` from `@MainActor` view models —
 /// the await suspends the caller on main, the work runs on background,
 /// then the caller resumes on main when done.
-public class MediaPickerManager {
+public final class MediaPickerManager {
     public static let shared = MediaPickerManager()
 
     private let photoKitService: PhotoKitService
@@ -116,22 +116,20 @@ public class MediaPickerManager {
     }
     
     private func generateThumbnail(for image: UIImage) -> UIImage {
-        let size: CGFloat = 600 // High quality but optimized
+        let size: CGFloat = 600
         let imageSize = image.size
         let side = min(imageSize.width, imageSize.height)
-        
+
         let rect = CGRect(
             x: (imageSize.width - side) / 2,
             y: (imageSize.height - side) / 2,
             width: side,
             height: side
         )
-        
-        // 1. Crop to square
+
         guard let cgImage = image.cgImage?.cropping(to: rect) else { return image }
         let croppedImage = UIImage(cgImage: cgImage, scale: image.scale, orientation: image.imageOrientation)
-        
-        // 2. Resize to target size
+
         let targetSize = CGSize(width: size, height: size)
         let renderer = UIGraphicsImageRenderer(size: targetSize)
         return renderer.image { _ in

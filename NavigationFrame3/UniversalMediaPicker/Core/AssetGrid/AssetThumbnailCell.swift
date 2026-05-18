@@ -18,41 +18,15 @@ import Photos
 /// VM's observable state would cascade a re-render across every cell on each
 /// load completion. Per-cell granularity preserved.
 struct AssetThumbnailCell: View {
-    let source: AssetThumbnailSource
+    let source: GridAsset
     let gridStyle: MediaPickerStyle.GridStyle
     let selectionIndex: Int?
     let accentColor: Color
     let initialImage: UIImage?
     let loadAsync: (() async -> UIImage?)?
 
-    enum AssetThumbnailSource {
-        case phAsset(PHAsset)
-        case mediaItem(MediaItem)
-
-        var id: String {
-            switch self {
-            case .phAsset(let asset): return asset.localIdentifier
-            case .mediaItem(let item): return item.id.uuidString
-            }
-        }
-
-        var phAsset: PHAsset? {
-            if case .phAsset(let asset) = self { return asset }
-            return nil
-        }
-
-        var mediaItem: MediaItem? {
-            if case .mediaItem(let item) = self { return item }
-            return nil
-        }
-    }
-
     @State private var asyncLoaded: UIImage?
     private var displayImage: UIImage? { asyncLoaded ?? initialImage }
-
-    /// Atomic counter so only the first N cells log (prevents N=200 spam).
-    private static let cellLogLimit = 3
-    private static let cellLogCounter = NSCountedSet()
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -96,20 +70,12 @@ struct AssetThumbnailCell: View {
         }
         .contentShape(Rectangle())
         .task(id: source.id) {
-            let shouldLog = AssetThumbnailCell.cellLogCounter.count < AssetThumbnailCell.cellLogLimit
-            if shouldLog {
-                AssetThumbnailCell.cellLogCounter.add("cell")
-                PickerPerfLog.event("gridCell.task → enter (initialImage=\(initialImage != nil), id=\(source.id.suffix(8)))")
-            }
             // Kick off the parent's async load only if we don't already have
             // an image to show and a loader was provided. `.task(id:)`
             // auto-cancels on cell recycle / disappear, so we don't waste
             // work loading thumbnails for cells that scrolled offscreen.
             guard displayImage == nil, let loadAsync else { return }
             asyncLoaded = await loadAsync()
-            if shouldLog {
-                PickerPerfLog.event("gridCell.task → async loaded (id=\(source.id.suffix(8)))")
-            }
         }
     }
 

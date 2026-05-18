@@ -113,7 +113,7 @@ public struct CropView: View {
                                 }
                                 .onEnded { _ in
                                     lastScale = scale
-                                    validateBounds(in: size, cropArea: activeCropArea)
+                                    validateBounds()
                                 }
                         )
                         .simultaneousGesture(
@@ -126,7 +126,7 @@ public struct CropView: View {
                                 }
                                 .onEnded { _ in
                                     lastOffset = offset
-                                    validateBounds(in: size, cropArea: activeCropArea)
+                                    validateBounds()
                                 }
                         )
                     
@@ -213,7 +213,7 @@ public struct CropView: View {
         .clipShape(Capsule())
     }
     
-    private func validateBounds(in size: CGSize, cropArea: CGRect) {
+    private func validateBounds() {
         // Minimum scale allowed is 0.3 for a "bird's eye" view
         if scale < 0.3 {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
