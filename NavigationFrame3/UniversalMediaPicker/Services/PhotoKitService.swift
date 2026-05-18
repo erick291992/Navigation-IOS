@@ -8,6 +8,14 @@ import Observation
 /// in-place edit in `Photos.app` (crop, markup, filter — same identifier,
 /// new pixels) produces a cache miss and a fresh fetch. Without this, the
 /// grid would happily serve pre-edit pixels until the entry was evicted.
+///
+/// One entry per asset, regardless of requested size. `loadThumbnail`
+/// always stores the LARGEST image ever fetched for that asset and
+/// downscales for smaller consumers via SwiftUI's `.scaledToFill()`. The
+/// alternative — keying by size too — meant a small grid-cell request
+/// arriving after a larger previewer request would overwrite the high-res
+/// image with a low-res one, causing visible blur the next time the
+/// previewer reopened. See `loadThumbnail` for the comparison logic.
 public enum ThumbnailCache {
     public static let shared: NSCache<NSString, UIImage> = {
         let c = NSCache<NSString, UIImage>()
@@ -23,123 +31,592 @@ public enum ThumbnailCache {
     }
 }
 
-/// A lightweight service to fetch recent assets from the user's photo library.
-@MainActor
+/// `@Observable` facade exposing the picker's published PhotoKit state.
+///
+/// Holds `recentAssets`, `authStatus`, and `albums` for SwiftUI views/VMs to
+/// observe via computed-property proxies. Uses `PhotoLibraryService` (the
+/// mini-repository) for the heavy off-main data work.
+///
+/// Architecture notes:
+/// - NO class-level `@MainActor`. Async data methods are nonisolated so
+///   awaiting them hops to the cooperative thread pool per SE-0338, and the
+///   heavy PhotoKit calls inside `PhotoLibraryService` run off the main thread.
+///   Observable-state writers and UIKit-touching methods are individually
+///   `@MainActor`-annotated; `await MainActor.run` is used inside async methods
+///   to hop back to main for observable writes.
+/// - `PHPhotoLibraryChangeObserver` conformance lives in a dedicated extension.
 @Observable
-public class PhotoKitService: NSObject, PHPhotoLibraryChangeObserver {
+public final class PhotoKitService: NSObject {
     public static let shared = PhotoKitService()
-    
+
+    /// Pixel size grid cells render thumbnails at. Single source of truth so
+    /// the prewarm size (in `setCachedAssets`) and the cell's request size
+    /// (in `AssetThumbnailCell`) cannot drift apart — a mismatch silently
+    /// misses PhotoKit's warm pool and reintroduces the cold-start lag.
+    public static let gridThumbnailTargetSize = CGSize(width: 400, height: 400)
+
+    /// Pixel size the library viewfinder's previewer requests. Larger than
+    /// the grid size so the top image is sharp at the ~48% viewfinder
+    /// height. Lives here as a constant so the previewer VM and any future
+    /// previewer prewarm reference the same number.
+    public static let previewerTargetSize = CGSize(width: 1000, height: 1000)
+
+    /// Initial page size for the grid — how many PHAssets we mount on first
+    /// paint. Deliberately small (~one viewport at a 4-column grid) so the
+    /// cells that fire `.task` on initial mount don't pile 60 requests onto
+    /// PhotoKit's serial queue at once. Pagination fills the rest as the
+    /// user scrolls; off-screen cells aren't even mounted by LazyVGrid until
+    /// they near the viewport, so the deferred cost is genuinely deferred.
+    ///
+    /// Used by both `prewarmVisibleContent` (step 1 fetch) and
+    /// `AssetGridViewModel.loadAssets` (the bounded first fetch). Single
+    /// source of truth — drift would mean prewarm caches a different set
+    /// than the grid mounts.
+    public static let gridInitialPageSize = 20
+
+    /// How many of the initial-page cells to pre-decode into
+    /// `ThumbnailCache.shared` during prewarm. Set equal to
+    /// `gridInitialPageSize` so the ENTIRE initial page is cache-hit on
+    /// sheet open — including the bottom row that sits just at the fold
+    /// (cells 17-19 at a 4-column grid are visible in the initial
+    /// viewport on many devices, so they need to be cache hits too).
+    ///
+    /// Must be ≤ `gridInitialPageSize`; we never try to prewarm a cell
+    /// that wasn't fetched in step 1.
+    public static let gridInitialPrewarmCount = 20
+
     public var recentAssets: [PHAsset] = []
     public var authStatus: PHAuthorizationStatus = .notDetermined
+    public var albums: [PhotoLibraryService.AlbumInfo] = []
 
+    /// First album's pre-fetched 60 PHAssets, populated by `prewarmVisibleContent`.
+    /// `AssetGridViewModel.init` reads this so the grid mounts with cells
+    /// already populated — no empty-state flash, no async wait for the picker's
+    /// own `loadAssets` to fire. When prewarm hasn't completed yet (cold race),
+    /// this is empty and the grid's own async fetch fills it normally.
+    public var prewarmedFirstAlbumAssets: [PHAsset] = []
 
+    private let library = PhotoLibraryService.shared
+
+    /// PhotoKit's prefetcher. Tell it "I'm about to ask for these N assets
+    /// at this size" via `startCachingImages`; subsequent `requestImage`
+    /// calls at the same key return from the warm pool instead of going to
+    /// disk. Not a parallel image cache — `ThumbnailCache` above is the
+    /// in-process bitmap cache; this one lives inside PhotoKit and is
+    /// managed by Apple (eviction, memory pressure, etc.).
+    @ObservationIgnored private let cachingManager = PHCachingImageManager()
+
+    /// Reused by both `startCachingImages` (prewarm) and `requestImage`
+    /// (per-cell read) so PhotoKit treats the warm and the read as the same
+    /// request shape — drift here silently misses the warm pool.
+    ///
+    /// `isNetworkAccessAllowed = true` lets PhotoKit fetch thumbnails for
+    /// iCloud-only assets (common when the user has "Optimize iPhone
+    /// Storage" enabled — older photos live only in iCloud with metadata
+    /// stubs locally). Without it, `.highQualityFormat` returns nil for
+    /// iCloud-only assets, and those cells render as empty black squares
+    /// forever. Apple's Photos.app sets this for the same reason.
+    @ObservationIgnored private let thumbnailRequestOptions: PHImageRequestOptions = {
+        let opts = PHImageRequestOptions()
+        opts.isSynchronous = false
+        opts.deliveryMode = .highQualityFormat
+        opts.isNetworkAccessAllowed = true
+        return opts
+    }()
+
+    /// Tracks what's currently being warmed so the next call can stop the
+    /// old set before starting the new one. `@MainActor`-touched only —
+    /// `setCachedAssets` is `@MainActor` and is the sole writer.
+    @ObservationIgnored private var cachedAssets: [PHAsset] = []
+    @ObservationIgnored private var cachedSize: CGSize = .zero
+
+    /// In-flight `fetchRecentAssets` handle for coalescing. When multiple
+    /// callers race (e.g. `openLimitedPicker` completion + library change
+    /// observer firing back-to-back), the second and later callers await
+    /// the first caller's Task instead of issuing redundant PhotoKit
+    /// requests. Touched only on `MainActor` (check/store + clear).
+    @ObservationIgnored private var inFlightRecentsFetch: Task<Void, Never>?
+
+    /// Cancellable handle for `prewarmVisibleContent`'s step 4 (grid-cell
+    /// thumbnail prewarm). The modifier calls `cancelGridPrewarm()` from
+    /// `.onChange(of: isPresented)` the moment the sheet is about to open
+    /// — that way, if the user is fast enough to tap before step 4
+    /// finishes (the cold-race case), the in-flight prewarm stops queuing
+    /// new requests instead of competing with sheet-open's own PhotoKit
+    /// requests. Touched only on `MainActor`.
+    @ObservationIgnored private var gridPrewarmTask: Task<Void, Never>?
+
+    /// Nonisolated — init does only thread-safe PhotoKit calls
+    /// (`authorizationStatus(for:)` and `register(_:)` are both documented
+    /// thread-safe) plus one write to `authStatus` before the instance is
+    /// observable by anyone. Removing the `@MainActor` here lets
+    /// `MediaPickerManager` (and any other consumer) hold a reference to
+    /// `PhotoKitService.shared` from a nonisolated context.
     private override init() {
         super.init()
         self.authStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         PHPhotoLibrary.shared().register(self)
     }
-    
+
     deinit {
         PHPhotoLibrary.shared().unregisterChangeObserver(self)
     }
-    
-    /// Silently updates the authorization status without requesting it.
+
+    // MARK: - Auth
+
+    /// Silently re-reads the current auth status without prompting. Cheap;
+    /// safe to call repeatedly from scenePhase observers.
+    @MainActor
     public func updateAuthStatus() {
         let newStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-        guard newStatus != authStatus else { return }
-        authStatus = newStatus
+        setAuthStatus(newStatus)
     }
-    
-    /// Requests permission and fetches the last X assets.
+
+    // MARK: - Prewarm (called by MediaPickerModifier infrastructure)
+
+    /// Warms the picker's full sheet-open state when authorization is
+    /// already granted. Does NOT prompt — first-time users hit the auth
+    /// prompt at their intent moment (when they actually open the picker).
     ///
-    /// Now async: the heavy `PHAsset.fetchAssets` call runs off MainActor via a
-    /// `nonisolated async` helper (see `performFetch` below). Per SE-0338,
-    /// awaiting a nonisolated async function from a MainActor-isolated context
-    /// hops execution to the cooperative pool for the duration of the call —
-    /// the main thread is freed, the UI stays responsive. When the call
-    /// returns, control resumes on MainActor (because this class is @MainActor),
-    /// so the subsequent `updateAssets(from:)` call mutates observable state
-    /// safely for SwiftUI.
-    public func fetchRecentAssets(limit: Int = 30) async {
+    /// Sequential phases (each one feeds the next):
+    ///   1. `fetchRecentAssets` — populates `recentAssets` (PHAsset refs)
+    ///   2. `loadAlbumsIfNeeded` — populates `albums` (PHAssetCollection refs)
+    ///   3. (if `warmVisibleContent`) `prewarmVisibleContent` —
+    ///      pre-fetches the first album's grid page + pre-loads the
+    ///      library previewer's 1000pt bitmap + gallery shortcut's 140pt
+    ///      bitmap into `ThumbnailCache`.
+    ///
+    /// Phase 3 moves the cold-PhotoKit cost OFF the picker's sheet-open
+    /// critical path and ONTO the modifier-host's view appearance, which
+    /// typically gives the user 1-3+ seconds to navigate before tapping
+    /// "open picker." When they tap, PhotoKit is fully warm: grid fetch
+    /// returns from internal cache, previewer + gallery shortcut paint
+    /// synchronously from `ThumbnailCache`.
+    ///
+    /// `warmVisibleContent: false` is the opt-out for callers that want
+    /// only metadata warming (rare).
+    ///
+    /// `limit` defaults to 1 because the main picker's only consumer of
+    /// `recentAssets` is the gallery-shortcut button (which needs just the
+    /// library-wide newest photo). The previewer follows the album's first
+    /// asset via `prewarmedFirstAlbumAssets`, not `recentAssets`. Callers
+    /// that need more (e.g. `EliteGeometricPickerViewModel` uses recents as
+    /// its grid source) pass a larger limit explicitly.
+    public func prewarm(limit: Int = 1, warmVisibleContent: Bool = true) async {
+        PickerPerfLog.event("photoKit.prewarm → enter")
         let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-        setAuthStatus(status)
+        guard status == .authorized || status == .limited else {
+            PickerPerfLog.event("photoKit.prewarm → skipped (no auth)")
+            return
+        }
+        await fetchRecentAssets(limit: limit)
+        PickerPerfLog.event("photoKit.prewarm → recents loaded (\(recentAssets.count))")
+        await loadAlbumsIfNeeded()
+        PickerPerfLog.event("photoKit.prewarm → albums loaded (\(albums.count))")
+
+        guard warmVisibleContent else { return }
+        await prewarmVisibleContent()
+    }
+
+    /// Pre-fetch the first album's grid page (60 PHAssets, top-K path) AND
+    /// pre-load the library previewer's 1000pt bitmap AND pre-load the
+    /// gallery shortcut's 140pt bitmap into `ThumbnailCache`. Called as the
+    /// third phase of `prewarm` by default.
+    ///
+    /// Sequential is intentional — same lesson as the picker's own
+    /// `bootstrap()`: running these in parallel via `async let` would
+    /// pile multiple PhotoKit requests onto the serial queue at once and
+    /// risk contending with other work. Sequential keeps the queue clean.
+    private func prewarmVisibleContent() async {
+        PickerPerfLog.event("photoKit.prewarm.visible → start")
+
+        let firstAlbum: PhotoLibraryService.AlbumInfo? = await MainActor.run { self.albums.first }
+
+        guard let firstAlbum else {
+            PickerPerfLog.event("photoKit.prewarm.visible → skipped (no album)")
+            return
+        }
+
+        // 1. Pre-fetch first album's grid page using PhotoKit's top-K
+        //    fast path. Store the result on `prewarmedFirstAlbumAssets`
+        //    so `AssetGridViewModel.init` can read it synchronously and
+        //    mount with cells already populated.
+        let firstPage = await library.fetchAssets(in: firstAlbum.collection, limit: Self.gridInitialPageSize)
+        await MainActor.run {
+            setCachedAssets(firstPage, targetSize: Self.gridThumbnailTargetSize)
+            self.prewarmedFirstAlbumAssets = firstPage
+        }
+        PickerPerfLog.event("photoKit.prewarm.visible → first album fetched + warmed (\(firstPage.count))")
+
+        guard let firstAlbumAsset = firstPage.first else {
+            // Album is empty — no first asset to prewarm previewer/shortcut against.
+            // Grid prewarm in step 4 would also be a no-op; skip the rest.
+            PickerPerfLog.event("photoKit.prewarm.visible → skipped further steps (album empty)")
+            return
+        }
+
+        // 2. Pre-load library previewer's 1000pt bitmap into ThumbnailCache.
+        //    Uses the album's first asset (same source as
+        //    `prewarmedFirstAlbumAssets.first` which `PickerViewModel.init`
+        //    reads for `previewAsset`). Cell 0 of the grid IS this asset,
+        //    so the largest-wins cache means cell 0 also benefits from the
+        //    1000pt entry (downscaled visually to grid size). This coupling
+        //    is intentional in the unified architecture — previewer + grid
+        //    cell 0 share one cache entry by design, not by accident.
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            loadThumbnail(for: firstAlbumAsset, size: Self.previewerTargetSize) { _ in
+                continuation.resume()
+            }
+        }
+        PickerPerfLog.event("photoKit.prewarm.visible → previewer 1000pt warmed")
+
+        // 3. Pre-load gallery shortcut's 140pt bitmap. Uses the album's
+        //    first asset (matches PickerViewModel.galleryThumbImage's
+        //    eager-init source). Largest-wins cache means this usually
+        //    returns from the 1000pt cache hit above (downscaled visually
+        //    by SwiftUI) — but we still issue the request to populate any
+        //    size-specific PhotoKit caches.
+        let galleryThumbSize = CGSize(width: 140, height: 140)
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            loadThumbnail(for: firstAlbumAsset, size: galleryThumbSize) { _ in
+                continuation.resume()
+            }
+        }
+        PickerPerfLog.event("photoKit.prewarm.visible → gallery thumb 140pt warmed")
+
+        // 4. Pre-decode the first ~16 grid cells (one viewport's worth)
+        //    into ThumbnailCache.shared so the grid paints its visible
+        //    viewport instantly when the sheet opens. Runs LAST so the
+        //    previewer + gallery shortcut (steps 2 + 3) get PhotoKit's
+        //    serial queue first — that was the lesson from an earlier
+        //    failed attempt that ran grid prewarm before the visible
+        //    content and starved the previewer.
+        //
+        //    Stored as a cancellable Task so the modifier can abort it
+        //    via cancelGridPrewarm() the moment the sheet is about to
+        //    present — that's the cold-race protection. Task.isCancelled
+        //    is checked between requests; PhotoKit's in-flight work isn't
+        //    abortable, but no further requests get queued.
+        let primeCount = min(Self.gridInitialPrewarmCount, firstPage.count)
+        guard primeCount > 0 else {
+            PickerPerfLog.event("photoKit.prewarm.visible → step 4 skipped (no cells)")
+            return
+        }
+        PickerPerfLog.event("photoKit.prewarm.visible → step 4 start (\(primeCount) cells)")
+
+        let prewarmTask = Task { [weak self] in
+            guard let self else { return }
+            for asset in firstPage.prefix(primeCount) {
+                if Task.isCancelled {
+                    PickerPerfLog.event("photoKit.prewarm.visible → step 4 cancelled")
+                    return
+                }
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    self.loadThumbnail(for: asset, size: Self.gridThumbnailTargetSize) { _ in
+                        continuation.resume()
+                    }
+                }
+            }
+            PickerPerfLog.event("photoKit.prewarm.visible → step 4 done")
+        }
+        await MainActor.run { self.gridPrewarmTask = prewarmTask }
+        await prewarmTask.value
+        await MainActor.run { self.gridPrewarmTask = nil }
+    }
+
+    /// Cancels any in-flight grid-cell prewarm (step 4 of
+    /// `prewarmVisibleContent`). Called from `MediaPickerModifier`'s
+    /// `.onChange(of: isPresented)` when the sheet is about to open, so
+    /// in-flight prewarm doesn't compete with sheet-open's own PhotoKit
+    /// requests during the cold-race scenario (user taps before prewarm
+    /// finishes). No-op if prewarm has already completed or never ran.
+    @MainActor
+    public func cancelGridPrewarm() {
+        gridPrewarmTask?.cancel()
+        gridPrewarmTask = nil
+    }
+
+    /// Decodes the given PHAssets' thumbnails into `ThumbnailCache.shared`
+    /// at the grid's target size. Sequential through PhotoKit's serial
+    /// queue; honors `Task.isCancelled` between requests so the caller can
+    /// abort partway through (e.g. rapid album switching supersedes the
+    /// prewarm for the previous album).
+    ///
+    /// Used by:
+    /// - `prewarmVisibleContent` step 4 (cold-open prewarm in modifier idle)
+    /// - `AssetGridViewModel.loadAssets` (album-switch prewarm before the
+    ///   visible swap, so the new album reveals with a populated viewport
+    ///   instead of empty squares trickling in)
+    public func prewarmGridCells(_ assets: some Collection<PHAsset>) async {
+        for asset in assets {
+            if Task.isCancelled { return }
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                loadThumbnail(for: asset, size: Self.gridThumbnailTargetSize) { _ in
+                    continuation.resume()
+                }
+            }
+        }
+    }
+
+    // MARK: - Recent assets
+
+    /// Resolves auth state, requests if needed, then fetches and stores the
+    /// most recent `limit` assets. Nonisolated async: awaiting hops to the
+    /// cooperative pool; the heavy fetch runs off-main inside `PhotoLibraryService`.
+    ///
+    /// **Coalesced.** Concurrent callers (e.g. `openLimitedPicker` completion
+    /// firing alongside `photoLibraryDidChange`) await a single shared Task
+    /// instead of issuing redundant PhotoKit fetches. The first caller's
+    /// `limit` wins — subsequent callers receive whatever the in-flight fetch
+    /// was configured with. Most call sites use the default (1), so divergence
+    /// is rare; `EliteGeometricPickerViewModel` is the explicit exception that
+    /// requests a larger limit because its grid is built from `recentAssets`.
+    public func fetchRecentAssets(limit: Int = 1) async {
+        let task: Task<Void, Never> = await MainActor.run {
+            if let existing = inFlightRecentsFetch {
+                return existing
+            }
+            let newTask = Task { [weak self] in
+                guard let self else { return }
+                await self.performRecentAssetsFetch(limit: limit)
+                await MainActor.run { self.inFlightRecentsFetch = nil }
+            }
+            inFlightRecentsFetch = newTask
+            return newTask
+        }
+        await task.value
+    }
+
+    private func performRecentAssetsFetch(limit: Int) async {
+        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        await MainActor.run { setAuthStatus(status) }
 
         if status != .authorized && status != .limited {
-            clearRecentAssetsIfNeeded()
+            await MainActor.run { clearRecentAssetsIfNeeded() }
         }
 
         switch status {
         case .authorized, .limited:
-            let assets = await Self.performFetch(limit: limit)
-            updateAssets(assets)
+            let assets = await library.fetchRecentAssets(limit: limit)
+            await MainActor.run { updateAssets(assets) }
         case .notDetermined:
-            let granted: PHAuthorizationStatus = await withCheckedContinuation { continuation in
-                PHPhotoLibrary.requestAuthorization(for: .readWrite) { newStatus in
-                    continuation.resume(returning: newStatus)
-                }
-            }
-            self.setAuthStatus(granted)
+            let granted = await library.requestAuthorization()
+            await MainActor.run { setAuthStatus(granted) }
             if granted == .authorized || granted == .limited {
-                let assets = await Self.performFetch(limit: limit)
-                updateAssets(assets)
+                let assets = await library.fetchRecentAssets(limit: limit)
+                await MainActor.run { updateAssets(assets) }
             } else {
-                self.clearRecentAssetsIfNeeded()
+                await MainActor.run { clearRecentAssetsIfNeeded() }
             }
         default:
-            print("⚠️ Photo Library access denied")
-            clearRecentAssetsIfNeeded()
+            await MainActor.run { clearRecentAssetsIfNeeded() }
         }
     }
 
-    // Equality-guarded setters. @Observable instruments every setter call —
-    // writing the same value still notifies subscribers and cascades a re-eval
-    // through the body (which is what produced the flicker on popup dismiss,
-    // even though the value never changed).
-    private func setAuthStatus(_ newStatus: PHAuthorizationStatus) {
-        guard newStatus != authStatus else { return }
-        authStatus = newStatus
+    // MARK: - Albums
+
+    /// Loads the album list if it hasn't been loaded yet. Idempotent.
+    public func loadAlbumsIfNeeded() async {
+        let needsLoad = await MainActor.run { albums.isEmpty }
+        guard needsLoad else { return }
+        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        guard status == .authorized || status == .limited else { return }
+        let fetched = await library.fetchAlbums()
+        await MainActor.run { albums = fetched }
     }
 
-    private func clearRecentAssetsIfNeeded() {
-        guard !recentAssets.isEmpty else { return }
-        recentAssets = []
+    /// Force re-fetch of the album list. Called when PhotoKit reports a
+    /// library change that might have added/removed albums.
+    public func reloadAlbums() async {
+        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        guard status == .authorized || status == .limited else {
+            await MainActor.run { albums = [] }
+            return
+        }
+        let fetched = await library.fetchAlbums()
+        await MainActor.run { albums = fetched }
     }
-    
-    /// Opens the native Apple limited library picker.
+
+    /// Fetch the assets contained in a specific album.
+    /// **Prefer the paginated pair** (`fetchAssetsResult(in:)` +
+    /// `materialize(from:range:)`) for the grid — see those methods below.
+    public func fetchAssets(in album: PhotoLibraryService.AlbumInfo, limit: Int = 200) async -> [PHAsset] {
+        await library.fetchAssets(in: album.collection, limit: limit)
+    }
+
+    /// Facade for `PhotoLibraryService.fetchAssetsResult` — see that method
+    /// for the rationale on returning the lazy `PHFetchResult` instead of an
+    /// eager array. Used by `AssetGridViewModel` to paginate the grid.
+    public func fetchAssetsResult(in album: PhotoLibraryService.AlbumInfo) async -> PHFetchResult<PHAsset> {
+        await library.fetchAssetsResult(in: album.collection)
+    }
+
+    /// Facade for `PhotoLibraryService.materialize` — used to incrementally
+    /// pull batches of `PHAsset` out of a previously-fetched result.
+    public func materialize(
+        from result: PHFetchResult<PHAsset>,
+        range: Range<Int>
+    ) async -> [PHAsset] {
+        await library.materialize(from: result, range: range)
+    }
+
+    // MARK: - UIKit-bridged picker presentations
+
+    /// Opens the native Apple limited library picker. Touches UIKit; marked
+    /// `@MainActor` so the call site is on the main thread.
+    @MainActor
     public func openLimitedPicker() {
         guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
               let rootVC = windowScene.windows.first?.rootViewController else { return }
-        
+
         let topVC = findTopViewController(from: rootVC)
-        
+
         if #available(iOS 15.0, *) {
             PHPhotoLibrary.shared().presentLimitedLibraryPicker(from: topVC) { _ in
-                Task { @MainActor in
-                    await self.fetchRecentAssets()
-                }
+                Task { await self.fetchRecentAssets() }
             }
         } else {
             PHPhotoLibrary.shared().presentLimitedLibraryPicker(from: topVC)
         }
     }
-    
-    /// Opens the system picker via UIKit to avoid SwiftUI presentation collisions.
-    public func openSystemPicker(selectionLimit: Int, completion: @escaping ([PHAsset]) -> Void) {
-        var config = PHPickerConfiguration(photoLibrary: .shared())
-        config.selectionLimit = selectionLimit
-        config.filter = .images
-        
-        let picker = PHPickerViewController(configuration: config)
-        picker.delegate = PhotoKitServicePickerDelegate.shared // We'll need a delegate
-        PhotoKitServicePickerDelegate.shared.completion = completion
-        
-        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let rootVC = windowScene.windows.first?.rootViewController else { return }
-        
-        let topVC = findTopViewController(from: rootVC)
-        topVC.present(picker, animated: true)
+
+    // MARK: - Thumbnail loading
+    //
+    // Lane discipline: only view models call these. Views take their image
+    // data as parameters from their parent's VM. The only UIKit-bridged
+    // surface that survives in this service is `openLimitedPicker`, because
+    // PhotoKit's manage-access picker has no SwiftUI equivalent.
+
+    /// Synchronous peek into the process-wide `ThumbnailCache`. The grid VM
+    /// passes the result to each cell as `initialImage` so the cell paints
+    /// on its first frame without an async hop (and survives recycles where
+    /// `@State` resets but the cache still holds the bitmap).
+    ///
+    /// Returns nil on miss; callers should kick off an async `loadThumbnail`
+    /// to populate (which the cell's `.task(id:)` does automatically).
+    public func cachedThumbnail(for asset: PHAsset) -> UIImage? {
+        ThumbnailCache.shared.object(forKey: ThumbnailCache.key(for: asset))
     }
-    
+
+    /// Tells PhotoKit to start preparing thumbnails for `assets` at
+    /// `targetSize` and to stop preparing the previously-warmed set.
+    /// Call this immediately after an album's asset list arrives, before
+    /// SwiftUI lays out cells — by the time cells call `loadThumbnail`,
+    /// PhotoKit returns from its warm pool instead of doing a disk read +
+    /// decode + resize (which is the ~400–1000 ms per-cell cold start the
+    /// grid otherwise pays).
+    ///
+    /// No-op when the asset IDs and size match the currently-warmed set,
+    /// so safe to call on every `loadAssets` invocation even when the
+    /// observer fires repeatedly.
+    @MainActor
+    public func setCachedAssets(_ assets: [PHAsset], targetSize: CGSize) {
+        let newIDs = assets.map(\.localIdentifier)
+        let oldIDs = cachedAssets.map(\.localIdentifier)
+        if newIDs == oldIDs && targetSize == cachedSize { return }
+
+        if !cachedAssets.isEmpty {
+            cachingManager.stopCachingImages(
+                for: cachedAssets,
+                targetSize: cachedSize,
+                contentMode: .aspectFill,
+                options: thumbnailRequestOptions
+            )
+        }
+        if !assets.isEmpty {
+            cachingManager.startCachingImages(
+                for: assets,
+                targetSize: targetSize,
+                contentMode: .aspectFill,
+                options: thumbnailRequestOptions
+            )
+        }
+        cachedAssets = assets
+        cachedSize = targetSize
+    }
+
+    /// Loads a thumbnail for a given asset.
+    /// Consults the process-wide `ThumbnailCache` first — on hit, `completion`
+    /// runs synchronously inline so the caller can paint without an async hop.
+    ///
+    /// Cache hit only counts when the cached image's pixel dimensions are
+    /// at least as large as `size`. A smaller-than-requested cached image
+    /// triggers a refetch at the requested size, and the new (larger)
+    /// image replaces it. Downstream callers asking for SMALLER sizes
+    /// later read this larger cached image and downscale visually via
+    /// `.scaledToFill()`. This single-largest-per-asset policy is what
+    /// prevents the previewer from showing a blurry image after the grid
+    /// cell had cached a small version (the original bug).
+    ///
+    /// Routed through `cachingManager` (not `PHImageManager.default()`)
+    /// so requests at the prewarmed size hit PhotoKit's warm pool. Sizes
+    /// that weren't prewarmed (e.g. the previewer's 1000pt) fall through
+    /// to a normal fetch with no penalty.
+    public func loadThumbnail(for asset: PHAsset, size: CGSize, completion: @escaping (UIImage?) -> Void) {
+        let key = ThumbnailCache.key(for: asset)
+
+        if let cached = ThumbnailCache.shared.object(forKey: key),
+           cached.pixelSize.width >= size.width,
+           cached.pixelSize.height >= size.height {
+            completion(cached)
+            return
+        }
+
+        cachingManager.requestImage(for: asset,
+                                    targetSize: size,
+                                    contentMode: .aspectFill,
+                                    options: thumbnailRequestOptions) { image, _ in
+            if let image = image {
+                // Guard against a late-arriving small fetch clobbering a
+                // larger image that some other caller already cached. Only
+                // replace when the incoming image is at least as large
+                // (by area) as what's there.
+                let existing = ThumbnailCache.shared.object(forKey: key)
+                if existing == nil || image.pixelSize.area >= existing!.pixelSize.area {
+                    ThumbnailCache.shared.setObject(image, forKey: key)
+                }
+            }
+            completion(image)
+        }
+    }
+
+    // MARK: - Private (state writers + UIKit helpers)
+
+    /// Equality-guarded auth setter. `@Observable` instruments every setter
+    /// call — writing the same value still notifies subscribers and cascades
+    /// a re-eval through every view that observes `authStatus`, which has
+    /// caused visible flicker when `PHPhotoLibraryChangeObserver` fires
+    /// rapidly during normal library activity.
+    @MainActor
+    private func setAuthStatus(_ newStatus: PHAuthorizationStatus) {
+        guard newStatus != authStatus else { return }
+        authStatus = newStatus
+    }
+
+    @MainActor
+    private func clearRecentAssetsIfNeeded() {
+        guard !recentAssets.isEmpty else { return }
+        recentAssets = []
+    }
+
+    /// Equality-guarded write path. Skips assignment when the identifier
+    /// set hasn't actually changed so we don't cascade `@Observable`
+    /// notifications and force a rebuild of every grid cell.
+    @MainActor
+    private func updateAssets(_ assets: [PHAsset]) {
+        // Defensive: never shrink a populated list to empty.
+        // PhotoKit's Limited Access selection set is briefly empty during
+        // popup dismiss; we don't want recentAssets to flash blank either.
+        if assets.isEmpty && !self.recentAssets.isEmpty { return }
+
+        let newIDs = assets.map(\.localIdentifier)
+        let oldIDs = self.recentAssets.map(\.localIdentifier)
+        guard newIDs != oldIDs else { return }
+
+        self.recentAssets = assets
+    }
+
+    @MainActor
     private func findTopViewController(from root: UIViewController) -> UIViewController {
         if let presented = root.presentedViewController {
             return findTopViewController(from: presented)
@@ -152,78 +629,19 @@ public class PhotoKitService: NSObject, PHPhotoLibraryChangeObserver {
         }
         return root
     }
-    
-    /// The heavy PhotoKit call. `nonisolated async` so calling it via `await`
-    /// from a MainActor context (per SE-0338) hops to the cooperative pool —
-    /// `PHAsset.fetchAssets` runs on a background thread, main thread stays free.
-    /// Static because it touches no instance state — keeps the actor isolation
-    /// boundary clear (this function can never accidentally mutate self).
-    nonisolated private static func performFetch(limit: Int) async -> [PHAsset] {
-        let fetchOptions = PHFetchOptions()
-        fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-        fetchOptions.fetchLimit = limit
+}
 
-        let result = PHAsset.fetchAssets(with: .image, options: fetchOptions)
+// MARK: - PHPhotoLibraryChangeObserver
 
-        var assets: [PHAsset] = []
-        result.enumerateObjects { asset, _, _ in
-            assets.append(asset)
-        }
-        return assets
-    }
-
-    /// Equality-guarded write path. Called on MainActor after the off-actor
-    /// fetch returns. Skips assignment if the data hasn't actually changed so
-    /// we don't cascade @Observable notifications and rebuild every grid cell.
-    private func updateAssets(_ assets: [PHAsset]) {
-        // Defensive: never shrink a populated list to empty (parity with
-        // AssetGridViewModel.refreshCurrentAssets). PhotoKit's Limited
-        // Access selection set is briefly empty during popup dismiss; we
-        // don't want the top viewfinder's recentAssets to flash blank
-        // either, even though previewAsset masking currently hides it.
-        if assets.isEmpty && !self.recentAssets.isEmpty { return }
-
-        let newIDs = assets.map(\.localIdentifier)
-        let oldIDs = self.recentAssets.map(\.localIdentifier)
-        guard newIDs != oldIDs else { return }
-
-        self.recentAssets = assets
-    }
-    
-    /// Loads a thumbnail for a given asset.
-    /// Consults the process-wide `ThumbnailCache` first — on hit, `completion`
-    /// runs synchronously inline so the caller can paint without an async hop.
-    public func loadThumbnail(for asset: PHAsset, size: CGSize, completion: @escaping (UIImage?) -> Void) {
-        let key = ThumbnailCache.key(for: asset)
-        if let cached = ThumbnailCache.shared.object(forKey: key) {
-            completion(cached)
-            return
-        }
-
-        let manager = PHImageManager.default()
-        let options = PHImageRequestOptions()
-        options.isSynchronous = false
-        options.deliveryMode = .highQualityFormat
-
-        manager.requestImage(for: asset,
-                             targetSize: size,
-                             contentMode: .aspectFill,
-                             options: options) { image, _ in
-            if let image = image {
-                ThumbnailCache.shared.setObject(image, forKey: key)
-            }
-            completion(image)
-        }
-    }
-    
-    // MARK: - PHPhotoLibraryChangeObserver
-    
-    nonisolated public func photoLibraryDidChange(_ changeInstance: PHChange) {
+extension PhotoKitService: PHPhotoLibraryChangeObserver {
+    /// Sync nonisolated callback per Apple's protocol. Hops to MainActor via
+    /// a Task to do the (now-async) refresh work.
+    public func photoLibraryDidChange(_ changeInstance: PHChange) {
         Task { @MainActor in
             self.updateAuthStatus()
 
-            // Note: When using a fetchLimit, changeInstance.changeDetails(for:)
-            // is unreliable and can miss newly inserted items or return nil.
+            // When using a fetchLimit, changeInstance.changeDetails(for:) is
+            // unreliable and can miss newly inserted items or return nil.
             // We force a full refresh to guarantee the UI reflects the new state.
             if self.authStatus == .authorized || self.authStatus == .limited {
                 await self.fetchRecentAssets()
@@ -232,20 +650,18 @@ public class PhotoKitService: NSObject, PHPhotoLibraryChangeObserver {
     }
 }
 
-class PhotoKitServicePickerDelegate: NSObject, PHPickerViewControllerDelegate {
-    static let shared = PhotoKitServicePickerDelegate()
-    var completion: (([PHAsset]) -> Void)?
-    
-    func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-        picker.dismiss(animated: true)
-        
-        let identifiers = results.compactMap(\.assetIdentifier)
-        let fetchResult = PHAsset.fetchAssets(withLocalIdentifiers: identifiers, options: nil)
-        var assets: [PHAsset] = []
-        fetchResult.enumerateObjects { asset, _, _ in
-            assets.append(asset)
-        }
-        
-        completion?(assets)
+// MARK: - UIImage pixel-size helper (used by loadThumbnail size comparisons)
+
+private extension UIImage {
+    /// True pixel dimensions = points * scale. `UIImage.size` alone is in
+    /// points, which lies on Retina devices (a 400×400 thumbnail @2x has
+    /// `size == 200×200`); comparing that against a point-based requested
+    /// size would always look "too small" and trigger needless refetches.
+    var pixelSize: CGSize {
+        CGSize(width: size.width * scale, height: size.height * scale)
     }
+}
+
+private extension CGSize {
+    var area: CGFloat { width * height }
 }

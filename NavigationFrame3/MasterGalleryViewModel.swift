@@ -3,15 +3,22 @@ import PhotosUI
 
 @Observable
 class MasterGalleryViewModel {
+    enum FlowState: Equatable {
+        case idle
+        case processing
+        case camera
+        case cropping(index: Int, total: Int)
+    }
+
     var pickedItems: [MediaItem] = []
     var showModifierPicker = false
     @ObservationIgnored
     var pickerId = UUID()
     var cropMode: MediaCrop = .square
     var selectionLimit: Int = 1
-    
+
     // Tier 3: Headless State
-    var flowState: MediaPickerState.FlowState = .idle
+    var flowState: FlowState = .idle
     var headlessSelection: [PhotosPickerItem] = []
     var headlessItems: [MediaItem] = []
     var headlessResults: [Int: UIImage] = [:]
@@ -44,7 +51,7 @@ class MasterGalleryViewModel {
         Task {
             do {
                 print("🔄 Starting headless processing...")
-                let processed = try await MediaPickerEngine.shared.process(items)
+                let processed = try await MediaPickerManager.shared.process(items)
                 print("✅ Processed \(processed.count) items")
                 
                 await MainActor.run {
@@ -109,7 +116,7 @@ class MasterGalleryViewModel {
     func handleCropResult(_ image: UIImage, at index: Int) {
         print("✂️ Crop finished for index \(index)")
         Task {
-            let processed = try? await MediaPickerEngine.shared.process(image)
+            let processed = try? await MediaPickerManager.shared.process(image)
             await MainActor.run {
                 if let processed = processed {
                     print("✅ Saved crop for index \(index)")

@@ -113,7 +113,7 @@ public struct CropView: View {
                                 }
                                 .onEnded { _ in
                                     lastScale = scale
-                                    validateBounds(in: size, cropArea: activeCropArea)
+                                    validateBounds()
                                 }
                         )
                         .simultaneousGesture(
@@ -126,7 +126,7 @@ public struct CropView: View {
                                 }
                                 .onEnded { _ in
                                     lastOffset = offset
-                                    validateBounds(in: size, cropArea: activeCropArea)
+                                    validateBounds()
                                 }
                         )
                     
@@ -161,7 +161,8 @@ public struct CropView: View {
                     isProcessing = false 
                 }
                 .onChange(of: item) { _, _ in
-                    // 🛡️ Ironclad Reset: Force spinner OFF the moment the data swaps
+                    // Reset transient transform + spinner state when the
+                    // displayed item swaps (jump-to-index or auto-advance).
                     isProcessing = false
                     scale = 1.0
                     lastScale = 1.0
@@ -213,7 +214,7 @@ public struct CropView: View {
         .clipShape(Capsule())
     }
     
-    private func validateBounds(in size: CGSize, cropArea: CGRect) {
+    private func validateBounds() {
         // Minimum scale allowed is 0.3 for a "bird's eye" view
         if scale < 0.3 {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {

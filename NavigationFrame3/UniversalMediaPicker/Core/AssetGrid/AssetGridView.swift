@@ -1,62 +1,61 @@
 import SwiftUI
 import Photos
 
+/// The asset grid. **Self-contained** — instantiates its own
+/// `AssetGridViewModel` via plain `@State`. The user's selection survives
+/// SwiftUI's upstream identity churn because `AssetGridViewModel.init`
+/// restores it from `AssetGridSelectionCache` (a small process-wide cache
+/// for `[GridAsset]` only).
+///
+/// Cross-cutting inputs flow DOWN as parameters (Apple's primitive shape):
+/// - `currentAlbum: Binding` — picker owns the truth; we observe via `.onChange`.
+/// - `selectedMode: PickerMode` — picker owns; we observe to swap data source.
+/// - `history: [MediaItem]` — picker provides for reuse-mode loading.
+///
+/// Events flow UP via callbacks:
+/// - `onAssetTap(GridAsset)` — fires when user taps a cell.
+/// - `onSelectionChange([GridAsset])` — fires whenever the VM's selection
+///   array changes, so the parent (PickerView) can mirror count + selection
+///   for its NEXT-button and shutter-handler logic.
 struct AssetGridView: View {
     let configuration: MediaPickerConfiguration
+    @Binding var currentAlbum: PhotoLibraryService.AlbumInfo?
+    let selectedMode: PickerMode
+    let history: [MediaItem]
     let onAssetTap: (GridAsset) -> Void
-    let onSelectionComplete: ([GridAsset]) -> Void
-    let showHeader: Bool
-    
-    @State private var vm: AssetGridViewModel
-    
-    // ---------------------------------------------------------
-    // Initializer 1: STANDALONE (No ViewModel required)
-    // ---------------------------------------------------------
+    let onSelectionChange: ([GridAsset]) -> Void
+    /// Fires when the first asset in the loaded grid changes — typically
+    /// the result of an album switch (Recents → Favorites etc.). Parent
+    /// uses it to keep the top previewer in sync with the active album.
+    let onFirstAssetChanged: (PHAsset?) -> Void
+
+    @State private var viewModel: AssetGridViewModel
+
     init(
         configuration: MediaPickerConfiguration,
-        showHeader: Bool = true,
+        currentAlbum: Binding<PhotoLibraryService.AlbumInfo?>,
+        selectedMode: PickerMode,
+        history: [MediaItem],
         onAssetTap: @escaping (GridAsset) -> Void,
-        onSelectionComplete: @escaping ([GridAsset]) -> Void
+        onSelectionChange: @escaping ([GridAsset]) -> Void,
+        onFirstAssetChanged: @escaping (PHAsset?) -> Void
     ) {
         self.configuration = configuration
-        self.showHeader = showHeader
+        self._currentAlbum = currentAlbum
+        self.selectedMode = selectedMode
+        self.history = history
         self.onAssetTap = onAssetTap
-        self.onSelectionComplete = onSelectionComplete
-        self._vm = State(initialValue: AssetGridViewModel(selectionLimit: configuration.selectionLimit))
+        self.onSelectionChange = onSelectionChange
+        self.onFirstAssetChanged = onFirstAssetChanged
+        self._viewModel = State(initialValue: AssetGridViewModel(selectionLimit: configuration.selectionLimit))
     }
 
-    // ---------------------------------------------------------
-    // Initializer 2: INJECTED (Pass a shared ViewModel)
-    // ---------------------------------------------------------
-    init(
-        configuration: MediaPickerConfiguration,
-        viewModel: AssetGridViewModel,
-        showHeader: Bool = true,
-        onAssetTap: @escaping (GridAsset) -> Void,
-        onSelectionComplete: @escaping ([GridAsset]) -> Void
-    ) {
-        self.configuration = configuration
-        self.showHeader = showHeader
-        self.onAssetTap = onAssetTap
-        self.onSelectionComplete = onSelectionComplete
-        self._vm = State(initialValue: viewModel)
-    }
-    
     private var gridStyle: MediaPickerStyle.GridStyle {
         configuration.style.gridStyle
     }
-    
-    var body: some View {
-        VStack(spacing: 0) {
-            if showHeader {
-                // Header
-                gridHeader
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 6)
-                    .background(configuration.style.toolbarColor)
-            }
 
-            // The Grid
+    var body: some View {
+        ScrollViewReader { proxy in
             ScrollView {
                 // Show skeleton placeholders while the asset list is empty —
                 // either we're still loading (state.isLoading) or pre-warm
@@ -64,35 +63,112 @@ struct AssetGridView: View {
                 // matches the real grid's column count + spacing so the layout
                 // doesn't shift when real cells take over. Modern iOS pattern:
                 // Photos, Files, Mail all do this.
-                if vm.state.assets.isEmpty {
+                if viewModel.assetGridState.assets.isEmpty {
                     skeletonGrid
                 } else {
                     LazyVGrid(
                         columns: Array(repeating: GridItem(.flexible(), spacing: gridStyle.spacing), count: gridStyle.columnCount),
                         spacing: gridStyle.spacing
                     ) {
-                        ForEach(vm.state.assets, id: \.id) { asset in
+                        ForEach(viewModel.assetGridState.assets, id: \.id) { asset in
                             AssetThumbnailCell(
-                                source: asset.phAsset != nil ? .phAsset(asset.phAsset!) : .mediaItem(asset.mediaItem!),
+                                source: asset,
                                 gridStyle: gridStyle,
-                                selectionIndex: vm.selectionIndex(for: asset),
-                                accentColor: configuration.style.accentColor
+                                selectionIndex: viewModel.selectionIndex(for: asset),
+                                accentColor: configuration.style.accentColor,
+                                initialImage: viewModel.thumbnail(for: asset),
+                                loadAsync: { await viewModel.requestThumbnail(for: asset) }
                             )
                             .contentShape(Rectangle())
                             .onTapGesture {
-                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                vm.trigger(.selectAsset(asset))
+                                viewModel.trigger(.selectAsset(asset))
                                 onAssetTap(asset)
+                            }
+                            // Pagination sentinel — when the cell `sentinelBuffer`
+                            // positions before the end appears, ask the VM to
+                            // load the next page. View only compares IDs (O(1));
+                            // the VM owns the actual page-load orchestration.
+                            .onAppear {
+                                if asset.id == viewModel.sentinelAssetID {
+                                    viewModel.loadNextPageIfNeeded()
+                                }
                             }
                         }
                     }
+                    // Selection-aware haptic: fires on .selection only when the
+                    // tracked array actually changes. At-limit no-op taps don't
+                    // change the array (toggleAssetSelection's guard rejects the
+                    // append silently), so they don't fire. Same array, no haptic
+                    // — exactly the UX requested.
+                    .sensoryFeedback(.selection, trigger: viewModel.assetGridState.selectedAssets)
                 }
             }
-        }
-        .onAppear {
-            // Only auto-load library if we're not already populated with history
-            if vm.state.assets.isEmpty {
-                vm.trigger(.loadInitialData)
+            .task {
+                // Initial selection from cache is already loaded by VM.init —
+                // emit it once so the parent (PickerView) can sync its mirror
+                // and the NEXT button reflects any restored selection.
+                onSelectionChange(viewModel.assetGridState.selectedAssets)
+            }
+            .onChange(of: currentAlbum) { _, newAlbum in
+                // Parent updated currentAlbum (dropdown selection or initial bootstrap).
+                // Skip if we're in reuse mode — history is the data source there.
+                guard selectedMode != .reuse else { return }
+                if let newAlbum {
+                    PickerPerfLog.event("assetGridView.onChange(currentAlbum) → \(newAlbum.title)")
+                    // Reset the per-cell log counter so the next ~4 cells of the
+                    // new album are captured in the perf log without breaking the
+                    // session-cumulative timeline.
+                    PickerPerfLog.resetCellLogger()
+                    viewModel.trigger(.selectAlbum(newAlbum))
+                }
+            }
+            .onChange(of: selectedMode) { _, newMode in
+                // Mode switch — swap the data source. In reuse mode the grid
+                // shows history items; otherwise it shows the current album's
+                // assets.
+                switch newMode {
+                case .reuse:
+                    viewModel.trigger(.loadHistory(history))
+                case .library, .photo:
+                    if let album = currentAlbum {
+                        viewModel.trigger(.selectAlbum(album))
+                    }
+                }
+            }
+            .onChange(of: viewModel.assetGridState.selectedAssets) { _, newSelection in
+                // Mirror selection up to the parent so PickerView's NEXT button
+                // count + handleShutter/handleNextTapped see the same selection
+                // the user just made. The VM has already written through to
+                // AssetGridSelectionCache; this callback just keeps the parent's
+                // observable mirror in sync.
+                onSelectionChange(newSelection)
+            }
+            .onChange(of: viewModel.assetGridState.assets.first?.id) { oldID, newID in
+                // Bubble the new first asset up so the parent can refresh the
+                // top previewer to match the active album (Trigger 3 — switching
+                // Recents → Favorites → Screenshots etc. follows in the previewer).
+                // Fires on initial load too, but the parent's setPreview is
+                // idempotent for the same identifier so no harm.
+                onFirstAssetChanged(viewModel.assetGridState.assets.first?.phAsset)
+
+                // Reset scroll to top of the new content on album swap. Without
+                // this, SwiftUI's ScrollView preserves its scroll offset across
+                // content replacement — switching from a deep-scrolled Recents
+                // to Selfies leaves Selfies clamped to the bottom of its (much
+                // shorter) content, exactly the behavior Photos.app / Instagram /
+                // every native iOS picker explicitly avoids. Also: LazyVGrid
+                // would otherwise mount cells from the middle of the new album,
+                // which are NOT in our prewarmed first-16 → cache misses →
+                // empty squares → defeats recommendation #3. Resetting scroll
+                // means LazyVGrid mounts cells 0-15, which ARE prewarmed.
+                //
+                // Guards:
+                //  - `oldID != nil`: skip the initial mount (cold open, going
+                //    from no assets → first album). No scroll position to reset.
+                //  - `oldID != newID`: skip same-album refreshes (e.g. library
+                //    change observer re-materializing the same first asset).
+                guard let newID, oldID != nil, oldID != newID else { return }
+                proxy.scrollTo(newID, anchor: .top)
             }
         }
     }
@@ -115,44 +191,5 @@ struct AssetGridView: View {
                     .cornerRadius(gridStyle.cornerRadius)
             }
         }
-    }
-    
-    private var gridHeader: some View {
-        HStack {
-            if gridStyle.showAlbumPicker && vm.state.currentAlbum != nil {
-                AlbumDropdownMenu(viewModel: vm)
-            } else {
-                Text(vm.state.currentAlbum?.title ?? "Recents")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.white)
-            }
-            
-            Spacer()
-            
-            HStack(spacing: 16) {
-                nextButton
-                    .disabled(vm.state.selectedAssets.isEmpty)
-                    .opacity(vm.state.selectedAssets.isEmpty ? 0.3 : 1.0)
-            }
-        }
-        .frame(minHeight: 32) // Prevent layout shift
-        .animation(nil, value: vm.state.selectedAssets.count)
-    }
-    
-    private var nextButton: some View {
-        let count = vm.state.selectedAssets.count
-        let limit = vm.selectionLimit
-        let label = count > 0 ? "NEXT (\(count)/\(limit))" : "NEXT"
-        
-        return Button(label) {
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-            onSelectionComplete(vm.state.selectedAssets)
-        }
-        .font(.system(size: 11, weight: .bold))
-        .foregroundColor(.white)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(configuration.style.accentColor)
-        .cornerRadius(12)
     }
 }

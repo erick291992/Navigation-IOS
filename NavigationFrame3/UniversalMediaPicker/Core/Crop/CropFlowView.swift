@@ -66,17 +66,13 @@ public struct CropFlowView: View {
                             viewModel.jumpTo(index: targetIndex)
                         },
                         onDone: { croppedImage in
-                            // Create MediaItem directly — do NOT re-process through
-                            // manager.process() which would run generateThumbnail()
-                            // and destroy the crop's aspect ratio by squaring it.
-                            let data = croppedImage.jpegData(compressionQuality: 0.9) ?? Data()
-                            let croppedItem = MediaItem(
-                                data: data,
-                                thumbnail: croppedImage,
-                                contentType: item.contentType,
-                                originalURL: item.originalURL
-                            )
-                            viewModel.finishCrop(item: croppedItem, index: index)
+                            // Hand the raw UIImage to the VM. JPEG encoding is
+                            // deferred to `finalize()` (which runs off main via
+                            // Task.detached) so this tap doesn't block main.
+                            // The crop's aspect ratio is preserved because we
+                            // do NOT route through `manager.process()` which
+                            // would re-square via generateThumbnail.
+                            viewModel.finishCrop(image: croppedImage, index: index)
                         },
                         onCancel: {
                             if let onGoBack = onGoBack {

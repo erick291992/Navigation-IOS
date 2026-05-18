@@ -1,0 +1,120 @@
+import SwiftUI
+import Photos
+import Observation
+
+// MARK: - Tier 3 Advanced Grid ViewModel
+// Proves developers can build their own entirely custom grid UI
+// utilizing AssetGridViewModel for fetching and MediaPickerManager for processing.
+
+@MainActor
+@Observable
+class AdvancedPickerExampleViewModel {
+
+    // Core Managers (constructor-default DI)
+    private let pickerManager: MediaPickerManager
+    
+    // We leverage AssetGridViewModel simply as a pure data source for PHAssets
+    // meaning the developer doesn't have to write lower-level PhotoKit fetching logic themselves.
+    let gridViewModel: AssetGridViewModel
+    
+    var flowState: FlowState = .idle
+    var finishedItems: [MediaItem] = []
+    
+    var itemsToCrop: [MediaItem] = []
+    var croppedResults: [Int: UIImage] = [:]
+    
+    var cropMode: MediaCrop = .square
+    var maxSelection: Int
+    
+    enum FlowState: Equatable {
+        case idle
+        case processing
+        case cropping(index: Int, total: Int)
+    }
+    
+    init(maxSelection: Int = 3, pickerManager: MediaPickerManager = .shared) {
+        self.maxSelection = maxSelection
+        self.pickerManager = pickerManager
+        self.gridViewModel = AssetGridViewModel(selectionLimit: maxSelection)
+        self.gridViewModel.trigger(.loadInitialData) // Fetch photos immediately
+    }
+
+    deinit {
+        tasks.forEach { $0.cancel() }
+    }
+
+    // MARK: - Fire-and-forget Task storage (see CODING_GUIDELINES.md §3)
+    @ObservationIgnored private var tasks: [Task<Void, Never>] = []
+
+    // MARK: - Actions
+
+    func selectAsset(_ asset: GridAsset) {
+        gridViewModel.trigger(.toggleAssetSelection(asset))
+    }
+
+    // The developer calls this when the user taps their custom "Next" button
+    func processSelectedAssets() {
+        let assets = gridViewModel.assetGridState.selectedAssets
+        guard !assets.isEmpty else { return }
+
+        flowState = .processing
+
+        let task = Task { [weak self] in
+            guard let self else { return }
+            do {
+                // Extract PHAssets from GridAsset wrappers
+                let phAssets = assets.compactMap { $0.phAsset }
+
+                // Pass raw PHAssets straight to the Tier 3 Engine!
+                let processed = try await self.pickerManager.process(phAssets)
+
+                await MainActor.run {
+                    self.itemsToCrop = processed
+                    self.croppedResults = [:]
+                    self.advanceToNextUncropped()
+                }
+            } catch {
+                await MainActor.run {
+                    self.flowState = .idle
+                }
+            }
+        }
+        tasks.append(task)
+    }
+
+    func didFinishCrop(_ croppedImage: UIImage, at index: Int) {
+        let task = Task { [weak self] in
+            guard let self else { return }
+            let result = try? await self.pickerManager.process(croppedImage)
+            await MainActor.run {
+                if let result = result {
+                    self.croppedResults[index] = result.thumbnail
+                    self.finishedItems.append(result)
+                }
+                self.advanceToNextUncropped()
+            }
+        }
+        tasks.append(task)
+    }
+    
+    func cancelFlow() {
+        flowState = .idle
+        itemsToCrop = []
+        croppedResults = [:]
+    }
+    
+    private func advanceToNextUncropped() {
+        for i in 0..<itemsToCrop.count {
+            if croppedResults[i] == nil {
+                flowState = .cropping(index: i, total: itemsToCrop.count)
+                return
+            }
+        }
+        
+        // Done cropping
+        flowState = .idle
+        itemsToCrop = []
+        croppedResults = [:]
+        gridViewModel.trigger(.clearSelection)
+    }
+}

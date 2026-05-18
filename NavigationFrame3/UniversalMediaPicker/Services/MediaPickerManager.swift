@@ -3,11 +3,23 @@ import PhotosUI
 import AVFoundation
 
 /// Handles the low-level processing of media assets into Unified MediaItem objects.
-@MainActor
-public class MediaPickerManager {
+///
+/// **Isolation note**: no `@MainActor` anywhere on this class. The instance
+/// methods (`process(...)`) are nonisolated async, so per SE-0338 their
+/// bodies run on the cooperative concurrent executor (background pool).
+/// JPEG encoding, thumbnail generation, and video frame extraction all
+/// stay off the main thread while still being called naturally with
+/// `try await pickerManager.process(...)` from `@MainActor` view models —
+/// the await suspends the caller on main, the work runs on background,
+/// then the caller resumes on main when done.
+public final class MediaPickerManager {
     public static let shared = MediaPickerManager()
-    
-    private init() {}
+
+    private let photoKitService: PhotoKitService
+
+    private init(photoKitService: PhotoKitService = .shared) {
+        self.photoKitService = photoKitService
+    }
     
     /// Processes a PhotosPickerItem into a MediaItem.
     public func process(_ item: PhotosPickerItem) async throws -> MediaItem {
@@ -29,10 +41,9 @@ public class MediaPickerManager {
         let thumbnail = generateThumbnail(for: image)
         
         let mediaItem = MediaItem(data: data, thumbnail: thumbnail, contentType: .image, originalURL: nil)
-        // MediaHistoryManager.shared.addToHistory([mediaItem]) // REMOVED: Managed by Flow Controllers
         return mediaItem
     }
-    
+
     /// Processes an array of PhotosPickerItems into MediaItems.
     public func process(_ items: [PhotosPickerItem]) async throws -> [MediaItem] {
         var results: [MediaItem] = []
@@ -52,14 +63,13 @@ public class MediaPickerManager {
         let thumbnail = generateThumbnail(for: image)
         
         let mediaItem = MediaItem(data: data, thumbnail: thumbnail, contentType: .image, originalURL: nil)
-        // MediaHistoryManager.shared.addToHistory([mediaItem]) // REMOVED: Managed by Flow Controllers
         return mediaItem
     }
-    
+
     /// Processes a single PHAsset into a MediaItem.
     public func process(_ asset: PHAsset) async throws -> MediaItem {
         let image = await withCheckedContinuation { continuation in
-            PhotoKitService.shared.loadThumbnail(for: asset, size: CGSize(width: 2000, height: 2000)) { img in
+            photoKitService.loadThumbnail(for: asset, size: CGSize(width: 2000, height: 2000)) { img in
                 continuation.resume(returning: img)
             }
         }
@@ -102,27 +112,24 @@ public class MediaPickerManager {
         let thumbnail = UIImage(cgImage: cgImage)
         
         let mediaItem = MediaItem(data: data, thumbnail: thumbnail, contentType: .video, originalURL: url)
-        // MediaHistoryManager.shared.addToHistory([mediaItem]) // REMOVED: Managed by Flow Controllers
         return mediaItem
     }
     
     private func generateThumbnail(for image: UIImage) -> UIImage {
-        let size: CGFloat = 600 // High quality but optimized
+        let size: CGFloat = 600
         let imageSize = image.size
         let side = min(imageSize.width, imageSize.height)
-        
+
         let rect = CGRect(
             x: (imageSize.width - side) / 2,
             y: (imageSize.height - side) / 2,
             width: side,
             height: side
         )
-        
-        // 1. Crop to square
+
         guard let cgImage = image.cgImage?.cropping(to: rect) else { return image }
         let croppedImage = UIImage(cgImage: cgImage, scale: image.scale, orientation: image.imageOrientation)
-        
-        // 2. Resize to target size
+
         let targetSize = CGSize(width: size, height: size)
         let renderer = UIGraphicsImageRenderer(size: targetSize)
         return renderer.image { _ in

@@ -63,7 +63,7 @@ public struct MediaPickerStyle {
         gallerySubtitle: String = "Choose from your library",
         cameraLabel: String = "Take Photo",
         cameraSubtitle: String = "Capture a new moment",
-        onboardingTitle: String = "Unified Creator V3",
+        onboardingTitle: String = "Add Media",
         doneButtonStyle: DoneButtonStyle = .text,
         font: Font = .body,
         gridStyle: GridStyle = .default
