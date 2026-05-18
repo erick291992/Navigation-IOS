@@ -40,6 +40,7 @@ struct LibraryPreviewer: View {
             }
         }
         .task(id: assetID) {
+            PickerPerfLog.event("libraryPreviewer.task → enter (initialImage=\(initialImage != nil), assetID=\(assetID ?? "nil"))")
             // Reset so the new asset's `initialImage` (cached peek) paints
             // immediately instead of leaving the previous tap's high-res
             // image hanging while the new fetch runs.
@@ -47,6 +48,7 @@ struct LibraryPreviewer: View {
             guard let loadAsync else { return }
             if let loaded = await loadAsync() {
                 asyncLoaded = loaded
+                PickerPerfLog.event("libraryPreviewer.task → high-res loaded")
             }
         }
     }

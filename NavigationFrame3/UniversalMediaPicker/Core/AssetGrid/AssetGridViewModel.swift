@@ -161,9 +161,11 @@ public final class AssetGridViewModel: NSObject {
     }
 
     private func loadAssets(for album: PhotoLibraryService.AlbumInfo) async {
+        PickerPerfLog.event("grid.loadAssets → enter (album=\(album.title))")
         state.isLoading = true
 
         let phAssets = await photoKit.fetchAssets(in: album)
+        PickerPerfLog.event("grid.loadAssets → fetchAssets done (\(phAssets.count))")
 
         // Skip assignment if the identifier set hasn't actually changed —
         // prevents SwiftUI from destroying and recreating every cell.
@@ -175,6 +177,7 @@ public final class AssetGridViewModel: NSObject {
             // before SwiftUI lays them out — first paint reads from the
             // warm pool instead of paying the disk/decode/resize cost.
             photoKit.setCachedAssets(phAssets, targetSize: PhotoKitService.gridThumbnailTargetSize)
+            PickerPerfLog.event("grid.loadAssets → setCachedAssets done (warm started)")
         }
         state.isLoading = false
     }

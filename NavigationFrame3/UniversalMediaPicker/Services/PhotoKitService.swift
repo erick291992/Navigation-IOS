@@ -128,10 +128,16 @@ public final class PhotoKitService: NSObject {
     /// dropdown). Running them sequentially keeps PhotoKit from
     /// contending with itself on a single underlying queue.
     public func prewarm(limit: Int = 30) async {
+        PickerPerfLog.event("photoKit.prewarm → enter")
         let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-        guard status == .authorized || status == .limited else { return }
+        guard status == .authorized || status == .limited else {
+            PickerPerfLog.event("photoKit.prewarm → skipped (no auth)")
+            return
+        }
         await fetchRecentAssets(limit: limit)
+        PickerPerfLog.event("photoKit.prewarm → recents loaded (\(recentAssets.count))")
         await loadAlbumsIfNeeded()
+        PickerPerfLog.event("photoKit.prewarm → albums loaded (\(albums.count))")
     }
 
     // MARK: - Recent assets

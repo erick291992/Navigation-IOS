@@ -68,18 +68,25 @@ public final class LibraryViewfinderViewModel {
     /// exit (including early-return guards) so the view can transition
     /// out of its initial spinner state regardless of which branch we took.
     public func loadRecentsIfNeeded() async {
-        guard loadPhase != .loaded else { return }     // already settled
+        PickerPerfLog.event("libraryVM.loadRecentsIfNeeded → enter (phase=\(loadPhase), hasRecents=\(hasRecents))")
+        guard loadPhase != .loaded else {
+            PickerPerfLog.event("libraryVM.loadRecentsIfNeeded → skip (already loaded)")
+            return
+        }
         guard authStatus == .authorized || authStatus == .limited else {
             loadPhase = .loaded                          // no auth to fetch — attempt is done
+            PickerPerfLog.event("libraryVM.loadRecentsIfNeeded → skip (no auth)")
             return
         }
         guard !hasRecents else {
             loadPhase = .loaded                          // warm prewarm raced past us
+            PickerPerfLog.event("libraryVM.loadRecentsIfNeeded → skip (recents already warm)")
             return
         }
         loadPhase = .loading
         await photoKit.fetchRecentAssets()
         loadPhase = .loaded
+        PickerPerfLog.event("libraryVM.loadRecentsIfNeeded → fetch complete (\(recentAssets.count))")
     }
 
     // MARK: - Previewer image (called by LibraryViewfinderView per previewer)

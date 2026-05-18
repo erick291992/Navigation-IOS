@@ -44,14 +44,17 @@ public struct PickerView: View {
         }
         .background(Color.black)
         .task {
+            PickerPerfLog.event("pickerView.task → enter")
             // Bootstrap the initial album so AssetGridView's binding
             // observer can load its first batch of assets.
             await viewModel.loadInitialAlbumIfNeeded()
+            PickerPerfLog.event("pickerView.task → loadInitialAlbum done (album=\(viewModel.currentAlbum?.title ?? "nil"))")
             // Resolve the gallery-shortcut thumbnail eagerly. Covers the
             // common case where the modifier's prewarm finished before this
             // view mounted (recentAssets is already populated) — onChange
             // won't fire for that, so we need an initial pass here.
             await viewModel.loadGalleryThumbIfNeeded()
+            PickerPerfLog.event("pickerView.task → loadGalleryThumb done (image=\(viewModel.galleryThumbImage != nil))")
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active { viewModel.refreshAuthIfNeeded() }

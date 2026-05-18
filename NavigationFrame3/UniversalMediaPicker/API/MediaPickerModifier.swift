@@ -45,21 +45,19 @@ public struct MediaPickerModifier: ViewModifier {
             // `startWarming()` is idempotent (early-returns if the session is
             // already configured) so this is safe to fire on every appearance.
             .onAppear {
+                PickerPerfLog.event("modifier.onAppear → startWarming dispatched")
                 Task { await CameraService.shared.startWarming() }
             }
             // Photo pre-fetch via `.task` because it IS async (we await
             // `prewarm()`) and the auto-cancellation on view disappear is a
             // nice bonus.
             .task {
-                // `prewarm()` internally checks authorization status and
-                // early-returns if not granted — first-time users hit the
-                // prompt at their intent moment, not eagerly here. Warms
-                // recents (for the viewfinder + gallery shortcut) and the
-                // album list (for the dropdown). The grid's per-album asset
-                // load is left to AssetGridView's own .task once the picker
-                // mounts — PhotoKit's internal indexes make that load fast
-                // and the skeleton UI bridges the brief reload window.
+                PickerPerfLog.event("modifier.task → prewarm awaited")
                 await PhotoKitService.shared.prewarm()
+                PickerPerfLog.event("modifier.task → prewarm completed")
+            }
+            .onChange(of: isPresented) { _, newValue in
+                if newValue { PickerPerfLog.reset("sheet presenting") }
             }
             .sheet(isPresented: $isPresented, onDismiss: {
                 // Per-session reset: clear the user's selection cache so the
