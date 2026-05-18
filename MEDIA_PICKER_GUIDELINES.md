@@ -91,16 +91,16 @@ Both are commented at the file head explaining why.
 
 ## What feeds each UI element
 
-The picker screen has four distinct UI regions, and they're fed by **different data sources**. Two of them happen to look identical on the default Recents view, which causes confusion — this section makes the wiring explicit.
+The picker screen has four distinct UI regions. After the unification work (2026-05-18), the previewer + gallery shortcut + grid all derive their visual content from **a single album-scoped data source**. The dropdown's album list is separate (it lists albums, not assets), and there's one tiny library-wide boolean query left for the library-viewfinder's empty-state check.
 
 ```
 ┌─────────────────────────────────────────┐
 │                                         │
 │   [BIG PREVIEW IMAGE]                   │  ← #1 Previewer (top half)
 │                                         │     fed by: PickerViewModel.previewAsset
-│                                         │     initial value: recentAssets.first
-│                                         │     after grid loads: follows the grid
-│                                         │     after grid tap: follows the tap
+│                                         │     initial value: prewarmedFirstAlbumAssets.first
+│                                         │     on album switch: follows album's first
+│                                         │     on grid tap: follows the tapped asset
 ├─────────────────────────────────────────┤
 │  Recents ▾                    NEXT      │  ← #2 Album dropdown
 │                                         │     fed by: photoKitService.albums
@@ -108,114 +108,109 @@ The picker screen has four distinct UI regions, and they're fed by **different d
 │  ┌──┐ ┌──┐ ┌──┐ ┌──┐                    │
 │  │  │ │  │ │  │ │  │                    │  ← #3 Asset grid
 │  └──┘ └──┘ └──┘ └──┘                    │     fed by: assetGridState.assets
-│  ┌──┐ ┌──┐ ┌──┐ ┌──┐                    │     fetched fresh per album switch
-│  │  │ │  │ │  │ │  │                    │     does NOT read recentAssets
+│  ┌──┐ ┌──┐ ┌──┐ ┌──┐                    │     mounts from: prewarmedFirstAlbumAssets
+│  │  │ │  │ │  │ │  │                    │     pagination grows the list
 │  └──┘ └──┘ └──┘ └──┘                    │
 ├─────────────────────────────────────────┤
 │ [🖼]      ( ⚪ )         [⟲]            │  ← #4 Shutter row
 │  ↑                                      │     [🖼] = gallery-shortcut button
-│  recentAssets.first                     │     fed by: recentAssets.first (always)
+│  prewarmedFirstAlbumAssets.first        │     fed by: PickerViewModel.galleryThumbImage
+│  (same as previewer's source)           │     visually follows the album like the previewer
 └─────────────────────────────────────────┘
 ```
 
-### The two PhotoKit fetches: `recentAssets` vs `assetGridState.assets`
+### Data flow: one fetch feeds three UI elements
 
-These look like the same query in different places. They aren't.
-
-| | `photoKitService.recentAssets` | `assetGridState.assets` |
-|---|---|---|
-| **Scope** | Library-wide (no album) | Album-scoped (`PHAssetCollection`) |
-| **Filter** | Images only (`.image`) | All media (images + videos) |
-| **Size** | ~30 items (capped via `fetchLimit`) | 60 + paginated growth |
-| **Owner** | `PhotoKitService` (shared) | `AssetGridViewModel` (per-mount) |
-| **Lifecycle** | Prewarmed once; refreshed on library-change observer | Reloaded fresh on every album switch |
-| **Feeds** | #1 previewer first paint, #4 gallery shortcut | #3 grid cells |
-
-On the **default Recents view** the two sets overlap because the Recents smart album (`smartAlbumUserLibrary`) is "all images + videos sorted by creation date." Same direction (newest first), so the first ~30 items match. **Switch to any other album** (Screenshots, Favorites, Videos) and they diverge: the grid reloads to that album's contents, `recentAssets` keeps the library-wide newest 30.
-
-### Why two queries instead of one
-
-Three reasons we don't collapse `recentAssets` into the grid's fetch:
-
-1. **First-paint timing.** The previewer needs *something to show NOW* when the sheet opens. The grid is mounting in parallel and won't have data for ~150-400ms (the album-scoped fetch). `recentAssets` is pre-loaded during the modifier's `prewarm()` BEFORE the sheet opens, so the previewer paints from `recentAssets.first` on the first frame.
-
-2. **The gallery-shortcut button has different semantics.** Per iOS convention (matches Apple's Camera app), the gallery shortcut always shows "the most recent photo in your library" — independent of which album the user is browsing in the grid. Switch to Screenshots → grid changes, gallery shortcut stays on library-wide newest. That requires a library-wide list, which is exactly what `recentAssets` is.
-
-3. **Limited Access compatibility.** When the user is in Limited Access mode, the library-wide query and any album-scoped query return different (possibly disjoint) sets. The previewer + gallery shortcut need to respect the limited-set independent of album scoping.
-
-### How #1 (the previewer) transitions from `recentAssets` to the grid
-
-The previewer doesn't read `recentAssets` directly — it reads `PickerViewModel.previewAsset`. The value of `previewAsset` evolves through three states:
-
-1. **At VM init**: eager-set to `recentAssets.first` (sync read from the prewarmed singleton).
-2. **After the grid loads** for any album: `AssetGridView` fires `onFirstAssetChanged(...)`, which calls `viewModel.setPreview(...)` with the grid's first asset. The previewer follows the active album from this point.
-3. **After a grid tap**: `onAssetTap` fires `viewModel.handleGridAssetTap(...)` which sets `previewAsset` to the tapped item.
-
-So `recentAssets` is **scaffolding for the cold-open window** for the previewer. Once the grid has data, the previewer is grid-driven for the rest of the session.
-
-`LibraryViewfinderViewModel.displayAsset(preferring:)` is a one-line defensive helper:
-
-```swift
-public func displayAsset(preferring preview: PHAsset?) -> PHAsset? {
-    preview ?? photoKitService.recentAssets.first
-}
-```
-
-It just falls back to `recentAssets.first` if the parent somehow didn't pass a `previewAsset`. In practice the parent always does (init eager-sets it), so the fallback is a safety net rather than a primary path.
-
-### The three PhotoKit queries (side by side)
-
-There are **three** distinct PhotoKit fetches the picker issues — `recentAssets`, the grid's bounded first page, and the grid's unbounded pagination result. All three are rooted at "newest first" but they have different scopes, filters, and sizes:
+The previewer (#1), gallery shortcut (#4), and grid (#3) all derive from a single PhotoKit fetch during cold-open prewarm: the album's first page (`prewarmedFirstAlbumAssets`, currently 20 PHAssets at `gridInitialPageSize`).
 
 ```
-QUERY 1 — recentAssets             QUERY 2 — grid page 1            QUERY 3 — grid pagination (lazy)
-──────────────────────────         ───────────────────────          ────────────────────────────────
-PHAsset.fetchAssets(               PHAsset.fetchAssets(             PHAsset.fetchAssets(
-    with: .image,                      in: currentAlbum,                in: currentAlbum,
-    options: {                         options: {                       options: {
-      sortDesc: creationDate↓            sortDesc: creationDate↓          sortDesc: creationDate↓
-      fetchLimit: 30                     fetchLimit: 60                   (NO fetchLimit — unbounded)
-    }                                  }                                }
-)                                  )                                )
-
-Scope: library-wide                Scope: one album                 Scope: one album
-Filter: images only                Filter: all media (img + video)  Filter: all media
-Size: 30 PHAssets                  Size: 60 PHAssets                Size: full result (lazy)
-Used by: previewer, gallery shortcut Used by: grid page 1           Used by: grid pagination
-                                                                      (materializes range 60..120,
-                                                                      120..180, etc.)
+                     ┌──────────────────────────────┐
+                     │  Album-scoped fetch          │
+                     │  fetchAssets(in: firstAlbum, │
+                     │              limit: 20)      │
+                     │  → prewarmedFirstAlbumAssets │
+                     └──────────────────────────────┘
+                                  │
+                                  ↓ feeds all of:
+              ┌───────────────────┼───────────────────┐
+              │                   │                   │
+              ↓                   ↓                   ↓
+        Previewer            Gallery thumb         Grid cells
+        (firstPage.first)    (firstPage.first)     (firstPage.prefix(20))
+        @ 1000pt cache       same asset            @ 400pt cache
+                             140pt cache hit       (cell 0 inherits the
+                             via largest-wins      1000pt entry — same key)
 ```
 
-**There is no "skip the first" / offset logic.** The grid's page-1 fetch starts at index 0 of its sort order, not at index 1. So when the user is on Recents, `gridCells[0]` is the same PHAsset as `recentAssets[0]` whenever the most recent thing in the library is an image. The two queries return overlapping sets — the grid does NOT deduplicate against `recentAssets`. Each consumer issues its own fetch from scratch.
+**Album switch propagates to all three together.** `AssetGridView.onChange(of: assetGridState.assets.first?.id)` fires when the album swap completes; it calls `PickerViewModel.handleFirstAlbumAssetChanged(_:)`, which updates BOTH `previewAsset` AND `galleryThumbImage` in lock-step. The shortcut's TAP behavior (opens Apple's `PhotosPicker` for library-wide browsing) is unchanged — only its thumbnail visually mirrors the album.
 
-**Pagination is not "fetch next 60 with offset" — it's "materialize a slice of the lazy result"** (query 3 above). `fetchAssetsResult` returns a `PHFetchResult<PHAsset>` over the whole album, lazy. `materialize(from: result, range: 60..<120)` extracts page 2; `range: 120..<180` extracts page 3. No offset arithmetic, no risk of cell 60 appearing twice across page boundaries. Page 1's first 60 (from query 2) are guaranteed equal to the first 60 of query 3's result because both share `sortDescriptors = [creationDate↓]`.
+### The remaining library-wide fetch (and why it's still there)
 
-### The "cell 0 paints instant" effect is incidental, not designed
+`PhotoKitService` still issues one library-wide query during prewarm: `fetchRecentAssets(limit: 1)`. It does NOT feed any visible photo. Its sole purpose is to populate `recentAssets` with at least one item so `LibraryViewfinderViewModel.hasRecents` can answer "does the user have ANY photos in their library?" — used to choose between the "loading," "empty," and "ready" view states in the library viewfinder.
 
-On cold sheet open, grid cell 0 paints instantly. The reason is subtle and worth knowing because it's an **implicit coupling** between two features that nothing forces to stay in sync:
+Cost: ~100ms cold start. Future cleanup (see `project_picker_deferred_media_type_filter.md` and related memos) would eliminate this fetch entirely by deriving `hasRecents` from `prewarmedFirstAlbumAssets` instead. Until then, the limit:1 fetch is the architectural compromise — main picker is fully unified for visible content, with a tiny boolean signal still routing through `recentAssets`.
+
+The `EliteGeometricPickerViewModel` variant explicitly passes `limit: 30` to `fetchRecentAssets` because it uses `recentAssets` as its grid data source (different architecture from the main picker — Elite Geometric doesn't have an album dropdown).
+
+### The three PhotoKit queries (side by side, after unification)
+
+Three distinct PhotoKit fetches happen, but only ONE of them feeds visible photo content:
 
 ```
-T-2.5s   prewarmVisibleContent() step 2:
-           loadThumbnail(for: recentFirst, size: 1000×1000)
-         → ThumbnailCache key:   "<recentFirst.localIdentifier>|<modDate>"
-         → ThumbnailCache value: UIImage @ 1000×1000
+QUERY 1 — recents (LibraryVM signal)  QUERY 2 — grid page 1 (UNIFIED)     QUERY 3 — grid pagination (lazy)
+──────────────────────────────         ─────────────────────────────       ────────────────────────────────
+PHAsset.fetchAssets(                   PHAsset.fetchAssets(                PHAsset.fetchAssets(
+    with: .image,                          in: currentAlbum,                   in: currentAlbum,
+    options: {                             options: {                          options: {
+      sortDesc: creationDate↓                sortDesc: creationDate↓             sortDesc: creationDate↓
+      fetchLimit: 1                          fetchLimit: 20                      (NO fetchLimit — unbounded)
+    }                                      }                                   }
+)                                      )                                   )
 
-T=0      Grid cell 0 mounts. Its asset is gridCells[0].
-         Cell asks: cachedThumbnail(for: gridCells[0])
-         → ThumbnailCache lookup key: "<gridCells[0].localIdentifier>|<modDate>"
+Scope: library-wide                    Scope: one album                    Scope: one album
+Filter: images only                    Filter: all media (img + video)     Filter: all media
+Size: 1 PHAsset                        Size: 20 PHAssets                   Size: full result (lazy)
+Used by: LibraryViewfinder's           Used by: previewer, gallery         Used by: grid pagination
+  hasRecents bool check ONLY             shortcut, AND grid cells 0-19       (materializes 20..80,
+  (no visible image)                     (single source of truth for          80..140, etc.)
+                                         visible content)
 
-         IF gridCells[0].localIdentifier == recentFirst.localIdentifier:
-             → CACHE HIT (the 1000pt image)
-             → Cell 0 paints instantly (downscaled visually to cell size)
-         ELSE:
-             → cache miss → cell 0 fires async fetch → trickles in with cells 1-59
+Cost: ~100ms cold start                Cost: ~10ms (top-K fast path)       Cost: ~75ms unbounded sort
+  (first PhotoKit op)                                                        on 33k-photo library
 ```
 
-When the user is on the Recents album AND the newest library asset is an image (not a video), `gridCells[0]` and `recentFirst` are the same `PHAsset` instance → same `ThumbnailCache` key → cell 0 hits cache. Otherwise (any other album; or Recents with a recent video first) cell 0 misses cache and trickles in like cells 1-59.
+**Pagination is index-range materialization, not offset arithmetic.** `fetchAssetsResult` returns a lazy `PHFetchResult<PHAsset>` over the whole album; `materialize(from: result, range: 20..<80)` extracts page 2. Page 1's first 20 (from query 2) are guaranteed to equal the first 20 of query 3's result because both share `sortDescriptors = [creationDate↓]`. No risk of cell 19 appearing twice across page boundaries.
 
-This is a **happy accident**, not a designed feature. The previewer's prewarm is cached at a different size (1000pt) for a different consumer (the top viewfinder). Cell 0 benefits only because the cache key is per-asset, not per-size, and the largest-wins policy keeps the 1000pt entry — which is larger than the 400pt the grid would otherwise have cached. Step 2 of `prewarmVisibleContent` has an inline comment flagging this so future contributors don't break it accidentally by changing what the prewarm caches.
+### Cell 0 + previewer + shortcut share a cache entry — by design
 
-If/when a deliberate per-cell prewarm ships (the deferred "16-cell prewarm" memo describes the plan), cell 0's instant-paint behavior will become a designed feature instead of a coincidence — but until then, treat it as "this works on Recents only because the universe aligned."
+Grid cell 0, the previewer, and the gallery shortcut all visually display the SAME PHAsset (the active album's first asset). They all read from `ThumbnailCache.shared`, keyed by `"<localIdentifier>|<modDate>"`. The cache entry is populated by `prewarmVisibleContent`:
+
+```
+T-2.5s   prewarmVisibleContent step 2:
+           loadThumbnail(for: firstAlbumAsset, size: 1000×1000)
+         → ThumbnailCache["<firstAlbumAsset.id>|<modDate>"] = UIImage @ 1000×1000
+
+T-2.3s   prewarmVisibleContent step 3:
+           loadThumbnail(for: firstAlbumAsset, size: 140×140)
+         → cache write skipped (largest-wins: existing 1000pt is bigger;
+            the request still hits PhotoKit's internal cache pool)
+
+T-2.3s   prewarmVisibleContent step 4 — prewarms first 20 grid cells:
+           Each cell's loadThumbnail at 400pt:
+             - Cell 0: cache HIT on the 1000pt entry → no fetch needed
+             - Cells 1-19: cache miss → PhotoKit warm-pool fetch at 400pt
+                           → cache written at 400pt for each
+
+T=0      Sheet opens. Cells 0-19 + previewer + shortcut paint from cache:
+         - Previewer reads cache for firstAlbumAsset → 1000pt entry hit
+         - Shortcut reads cache for firstAlbumAsset → same 1000pt entry hit
+         - Cell 0 reads cache for firstAlbumAsset → same 1000pt entry hit
+         - Cells 1-19 read their own 400pt entries (also hits)
+```
+
+This three-way cache-key collision used to be incidental — pre-unification, the previewer prewarmed using `recentAssets.first` (library-wide), which happened to share an identifier with `gridCells[0]` only when the user's most recent thing was an image. After unification, the previewer + shortcut + grid all derive from `prewarmedFirstAlbumAssets.first` by design. The collision is intentional, not coincidental.
+
+**Design invariant for future contributors:** previewer + shortcut + grid cell 0 share one ThumbnailCache entry. Don't change what prewarm step 2 caches (size or asset) without preserving this. If the previewer's asset diverges from the grid's first asset, you've broken the unification — the shortcut would show a different photo than cell 0, which contradicts the iOS-native "consistency between what you see and what you tap" expectation.
 
 ## Requirements
 
