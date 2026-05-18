@@ -447,6 +447,54 @@ If the answer is "the downstream framework's queue," parallelism won't help — 
 
 A `Task { … }` block with no stored handle is "fire-and-forget" in the worst sense — it survives the view dismissing, retains `self` until completion, and leaks if the work is slow. If you need fire-and-forget on a `@MainActor` VM, use the task-array pattern above. The only exception is short-lived Tasks on long-lived singletons (e.g., `CameraService.flipCamera`) where leak risk is bounded.
 
+### Coalesce concurrent calls to the same service fetch
+
+When a service method (`PhotoKitService.fetchRecentAssets`, a URL-session refresh, a database reload — any "go get / refresh state X") has **multiple distinct triggers** that can fire close in time, two callers can race and issue the same work twice. Symptoms: redundant network requests, redundant disk/decode work, redundant pressure on a shared queue-backed framework (PhotoKit, AVFoundation, etc.).
+
+The fix is **in-flight Task coalescing**: store a handle to the running Task; the second-and-later caller awaits the existing Task instead of starting a new one.
+
+**Canonical example in this codebase: `PhotoKitService.fetchRecentAssets`.** Called from six distinct triggers (modifier prewarm, scenePhase active, onboarding GET STARTED, Limited-picker dismiss, PhotoKit change observer, library viewfinder mount). Two pairs of triggers can fire near-simultaneously (Limited-picker dismiss + change observer; foreground + change observer). The coalescer makes the second caller a no-op duplicate.
+
+```swift
+@ObservationIgnored private var inFlightRecentsFetch: Task<Void, Never>?
+
+public func fetchRecentAssets(limit: Int = 30) async {
+    // Check + create atomically on MainActor so two nonisolated callers
+    // racing on the cooperative pool don't both pass the nil check.
+    let task: Task<Void, Never> = await MainActor.run {
+        if let existing = inFlightRecentsFetch {
+            return existing
+        }
+        let newTask = Task { [weak self] in
+            guard let self else { return }
+            await self.performRecentAssetsFetch(limit: limit)
+            // Spawned Task clears its own handle on completion.
+            await MainActor.run { self.inFlightRecentsFetch = nil }
+        }
+        inFlightRecentsFetch = newTask
+        return newTask
+    }
+    await task.value
+}
+
+private func performRecentAssetsFetch(limit: Int) async { /* the actual work */ }
+```
+
+**Why it's structured this way:**
+
+1. **`MainActor.run` for the check-or-create.** The service is nonisolated, so two callers can enter on different threads. Wrapping the read + write in a single `MainActor.run` block makes them atomic — only one Task ever gets created.
+2. **The spawned Task clears its own handle.** Cleaner than having every caller participate in cleanup. After the handle is nil, a subsequent legitimately-new call gets a fresh Task.
+3. **Both callers `await task.value`.** Same result for both. The duplicate caller pays zero PhotoKit cost — just an extra `await` resume.
+
+**When this pattern applies:**
+- Service methods invoked from multiple reactive triggers (scenePhase, system observers, user actions).
+- Especially when the underlying work hits a shared serial queue (PhotoKit, AVFoundation, URLSession) where duplicates compete with visible-content requests for queue time.
+- Less critical for pure in-memory work (the equality guard on the writer already suppresses cascades there).
+
+**Trade-off — first caller's parameters win.** If callers pass different arguments (`limit: 30` vs `limit: 5`), the second caller gets whatever the in-flight Task was configured with. Usually fine because most call sites use defaults; if not, the in-flight handle should be keyed by argument.
+
+**Don't conflate with the equality guard.** The guard in `updateAssets` prevents the duplicate `@Observable` cascade (UI re-eval). The coalescer prevents the duplicate WORK (PhotoKit fetch). Both are needed: the guard for the case where two legitimate fetches return the same data; the coalescer for the case where two near-simultaneous triggers fire the same fetch.
+
 ### Bounded fast-path + background unbounded (the "hybrid fetch" pattern)
 
 When you have an operation that has both a **fast bounded variant** and a **slow unbounded variant** of the same work — and the caller wants the bounded result on the critical path but eventually needs the unbounded result for downstream operations — split into two phases:
@@ -930,6 +978,8 @@ Use `// MARK: - Section` for any file with multiple logical sections (init, publ
 | Fetch with a bounded-fast / unbounded-slow API split (PhotoKit, URLSession, etc.) | Does the caller need the bounded for first paint AND the unbounded for downstream? | Use the hybrid fast-path + background unbounded pattern. Critical-path consumer awaits bounded; downstream consumers await the stored background Task. |
 | Bounded fast-path returns but PHASE 2 unbounded fetch competes with visible content | Does PHASE 2 hit a shared serial queue (PhotoKit, AVFoundation)? | Lazy PHASE 2 — defer the spawn to first user-intent trigger (sentinel, button) instead of eager-background after PHASE 1. |
 | Initial VM state derivable from injected service properties | Is the data already on a singleton at VM construction time? | Eager-init in VM `init` — read the singleton synchronously and assign. Don't async-fetch what's already there. |
+| Service method invoked from N reactive triggers | Can two triggers fire close in time? | Coalesce — store an in-flight `Task<Void, Never>?`; the second caller `await`s it. See §3 "Coalesce concurrent calls to the same service fetch." |
+| Type whose `==` should mean "same content" but uses `id = UUID()` for `Identifiable` | Need content equality? | Implement `==` + `hash(into:)` explicitly over the content fields. `Identifiable.id` (instance identity) and `Equatable.==` (content identity) are allowed to diverge. |
 | Public type | Where does it live? | `Models/`, one type per file. |
 | Internal helper struct | Where does it live? | Same file as the view/VM that uses it. |
 | Flow stage (multi-step UX) | Sheet, NavigationStack, or single-ZStack? | Single ZStack with flow-state enum. |
@@ -965,6 +1015,12 @@ Use `// MARK: - Section` for any file with multiple logical sections (init, publ
 - ❌ Multi-type files for public types (`Models.swift`, `Components.swift` grab-bags).
 - ❌ `// Added for ticket #X` or `// Used by Y` comments.
 - ❌ Doc comments that restate the type signature.
+- ❌ Leaving dead surface — unused enum cases, observable state fields with no producer, methods with no callers, parameters the body ignores. These accumulate when a UX is designed but never shipped, or when a refactor moves the consumer without pruning the supply. **Delete on sight.** A future contributor reading `case toggleMultiSelect` will assume the feature exists and try to use it. If the surface comes back, re-add it deliberately with a real producer.
+- ❌ Service-to-service references that hard-code `.shared` inline (e.g., `private let foo = FooService.shared`). Use constructor-default DI even for services — same shape as VMs (`init(foo: FooService = .shared)`). Production callers don't notice; the parameter shape is ready for protocol-based test injection later.
+- ❌ Multiple distinct triggers calling the same service refresh with no coalescer. Two near-simultaneous triggers will issue the same fetch twice and double the pressure on shared queue-backed frameworks (PhotoKit, AVFoundation, URLSession). See §3 "Coalesce concurrent calls to the same service fetch."
+- ❌ `Identifiable` via `id = UUID()` per-instance AND relying on the synthesized `Equatable` for content equality. Two instances built from identical data compare unequal because their UUIDs differ. If you need content equality, implement `==` + `hash(into:)` explicitly over the content fields (and document the divergence between `Identifiable.id` and `Equatable.==`).
+- ❌ ASCII section banners (long `━━━` rules + box-art around declarations). Use `// MARK:` — Xcode's jump bar surfaces them, and they don't visually fight the code below.
+- ❌ Theatrical emoji prefixing what-comments (`// 🛡️ Sovereign Layer: Always on Top` next to `.zIndex(100)`). If a comment is decorative rather than load-bearing, delete it. If it carries a real WHY, write that WHY without emoji.
 
 ---
 
