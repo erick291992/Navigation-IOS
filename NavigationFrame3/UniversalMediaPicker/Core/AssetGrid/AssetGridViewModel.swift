@@ -61,7 +61,7 @@ public final class AssetGridViewModel: NSObject {
 
     // MARK: - Pagination state
     //
-    // The grid uses a **two-phase hybrid fetch** model:
+    // The grid uses a **lazy two-phase fetch** model:
     //
     // PHASE 1 (on the critical path) — `fetchAssets(in:, limit: pageSize)`
     //   returns the first page eagerly. This call uses PhotoKit's top-K
@@ -70,20 +70,24 @@ public final class AssetGridViewModel: NSObject {
     //   doesn't have to establish the full sort order over the entire
     //   library — it only needs to find the top N most recent.
     //
-    // PHASE 2 (off the critical path) — a background `Task` does the
-    //   unbounded `fetchAssetsResult` and stores the lazy `PHFetchResult`
-    //   in `fetchResult`. This is what pagination needs to materialize
-    //   pages 60+ on scroll. The unbounded sort PhotoKit does here is
-    //   expensive (~500-1000ms on a 33k-photo library), but it runs AFTER
-    //   the user is already looking at the grid — they don't wait on it.
+    // PHASE 2 (lazy, triggered by user intent) — when the user scrolls to
+    //   the pagination sentinel for the first time, `loadNextPageCore`
+    //   kicks off an unbounded `fetchAssetsResult` Task and awaits it.
+    //   The unbounded sort PhotoKit does here is expensive (~500-1000ms on
+    //   a 33k-photo library) AND it monopolizes PhotoKit's serial queue.
     //
-    // If the user scrolls fast enough to hit the pagination sentinel
-    // before PHASE 2 finishes, `loadNextPageCore` awaits `pendingFullFetch`
-    // instead of no-op'ing. So no "stuck at 60" wall for fast scrollers;
-    // they just briefly wait for PHASE 2 to complete.
+    // **Why lazy and not eager-in-background?** We tried firing PHASE 2
+    // immediately after PHASE 1 (eager-background). On a real device with
+    // a large library, the unbounded sort competed with the library
+    // previewer's 1000pt image fetch and the gallery shortcut's 140pt
+    // fetch on PhotoKit's serial queue, delaying those visible-to-user
+    // images by 100-300ms. By deferring PHASE 2 until the user actually
+    // scrolls past page 1, PhotoKit's queue stays free during sheet-open
+    // and the visible content paints as fast as the pre-pagination
+    // baseline. The first scroll past 60 pays the PHASE 2 cost once.
     //
-    // See CODING_GUIDELINES.md §3 "Bounded fast-path + background unbounded"
-    // for the general pattern.
+    // See CODING_GUIDELINES.md §3 for the queue-contention lesson and the
+    // canonical "do less near sheet-mount" rule.
 
     @ObservationIgnored private var fetchResult: PHFetchResult<PHAsset>?
     @ObservationIgnored private var isLoadingPage = false   // re-entry guard for loadNextPage
@@ -232,11 +236,10 @@ public final class AssetGridViewModel: NSObject {
         state.isLoading = true
 
         // PHASE 1 — bounded top-`pageSize` fetch using PhotoKit's partial-sort
-        // fast path. This is the ONLY thing the user actually waits on for
-        // first paint. A bounded fetch is dramatically faster than the
-        // unbounded sort on large libraries because PhotoKit uses a top-K
-        // algorithm and never has to establish ordering for the rest of
-        // the album.
+        // fast path. This is the ONLY thing the user waits on for first
+        // paint. A bounded fetch is dramatically faster than the unbounded
+        // sort on large libraries because PhotoKit uses a top-K algorithm
+        // and never has to establish ordering for the rest of the album.
         let firstPage = await photoKitService.fetchAssets(in: album, limit: Self.pageSize)
         PickerPerfLog.event("grid.loadAssets → PHASE 1 fetched (\(firstPage.count))")
 
@@ -253,24 +256,10 @@ public final class AssetGridViewModel: NSObject {
             PickerPerfLog.event("grid.loadAssets → setCachedAssets done (warm started)")
         }
         state.isLoading = false
-        // ↑ User sees the first 60 cells from this point on. PHASE 2 below is
-        //   off the critical path — runs after first paint, doesn't block.
-
-        // PHASE 2 — background fetch of the unbounded `PHFetchResult`. This
-        // is what pagination needs to materialize pages 60+ on scroll. The
-        // unbounded sort PhotoKit does here is exactly the same work the
-        // pre-hybrid code did — we just moved it OFF the critical path so
-        // it no longer blocks first paint. Stored on `pendingFullFetch` so
-        // `loadNextPageCore` can await it if the user scrolls fast.
-        let task = Task { [weak self] in
-            guard let self else { return }
-            PickerPerfLog.event("grid.loadAssets → PHASE 2 start (background)")
-            let fullResult = await self.photoKitService.fetchAssetsResult(in: album)
-            self.fetchResult = fullResult
-            PickerPerfLog.event("grid.loadAssets → PHASE 2 ready (total=\(fullResult.count))")
-        }
-        self.pendingFullFetch = task
-        tasks.append(task)
+        // ↑ User sees the first 60 cells from here. NO PHASE 2 — it's
+        //   deferred to the first sentinel hit in `loadNextPageCore`. This
+        //   leaves PhotoKit's serial queue free for the library previewer
+        //   and gallery shortcut to load without contention.
     }
 
     // MARK: - Pagination (load next page)
@@ -289,15 +278,31 @@ public final class AssetGridViewModel: NSObject {
 
     private func loadNextPageCore() async {
         guard !isLoadingPage else { return }                 // re-entry guard
+        guard let album = lastLoadedAlbum else { return }    // no album, no pagination
 
-        // Wait for PHASE 2 background fetch if the user scrolled past the
-        // first page before it completed. Without this, fast-scrolling
-        // users would hit a "wall" at cell 60 with no auto-retry once
-        // PHASE 2 eventually finishes. Awaiting the task gives PHASE 2 a
-        // chance to populate `fetchResult` before we check it.
-        if fetchResult == nil, let pending = pendingFullFetch {
-            PickerPerfLog.event("grid.loadNextPage → waiting on PHASE 2")
-            await pending.value
+        // Lazy PHASE 2 — kick off the unbounded fetch HERE on the first
+        // sentinel hit, not eagerly in `loadAssets`. This keeps PhotoKit's
+        // serial queue free during sheet-open so the library previewer and
+        // gallery shortcut aren't competing with the ~500-1000ms unbounded
+        // sort. PhotoKit only does bulk work after the user has shown
+        // intent to scroll past page 1.
+        if fetchResult == nil {
+            if pendingFullFetch == nil {
+                PickerPerfLog.event("grid.loadNextPage → triggering lazy PHASE 2")
+                let task = Task { [weak self] in
+                    guard let self else { return }
+                    PickerPerfLog.event("grid.loadNextPage → PHASE 2 start (lazy)")
+                    let fullResult = await self.photoKitService.fetchAssetsResult(in: album)
+                    self.fetchResult = fullResult
+                    PickerPerfLog.event("grid.loadNextPage → PHASE 2 ready (total=\(fullResult.count))")
+                }
+                pendingFullFetch = task
+                tasks.append(task)
+            }
+            if let pending = pendingFullFetch {
+                PickerPerfLog.event("grid.loadNextPage → waiting on PHASE 2")
+                await pending.value
+            }
         }
 
         guard let result = fetchResult else { return }
