@@ -92,6 +92,70 @@ Two and only two places skip the rule. Both have a header comment explaining why
 
 If you find yourself wanting to add a third exception, **don't**. Add a method to the VM instead, or pass the value down as a parameter.
 
+### View body discipline — no orchestration in views
+
+A view's `.task` / `.onAppear` body must be **a single call to a VM method**. The view's job is "tell the VM to do its thing." Any decision about *how* the work runs — sequential vs parallel, with retries, with timeouts, with backoff — belongs in the VM.
+
+❌ **Wrong** (orchestration in the view):
+```swift
+.task {
+    async let albumBootstrap: Void = viewModel.loadAlbums()
+    async let galleryThumb: Void = viewModel.loadGalleryThumb()
+    _ = await (albumBootstrap, galleryThumb)
+}
+```
+
+✅ **Right** (VM owns the orchestration):
+```swift
+// View
+.task { await viewModel.bootstrap() }
+
+// VM
+public func bootstrap() async {
+    async let albumBootstrap: Void = loadAlbums()
+    async let galleryThumb: Void = loadGalleryThumb()
+    _ = await (albumBootstrap, galleryThumb)
+}
+```
+
+The wrong version locks the parallelization shape into the view. If you later want to add a third step, add retry, or serialize one of them under some condition, you have to edit the view — which means the view now contains orchestration logic. Move it to the VM up front.
+
+**The rule extends to `.onAppear { Task { … } }` blocks too.** The body of that inner `Task` closure should also be a single VM method call, not a sequence of orchestrated awaits.
+
+This is a specific application of the broader View → ViewModel → Service rule, but worth stating separately because `async let` is seductive and easy to inline at the call site when you first reach for parallelization.
+
+### `.task` vs `.onAppear` — which lifecycle hook
+
+Both fire when the view appears, with deliberate differences. Choose based on what you need:
+
+| | `.onAppear { … }` | `.task { await … }` |
+|---|---|---|
+| Closure type | Sync | Async |
+| Timing | Immediately on appearance | ~16-32ms later (scheduling overhead) |
+| Auto-cancellation on disappear | ❌ | ✅ (task implicitly cancelled) |
+| Async work | Must wrap in `Task { … }` manually; that Task is NOT auto-cancelled | Native; auto-cancels |
+| Re-runs on reappear | ✅ | ✅ (cancels previous if still running) |
+
+**Default to `.task`.** It's the modern path: async-native, cancels cleanly, ties to the view's lifecycle.
+
+**Use `.onAppear` when:**
+- The kickoff is latency-critical and you need the ~16-32ms head start (e.g., camera cold-start).
+- The work should keep running even if the view briefly disappears (e.g., warming a long-lived shared service).
+- You're doing pure sync setup (no `await` involved at all).
+
+**Concrete example** — `MediaPickerModifier.swift` uses both deliberately:
+
+```swift
+.onAppear {
+    Task { await CameraService.shared.startWarming() }   // every ms matters
+}
+.task {
+    await PhotoKitService.shared.prewarm()                // cancellable if user navigates away
+}
+```
+
+Both choices are documented in that file's header comment.
+
 ### Pattern selection (View ↔ ViewModel ↔ View)
 
 Three patterns coexist, each correct in its niche. Choose with the decision tree:
@@ -119,6 +183,56 @@ Three valid placements, each with a specific job:
 | `@MainActor class Foo {…}` | Every method, init, and property runs on main | **View models.** They're SwiftUI's consumers — all reads/writes should be main-isolated by default. |
 | `@MainActor public static let shared = Foo()` | Only the shared accessor is main | **Services with main-thread invariants** (UIKit ownership, AV session). Rare. |
 | `@MainActor func foo() {…}` (per-method) | This method, plus its sync writes to observable state | **Services that do mixed work.** Class is nonisolated; UI-touching methods opt in. |
+
+### What `@MainActor` does NOT mean
+
+A common misread: "`@MainActor` makes this function slow because it runs on the main thread."
+
+That's not what `@MainActor` does. The annotation says **"only one thread can execute this at a time, and that thread is main."** Whether it's slow depends on **what's inside** the function, not the annotation. A `@MainActor` function that just dispatches to async APIs (PhotoKit, AVFoundation, URLSession, etc.) is essentially free — those APIs don't block; they queue work and return immediately. A `@MainActor` function that JPEG-encodes a 4K image **is** slow because it does heavy CPU on main.
+
+**Two things to check when you see `@MainActor`:**
+1. *What does the function actually do?* Dispatching to async work = cheap. Crunching CPU = expensive.
+2. *Is the caller already on `@MainActor`?* If yes (e.g., a VM calling a service method), there's no thread hop — calling it costs nothing. If no, there's one hop, which is also cheap (~microseconds) unless you're calling it in a tight loop.
+
+The "sole-writer" pattern uses `@MainActor` on the writer method (not the whole class) as the cheapest way to prevent data races on a shared mutable variable. Alternatives — actors, locks, serial queues — all have higher overhead. `@MainActor` on a fast writer beats them.
+
+### Async ≠ off-main — actor inheritance rules
+
+A common confusion: "`async` function" does NOT mean "runs off main." Where the body actually runs is determined by **actor inheritance**, not by the `async` keyword. These five rules govern everything:
+
+1. **A `@MainActor async` function's body runs on main.** Awaiting it from main suspends, runs the body on main, returns. The `async` just means "may suspend."
+
+2. **A nonisolated `async` function's body runs on the cooperative pool.** When awaited from any actor context (including `@MainActor`), Swift hops off main, runs the body on the pool, and resumes on the caller's actor. **This is SE-0338 — it's automatic.** Most off-main work in this codebase happens through this rule, not through `Task.detached`.
+
+3. **`Task { … }` inherits the actor of the enclosing context.** Inside a `@MainActor` method, `Task { … }` is `@MainActor`. Its body runs on main.
+
+4. **`Task.detached { … }` does NOT inherit.** It always starts on the cooperative pool. Use it to escape a `@MainActor` enclosing context when you genuinely need off-main work AND can't go through a nonisolated async function.
+
+5. **`async let` child tasks inherit the parent's actor.** Inside a `@MainActor` method, `async let a = methodA()` creates a child task that is `@MainActor` (if `methodA` is also `@MainActor`). Both children run on main, interleaving at await points. **This is not true thread-level parallelism** — see the parallelism decision framework below.
+
+**Concrete examples in this codebase:**
+
+```swift
+// PhotoKitService is NOT @MainActor at the class level.
+// loadAlbumsIfNeeded is nonisolated async.
+public func loadAlbumsIfNeeded() async { … }
+
+// In a @MainActor VM, this is automatically off-main per rule 2:
+await photoKitService.loadAlbumsIfNeeded()
+
+// In a @MainActor VM, this Task runs on MAIN (rule 3):
+Task { await someAsyncWork() }
+
+// In a @MainActor VM, this Task runs on the COOPERATIVE POOL (rule 4):
+Task.detached { await someAsyncWork() }
+
+// In a @MainActor bootstrap, both children inherit @MainActor (rule 5):
+async let a: Void = loadInitialAlbumIfNeeded()   // @MainActor
+async let b: Void = loadGalleryThumbIfNeeded()   // @MainActor
+_ = await (a, b)                                  // both interleave on main
+```
+
+**Practical implication:** you almost never need `Task.detached` in this codebase, because services are already nonisolated and their async methods auto-hop off main via SE-0338. Reach for `Task.detached` only for **CPU-bound work inside a `@MainActor` VM** (encoding, parsing) — that's why `CropFlowViewModel.finalize` uses it.
 
 ### The nonisolated-class pattern (services)
 
@@ -170,6 +284,109 @@ let finalItems = await Task.detached(priority: .userInitiated) {
 
 Don't put a `@MainActor` annotation on a class whose methods do heavy CPU. The annotation lies about where the work runs and SwiftUI will stutter.
 
+### The fire-and-forget Task pattern (sync method, async work inside)
+
+For action methods called from sync call sites (button taps, gesture handlers, `.onChange` blocks), use this pattern instead of making the method `async`:
+
+```swift
+@MainActor
+@Observable
+final class SomeViewModel {
+    @ObservationIgnored private var tasks: [Task<Void, Never>] = []
+
+    deinit {
+        tasks.forEach { $0.cancel() }   // cancel in-flight work on dismiss
+    }
+
+    func handleSomeAction() {                          // sync signature
+        let task = Task { [weak self] in               // inherits @MainActor
+            guard let self else { return }
+            do {
+                try await self.repository.doWork()     // hops off-main per SE-0338
+            } catch {
+                logger.error("Failed: \(error.localizedDescription)")
+            }
+        }
+        tasks.append(task)
+    }
+}
+```
+
+**Why this shape:**
+
+- **Sync signature.** Caller writes `vm.handleSomeAction()` — no `await`, no `Task` wrapping. Button code stays clean: `Button("Action") { vm.handleSomeAction() }`.
+- **Internal `Task { }`.** Spawns the async work. Inherits `@MainActor` (rule 3 above), but the await on a nonisolated repository method hops off-main automatically.
+- **`tasks` array + deinit cancellation.** If the view dismisses while work is in flight, the task gets cancelled. Prevents zombie work and `self`-retention leaks.
+- **Error handled inline.** Fire-and-forget means no caller to surface errors to. Log + recover.
+
+**When to use:**
+- User actions: tap, swipe, drag-release.
+- `.onChange` reactions where the caller is sync.
+- Background work the view doesn't need to wait for.
+
+**When NOT to use:**
+- Bootstrap / mount work where the view's `.task` needs to await completion → use `async func bootstrap()` instead; the view's `.task { await viewModel.bootstrap() }` provides the lifecycle binding naturally.
+- Coordinated multi-step flows where you need ordering or completion signals → use sequential `async` methods.
+
+**Reference implementations:**
+- `HomeFeedViewModel.givePostEnergy` (meetsta-ios) — canonical with task-array + deinit cancellation.
+- `CameraService.flipCamera` — minimal version (single Task, no array, because the operation is short-lived and the service lives for the app's lifetime).
+
+### When parallelism helps — and when it doesn't (the decision framework)
+
+Before reaching for `async let`, `Task.detached`, or `withTaskGroup`, run through this checklist. Parallelism is not free just because the syntax is clean.
+
+**Step 1 — Identify the work type.**
+
+| Work type | Parallelism payoff |
+|---|---|
+| **CPU-bound** (encoding, parsing, image transform) | High. Cores actually run in parallel. Use `Task.detached`. |
+| **I/O through a shared framework** (PhotoKit, AVFoundation, URLSession) | Low to zero. The framework serializes through its own internal queues; Swift parallelism just queues things faster on its end. |
+| **I/O across different frameworks / endpoints** (one network call + one disk read) | High. The systems run independently. |
+
+**Step 2 — Identify the downstream serialization.**
+
+PhotoKit serves image requests through `PHCachingImageManager`'s internal queue. URLSession serializes per-host. AVFoundation has its capture-session queue. **You don't get parallelism your downstream doesn't support.** Even if you fire 10 parallel Swift tasks, the framework underneath may process them sequentially.
+
+How to check: skim the Apple docs for the methods you're calling. Phrases like "serial queue," "background queue," or *no* threading mention at all (which usually means "we handle it") all imply serialization.
+
+**Step 3 — Identify the main-thread side-effect cost.**
+
+Every parallel task that writes `@Observable` state will fire its writes near-simultaneously. Each write triggers SwiftUI to re-evaluate every view that reads the property. Two parallel tasks bunching their writes = two cascade bursts back-to-back, all on main.
+
+If this happens during a sensitive window (sheet animation, initial layout), SwiftUI's scheduler defers other main-thread work — and other things (sibling view tasks, layout, animation frames) appear slow.
+
+Sequential execution spreads the writes out in time, giving SwiftUI gaps between cascades. Total work is identical; distribution is better.
+
+**Step 4 — Compute net benefit.**
+
+```
+net = (sequential_wall_time − parallel_wall_time)        // the win
+    − (cascade_pileup_cost + scheduling_pressure_cost)    // the side effects
+```
+
+- If downstream is serial and the work is small → win is near zero, cost is real → **sequential is better.**
+- If downstream is parallel and the work is large → win exceeds the side-effect cost → **parallel is better.**
+
+**Worked examples from this codebase:**
+
+| Site | Decision | Why |
+|---|---|---|
+| `CropFlowViewModel.finalize` (N JPEG encodes) | **`Task.detached`** | CPU-bound, cores parallelize, no downstream serialization. |
+| `MediaPickerManager.process(items:)` (N items) | **Sequential `for` loop** with nonisolated async | Each item processes off-main; PhotoKit serializes anyway; loop is simple and main-thread-friendly. |
+| `PickerViewModel.bootstrap()` (album bootstrap + gallery thumb) | **Sequential `await`s** | PhotoKit serializes both requests internally; parallel cascade pile-up during sheet animation made the visible content (grid, previewer) appear ~250ms slower than sequential. Measured. See `project_picker_perf_state.md` in memory. |
+| `CameraService.flipCamera` | **Fire-and-forget `Task`** | Single button-triggered action, no coordination, caller is sync. |
+
+**The quick gut-check question:**
+
+> "If I weren't using `async let` here, what's the bottleneck?"
+
+If the answer is "the downstream framework's queue," parallelism won't help — use sequential. If the answer is "CPU on main," use `Task.detached`. If the answer is "two independent slow things," `async let` is the right tool.
+
+### Don't fire orphan Tasks
+
+A `Task { … }` block with no stored handle is "fire-and-forget" in the worst sense — it survives the view dismissing, retains `self` until completion, and leaks if the work is slow. If you need fire-and-forget on a `@MainActor` VM, use the task-array pattern above. The only exception is short-lived Tasks on long-lived singletons (e.g., `CameraService.flipCamera`) where leak risk is bounded.
+
 ### Equality-guarded setters
 
 Every `@Observable` setter cascades to all observers, even when the value didn't change. For frequently-written state, guard:
@@ -203,7 +420,7 @@ Every view model takes its services as constructor parameters with `.shared` def
 ```swift
 public init(
     configuration: Config,
-    photoKit: PhotoKitService = .shared,
+    photoKitService: PhotoKitService = .shared,
     cameraService: CameraService = .shared,
     historyManager: MediaHistoryManager = .shared,
     onCompletion: @escaping ([MediaItem]) -> Void,
@@ -213,7 +430,7 @@ public init(
 
 **Production callers** omit the service params — they get `.shared`. Zero call-site noise.
 
-**Tests** pass mocks: `PickerViewModel(configuration: …, photoKit: MockPhotoKit(), …)`.
+**Tests** pass mocks: `PickerViewModel(configuration: …, photoKitService: MockPhotoKitService(), …)`.
 
 This is non-negotiable for any VM. Never call `Service.shared.method()` inline inside a VM body — always go through the stored property.
 
@@ -358,7 +575,7 @@ public var galleryThumbImage: UIImage?
 
 public func loadGalleryThumbIfNeeded() async {
     guard let asset = recentAssets.first else { galleryThumbImage = nil; return }
-    if let cached = photoKit.cachedThumbnail(for: asset) {
+    if let cached = photoKitService.cachedThumbnail(for: asset) {
         galleryThumbImage = cached; return
     }
     galleryThumbImage = await ... // async fetch
@@ -430,6 +647,19 @@ cachingManager.requestImage(
 
 If the warm and the read use different `options`, different `contentMode`, or different `targetSize`, PhotoKit treats them as different requests and the warm pool is wasted. Single source of truth prevents drift.
 
+### Beware queue contention — don't starve the visible content
+
+When prewarming or prefetching on a shared async resource (PhotoKit, AVFoundation, URLSession, any framework with internal queues), ask first: **who else queues into this resource, and would my prefetch delay them?**
+
+Concrete failure mode (from a real attempt in this codebase): we tried priming `ThumbnailCache` for 16 grid cells during `setCachedAssets` to make first-paint synchronous. Code-analysis-wise it looked free — "dead time during SwiftUI layout, let's use it." But the 16 grid-thumb requests queued into PhotoKit **ahead of** the more visually prominent library previewer (1000×1000) and gallery shortcut (140×140) requests. Grid cells appeared instantly; the big visible images appeared later. Net perceived perf was worse because the user looks at the big images first.
+
+**Rule:** before adding a "prewarm" or "predispatch" on a shared queue-backed framework, identify what else competes for that queue and whether the more visible/critical consumers can tolerate being delayed. If they can't:
+- Issue the visible/critical requests FIRST, then the prefetch.
+- Or skip the prefetch entirely.
+- Or use a framework feature that lets you set request priority (e.g., `URLRequest`'s `networkServiceType`, `Task(priority:)`).
+
+"Free work in dead time" is a real pattern, but only when no one else needs that dead time. On a shared queue, dead time isn't dead — it's just unused by you.
+
 ---
 
 ## 11. Comment style
@@ -469,11 +699,17 @@ Use `// MARK: - Section` for any file with multiple logical sections (init, publ
 | View leaf (button, cell, icon) | Does it need framework types to do its job? | No → take primitives. Yes → wrap the framework call in a VM method. |
 | View model | What services does it need? | Constructor-inject all with `.shared` defaults. `@MainActor @Observable final class`. |
 | Service | Does it do mixed I/O + UI work? | Yes → nonisolated class with selective `@MainActor` on writers. UIKit-only → `@MainActor` on the shared accessor. |
+| `.task` body in a view | More than one line? More than one `await`? | Wrong — move to a VM method, view calls `await viewModel.someMethod()` once. |
+| `.onAppear` vs `.task` | Need auto-cancellation on dismiss? | `.task`. Need the absolute earliest moment, work survives disappear? `.onAppear { Task { … } }`. |
+| Action method called from a button / gesture | Caller is sync; no completion to await | Sync method + internal `Task { … }` + `tasks` array + deinit cancel. See §3 "Fire-and-forget Task pattern." |
+| `async let` to parallelize two methods | Is the downstream framework serial? Does parallel cause Observable cascade bursts? | If yes to either → sequential `await`s. Parallel `@MainActor` `async let` is rarely net-positive. See §3 "When parallelism helps." |
+| Heavy CPU work inside a VM | Will it block main if not detached? | Wrap in `Task.detached(priority: .userInitiated) { … }.value`. Never put `@MainActor` on a class whose methods do heavy CPU. |
 | Public type | Where does it live? | `Models/`, one type per file. |
 | Internal helper struct | Where does it live? | Same file as the view/VM that uses it. |
 | Flow stage (multi-step UX) | Sheet, NavigationStack, or single-ZStack? | Single ZStack with flow-state enum. |
 | Haptic | Tap-counter or state-change? | State-change if you have an `Equatable` value that gates it; tap-counter for fire-on-tap. |
 | Cache | Cross-screen reuse? | `NSCache`-backed `enum` namespace with `key(for:)`. Include modification timestamps in the key. |
+| Prewarm / prefetch | What else queues into the same framework? | If anything more visible competes, prioritize the visible one first or skip the prewarm. |
 | New folder | Plural or singular? | Plural if "bag of N peers." Singular if "the X." |
 
 ---
@@ -483,10 +719,16 @@ Use `// MARK: - Section` for any file with multiple logical sections (init, publ
 - ❌ `Service.shared.method()` inside a view body.
 - ❌ `Service.shared.method()` inside a VM body when the service is in a stored property.
 - ❌ `@MainActor` on a whole class that does heavy CPU work.
+- ❌ `async let` / multiple sequential `await`s inside a view's `.task` or `.onAppear { Task { … } }` body. Move the orchestration to a VM method.
+- ❌ A `.task` body that does more than call a single VM method (with the exception of bracketing perf-log calls).
+- ❌ `async let` on `@MainActor` methods without first checking the downstream framework's serialization. Parallel-by-default on a `@MainActor` class is rarely net-positive; see §3.
+- ❌ Fire-and-forget `Task { … }` from a VM without storing the task in a `tasks` array. Leaks `self` and orphans work if the view dismisses mid-flight.
+- ❌ Reaching for `Task.detached` when SE-0338 already covers the case (the called function is nonisolated async). Just `await` it.
 - ❌ `UIImpactFeedbackGenerator` directly (use `.sensoryFeedback`).
 - ❌ Nested SwiftUI sheets for multi-stage flows.
 - ❌ View props typed as framework types when primitives would do.
 - ❌ Cache keys that omit modification timestamps for editable resources.
+- ❌ Naive prefetch on a shared queue-backed framework without first checking whether more-visible content competes for the same queue.
 - ❌ Plural folder names for features (`Pickers/`, `Onboardings/`).
 - ❌ Multi-type files for public types (`Models.swift`, `Components.swift` grab-bags).
 - ❌ `// Added for ticket #X` or `// Used by Y` comments.

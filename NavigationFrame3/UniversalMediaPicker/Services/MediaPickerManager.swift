@@ -15,7 +15,7 @@ import AVFoundation
 public class MediaPickerManager {
     public static let shared = MediaPickerManager()
 
-    private let photoKit = PhotoKitService.shared
+    private let photoKitService = PhotoKitService.shared
 
     private init() {}
     
@@ -67,7 +67,7 @@ public class MediaPickerManager {
     /// Processes a single PHAsset into a MediaItem.
     public func process(_ asset: PHAsset) async throws -> MediaItem {
         let image = await withCheckedContinuation { continuation in
-            photoKit.loadThumbnail(for: asset, size: CGSize(width: 2000, height: 2000)) { img in
+            photoKitService.loadThumbnail(for: asset, size: CGSize(width: 2000, height: 2000)) { img in
                 continuation.resume(returning: img)
             }
         }

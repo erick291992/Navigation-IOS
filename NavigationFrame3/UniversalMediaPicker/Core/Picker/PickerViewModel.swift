@@ -37,11 +37,11 @@ public final class PickerViewModel {
     //
     // Constructor-default DI: production callers omit these params and get
     // the `.shared` singletons; tests inject mocks via `init(...,
-    // photoKit: mockPhotoKit, ...)` without touching the type. No call-site
+    // photoKitService: mockPhotoKitService, ...)` without touching the type. No call-site
     // changes needed when the rule is unified across the picker.
 
     private let cameraService: CameraService
-    private let photoKit: PhotoKitService
+    private let photoKitService: PhotoKitService
     private let historyManager: MediaHistoryManager
     private let pickerManager: MediaPickerManager
 
@@ -65,7 +65,7 @@ public final class PickerViewModel {
     public init(
         configuration: MediaPickerConfiguration,
         cameraService: CameraService = .shared,
-        photoKit: PhotoKitService = .shared,
+        photoKitService: PhotoKitService = .shared,
         historyManager: MediaHistoryManager = .shared,
         pickerManager: MediaPickerManager = .shared,
         onCompletion: @escaping ([MediaItem]) -> Void,
@@ -73,7 +73,7 @@ public final class PickerViewModel {
     ) {
         self.configuration = configuration
         self.cameraService = cameraService
-        self.photoKit = photoKit
+        self.photoKitService = photoKitService
         self.historyManager = historyManager
         self.pickerManager = pickerManager
         self.onCompletion = onCompletion
@@ -82,15 +82,44 @@ public final class PickerViewModel {
 
     // MARK: - Computed proxies (read by PickerView via the strict View → VM rule)
 
-    public var authStatus: PHAuthorizationStatus { photoKit.authStatus }
-    public var recentAssets: [PHAsset] { photoKit.recentAssets }
+    public var authStatus: PHAuthorizationStatus { photoKitService.authStatus }
+    public var recentAssets: [PHAsset] { photoKitService.recentAssets }
     public var history: [MediaItem] { historyManager.history }
-    public var albums: [PhotoLibraryService.AlbumInfo] { photoKit.albums }
+    public var albums: [PhotoLibraryService.AlbumInfo] { photoKitService.albums }
 
     public var availableZoomFactors: [CGFloat] { cameraService.availableZoomFactors }
     public var zoomFactor: CGFloat { cameraService.zoomFactor }
 
     public var selectionCount: Int { selectedAssets.count }
+
+    // MARK: - Intent: mount-time bootstrap
+
+    /// Single entry point called from `PickerView.task` on mount. Owns the
+    /// orchestration of the picker's initial async setup so the view stays
+    /// dumb (a view never decides what runs in parallel vs serially — that
+    /// belongs to the VM).
+    ///
+    /// **Sequential is intentional here, not lazy.** An earlier version of
+    /// this method used `async let` to issue both bootstraps in parallel.
+    /// On a real device that caused main-thread contention with the
+    /// sibling `LibraryViewfinderView.task` and with SwiftUI's grid
+    /// layout pass — the parallel bootstrap delayed the grid's mount by
+    /// ~950ms and the layout by ~225ms in exchange for getting the
+    /// gallery-shortcut thumbnail (a small corner image) ~300ms earlier.
+    /// Net perceived perf was worse because the grid and library
+    /// previewer are the visually dominant content. Same lesson as the
+    /// reverted ThumbnailCache prime in `PhotoKitService.setCachedAssets`:
+    /// don't starve visible content to optimize peripheral content. See
+    /// `project_picker_perf_state.md` in memory for the measurement.
+    ///
+    /// If a future change needs the gallery thumb earlier specifically,
+    /// the right fix is to *prioritize the visible-content requests
+    /// first* (previewer, grid) and only then issue the gallery-thumb
+    /// request — not to fan everything out in parallel.
+    public func bootstrap() async {
+        await loadInitialAlbumIfNeeded()
+        await loadGalleryThumbIfNeeded()
+    }
 
     // MARK: - Intent: album bootstrap (initial-album setup for the picker flow)
 
@@ -99,8 +128,8 @@ public final class PickerViewModel {
     /// already set. `AssetGridView`'s `.onChange(of: currentAlbum)` then
     /// triggers the first asset load.
     public func loadInitialAlbumIfNeeded() async {
-        await photoKit.loadAlbumsIfNeeded()
-        if currentAlbum == nil, let first = photoKit.albums.first {
+        await photoKitService.loadAlbumsIfNeeded()
+        if currentAlbum == nil, let first = photoKitService.albums.first {
             currentAlbum = first
         }
     }
@@ -168,12 +197,12 @@ public final class PickerViewModel {
             galleryThumbImage = nil
             return
         }
-        if let cached = photoKit.cachedThumbnail(for: asset) {
+        if let cached = photoKitService.cachedThumbnail(for: asset) {
             galleryThumbImage = cached
             return
         }
         galleryThumbImage = await withCheckedContinuation { continuation in
-            photoKit.loadThumbnail(for: asset, size: galleryThumbSize) { image in
+            photoKitService.loadThumbnail(for: asset, size: galleryThumbSize) { image in
                 continuation.resume(returning: image)
             }
         }
@@ -246,7 +275,7 @@ public final class PickerViewModel {
     public func handleGalleryShortcut() {
         switch authStatus {
         case .limited:
-            photoKit.openLimitedPicker()
+            photoKitService.openLimitedPicker()
         case .denied, .restricted:
             if let url = URL(string: UIApplication.openSettingsURLString) {
                 UIApplication.shared.open(url)
@@ -280,16 +309,16 @@ public final class PickerViewModel {
     /// Called from `PickerView`'s `scenePhase` observer when the app becomes
     /// active again. Refreshes auth status and (if newly authorized) recents.
     public func refreshAuthIfNeeded() {
-        photoKit.updateAuthStatus()
-        if photoKit.authStatus == .authorized || photoKit.authStatus == .limited {
-            Task { await photoKit.fetchRecentAssets() }
+        photoKitService.updateAuthStatus()
+        if photoKitService.authStatus == .authorized || photoKitService.authStatus == .limited {
+            Task { await photoKitService.fetchRecentAssets() }
         }
     }
 
     /// Triggered from the onboarding "GET STARTED" button. Requests auth +
     /// warms camera so the user lands in a populated picker on grant.
     public func requestPermissions() {
-        Task { await photoKit.fetchRecentAssets() }
+        Task { await photoKitService.fetchRecentAssets() }
         Task { await cameraService.startWarming() }
     }
 

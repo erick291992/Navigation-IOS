@@ -16,7 +16,7 @@ import Observation
 @MainActor
 @Observable
 public final class LibraryViewfinderViewModel {
-    private let photoKit: PhotoKitService
+    private let photoKitService: PhotoKitService
 
     /// Load progress for recents. One state variable, three explicit
     /// states — replaces an earlier two-boolean shape (isLoadingRecents +
@@ -32,19 +32,19 @@ public final class LibraryViewfinderViewModel {
 
     public var loadPhase: LoadPhase
 
-    public init(photoKit: PhotoKitService = .shared) {
-        self.photoKit = photoKit
+    public init(photoKitService: PhotoKitService = .shared) {
+        self.photoKitService = photoKitService
         // If the modifier's prewarm already populated recents before this
         // VM mounted, skip `.idle` entirely — no spinner flash, view
         // renders the previewer on its very first frame.
-        self.loadPhase = photoKit.recentAssets.isEmpty ? .idle : .loaded
+        self.loadPhase = photoKitService.recentAssets.isEmpty ? .idle : .loaded
     }
 
     // MARK: - Computed proxies
 
-    public var recentAssets: [PHAsset] { photoKit.recentAssets }
-    public var authStatus: PHAuthorizationStatus { photoKit.authStatus }
-    public var hasRecents: Bool { !photoKit.recentAssets.isEmpty }
+    public var recentAssets: [PHAsset] { photoKitService.recentAssets }
+    public var authStatus: PHAuthorizationStatus { photoKitService.authStatus }
+    public var hasRecents: Bool { !photoKitService.recentAssets.isEmpty }
 
     // MARK: - Display helpers
 
@@ -52,7 +52,7 @@ public final class LibraryViewfinderViewModel {
     /// (when the user has tapped one in the grid) takes precedence; otherwise
     /// we fall back to the first recent asset.
     public func displayAsset(preferring preview: PHAsset?) -> PHAsset? {
-        preview ?? photoKit.recentAssets.first
+        preview ?? photoKitService.recentAssets.first
     }
 
     // MARK: - Intent
@@ -60,7 +60,7 @@ public final class LibraryViewfinderViewModel {
     /// Opens the iOS limited library picker. Only meaningful when
     /// `authStatus == .limited`.
     public func openLimitedPicker() {
-        photoKit.openLimitedPicker()
+        photoKitService.openLimitedPicker()
     }
 
     /// Called from the view's `.task`. Idempotent — re-entry while
@@ -84,7 +84,7 @@ public final class LibraryViewfinderViewModel {
             return
         }
         loadPhase = .loading
-        await photoKit.fetchRecentAssets()
+        await photoKitService.fetchRecentAssets()
         loadPhase = .loaded
         PickerPerfLog.event("libraryVM.loadRecentsIfNeeded → fetch complete (\(recentAssets.count))")
     }
@@ -97,7 +97,7 @@ public final class LibraryViewfinderViewModel {
     /// cached image instantly while the high-res upgrade loads).
     public func thumbnail(for asset: PHAsset?) -> UIImage? {
         guard let asset else { return nil }
-        return photoKit.cachedThumbnail(for: asset)
+        return photoKitService.cachedThumbnail(for: asset)
     }
 
     /// Async high-res fetch for the previewer at `previewerTargetSize`.
@@ -107,7 +107,7 @@ public final class LibraryViewfinderViewModel {
     /// to the new asset.
     public func requestThumbnail(for asset: PHAsset) async -> UIImage? {
         await withCheckedContinuation { continuation in
-            photoKit.loadThumbnail(for: asset, size: PhotoKitService.previewerTargetSize) { image in
+            photoKitService.loadThumbnail(for: asset, size: PhotoKitService.previewerTargetSize) { image in
                 continuation.resume(returning: image)
             }
         }

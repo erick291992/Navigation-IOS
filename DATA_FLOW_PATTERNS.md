@@ -204,6 +204,8 @@ That's principled, not chaotic. The mix only looks chaotic until you know the de
 
 7. **Document any new pattern adoption.** If a future feature needs Pattern 3 or H, add a section to this doc with the file + the reason. Don't let one-off patterns proliferate without documentation.
 
+8. **No async orchestration in view bodies.** A view's `.task` / `.onAppear` body must be a single VM method call. Decisions about *how* the work runs (sequential, parallel via `async let`, with retries, with backoff) belong in the VM. If you find yourself reaching for `async let` or two sequential `await`s inside a view, add a `bootstrap()`-style method on the VM and put the orchestration there. See [CODING_GUIDELINES.md](CODING_GUIDELINES.md) §2 "View body discipline" for the rationale and `.task` vs `.onAppear` decision matrix.
+
 ### Known inconsistencies to clean up
 
 _All previously-tracked inconsistencies in this section have been resolved as of 2026-05-17 (`EmptyStateView` refactored to `@ViewBuilder`, `MediaPickerEngine` deleted, `AdvancedPickerExampleView` migrated to its VM). Add new items here as they arise._

@@ -13,7 +13,7 @@ public class EliteGeometricPickerViewModel {
     
     // MARK: - Services (constructor-default DI; production omits, tests inject)
     public let cameraService: CameraService
-    public let photoKit: PhotoKitService
+    public let photoKitService: PhotoKitService
     private let historyManager: MediaHistoryManager
     private let pickerManager: MediaPickerManager
     @ObservationIgnored private var tasks: [Task<Void, Never>] = []
@@ -52,7 +52,7 @@ public class EliteGeometricPickerViewModel {
     public init(
         configuration: MediaPickerConfiguration,
         cameraService: CameraService = .shared,
-        photoKit: PhotoKitService = .shared,
+        photoKitService: PhotoKitService = .shared,
         historyManager: MediaHistoryManager = .shared,
         pickerManager: MediaPickerManager = .shared,
         onCompletion: @escaping ([MediaItem]) -> Void,
@@ -60,7 +60,7 @@ public class EliteGeometricPickerViewModel {
     ) {
         self.configuration = configuration
         self.cameraService = cameraService
-        self.photoKit = photoKit
+        self.photoKitService = photoKitService
         self.historyManager = historyManager
         self.pickerManager = pickerManager
         self.onCompletion = onCompletion
@@ -68,9 +68,9 @@ public class EliteGeometricPickerViewModel {
     }
     
     // MARK: - Computed State
-    public var recentAssets: [PHAsset] { photoKit.recentAssets }
+    public var recentAssets: [PHAsset] { photoKitService.recentAssets }
     public var history: [MediaItem] { historyManager.history }
-    public var authStatus: PHAuthorizationStatus { photoKit.authStatus }
+    public var authStatus: PHAuthorizationStatus { photoKitService.authStatus }
     
     public var canProceed: Bool {
         if selectedMode == .library { return previewAsset != nil || !selectedAssets.isEmpty }
@@ -82,7 +82,7 @@ public class EliteGeometricPickerViewModel {
     
     public func setup() {
         Task {
-            await photoKit.fetchRecentAssets()
+            await photoKitService.fetchRecentAssets()
             // Preview-asset assignment moved INSIDE the Task so we read
             // recentAssets AFTER the fetch completes (was a pre-existing
             // race; fixed during the architectural rebuild).
@@ -94,9 +94,9 @@ public class EliteGeometricPickerViewModel {
     }
 
     public func updateAuth() {
-        photoKit.updateAuthStatus()
-        if photoKit.authStatus == .authorized || photoKit.authStatus == .limited {
-            Task { await photoKit.fetchRecentAssets() }
+        photoKitService.updateAuthStatus()
+        if photoKitService.authStatus == .authorized || photoKitService.authStatus == .limited {
+            Task { await photoKitService.fetchRecentAssets() }
         }
     }
     
@@ -218,7 +218,7 @@ public class EliteGeometricPickerViewModel {
     }
     
     public func openLimitedPicker() {
-        photoKit.openLimitedPicker()
+        photoKitService.openLimitedPicker()
     }
 
     // MARK: - Previewer image (called by EliteGeometricPickerView per previewer)
@@ -227,7 +227,7 @@ public class EliteGeometricPickerViewModel {
     /// `LibraryPreviewer.initialImage` for first-frame paint.
     public func thumbnail(for asset: PHAsset?) -> UIImage? {
         guard let asset else { return nil }
-        return photoKit.cachedThumbnail(for: asset)
+        return photoKitService.cachedThumbnail(for: asset)
     }
 
     /// Async high-res fetch at the previewer size. Parent passes a closure
@@ -235,7 +235,7 @@ public class EliteGeometricPickerViewModel {
     /// it in `.task(id:)` for auto-cancel on asset change.
     public func requestThumbnail(for asset: PHAsset) async -> UIImage? {
         await withCheckedContinuation { continuation in
-            photoKit.loadThumbnail(for: asset, size: PhotoKitService.previewerTargetSize) { image in
+            photoKitService.loadThumbnail(for: asset, size: PhotoKitService.previewerTargetSize) { image in
                 continuation.resume(returning: image)
             }
         }

@@ -48,7 +48,7 @@ public struct AssetGridState {
 @MainActor
 @Observable
 public final class AssetGridViewModel: NSObject {
-    private let photoKit: PhotoKitService
+    private let photoKitService: PhotoKitService
     public let selectionLimit: Int
 
     public var state = AssetGridState()
@@ -59,9 +59,9 @@ public final class AssetGridViewModel: NSObject {
     /// `@Observable`; views never see it.
     @ObservationIgnored private var lastLoadedAlbum: PhotoLibraryService.AlbumInfo?
 
-    public init(selectionLimit: Int = 1, photoKit: PhotoKitService = .shared) {
+    public init(selectionLimit: Int = 1, photoKitService: PhotoKitService = .shared) {
         self.selectionLimit = selectionLimit
-        self.photoKit = photoKit
+        self.photoKitService = photoKitService
         super.init()
         // Restore selection from the cache so user-tapped photos survive
         // SwiftUI's upstream identity churn (see AssetGridSelectionCache).
@@ -152,8 +152,8 @@ public final class AssetGridViewModel: NSObject {
     /// `currentAlbum` externally and triggers `.selectAlbum` directly.
     private func loadInitialAlbum() async {
         state.isLoading = true
-        await photoKit.loadAlbumsIfNeeded()
-        if let first = photoKit.albums.first {
+        await photoKitService.loadAlbumsIfNeeded()
+        if let first = photoKitService.albums.first {
             lastLoadedAlbum = first
             await loadAssets(for: first)
         }
@@ -164,7 +164,7 @@ public final class AssetGridViewModel: NSObject {
         PickerPerfLog.event("grid.loadAssets → enter (album=\(album.title))")
         state.isLoading = true
 
-        let phAssets = await photoKit.fetchAssets(in: album)
+        let phAssets = await photoKitService.fetchAssets(in: album)
         PickerPerfLog.event("grid.loadAssets → fetchAssets done (\(phAssets.count))")
 
         // Skip assignment if the identifier set hasn't actually changed —
@@ -176,7 +176,7 @@ public final class AssetGridViewModel: NSObject {
             // Tell PhotoKit to start preparing the cells' thumbnails NOW,
             // before SwiftUI lays them out — first paint reads from the
             // warm pool instead of paying the disk/decode/resize cost.
-            photoKit.setCachedAssets(phAssets, targetSize: PhotoKitService.gridThumbnailTargetSize)
+            photoKitService.setCachedAssets(phAssets, targetSize: PhotoKitService.gridThumbnailTargetSize)
             PickerPerfLog.event("grid.loadAssets → setCachedAssets done (warm started)")
         }
         state.isLoading = false
@@ -215,7 +215,7 @@ public final class AssetGridViewModel: NSObject {
     public func thumbnail(for asset: GridAsset) -> UIImage? {
         switch asset {
         case .phAsset(let ph):
-            return photoKit.cachedThumbnail(for: ph)
+            return photoKitService.cachedThumbnail(for: ph)
         case .mediaItem(let item):
             return item.thumbnail
         }
@@ -229,7 +229,7 @@ public final class AssetGridViewModel: NSObject {
     public func requestThumbnail(for asset: GridAsset) async -> UIImage? {
         guard case .phAsset(let ph) = asset else { return nil }
         return await withCheckedContinuation { continuation in
-            photoKit.loadThumbnail(for: ph, size: PhotoKitService.gridThumbnailTargetSize) { image in
+            photoKitService.loadThumbnail(for: ph, size: PhotoKitService.gridThumbnailTargetSize) { image in
                 continuation.resume(returning: image)
             }
         }
@@ -242,7 +242,7 @@ public final class AssetGridViewModel: NSObject {
     private func refreshCurrentAssets() async {
         guard let album = lastLoadedAlbum else { return }
 
-        let phAssets = await photoKit.fetchAssets(in: album)
+        let phAssets = await photoKitService.fetchAssets(in: album)
 
         // Defensive: never shrink a populated grid to empty here.
         // Immediately after iOS dismisses the Limited Access popup ("Keep
@@ -259,7 +259,7 @@ public final class AssetGridViewModel: NSObject {
         guard newIDs != oldIDs else { return }
 
         state.assets = phAssets.map { .phAsset($0) }
-        photoKit.setCachedAssets(phAssets, targetSize: PhotoKitService.gridThumbnailTargetSize)
+        photoKitService.setCachedAssets(phAssets, targetSize: PhotoKitService.gridThumbnailTargetSize)
     }
 }
 
