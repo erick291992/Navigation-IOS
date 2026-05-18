@@ -51,26 +51,18 @@ public struct PickerView: View {
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active { viewModel.refreshAuthIfNeeded() }
         }
-        .onChange(of: viewModel.recentAssets) { _, newValue in
-            // Auto-populate library preview from the first recent the moment
-            // recents arrive (parity with the original onChange in UnifiedCreatorView).
-            if viewModel.previewAsset == nil, let first = newValue.first {
-                viewModel.setPreview(first)
-            }
-            // Refresh the gallery-shortcut thumbnail whenever recents shift
-            // (library change observer, limited-access pick set updates).
-            Task { await viewModel.loadGalleryThumbIfNeeded() }
+        .onChange(of: viewModel.recentAssets) { _, _ in
+            // VM owns the orchestration (seed preview + refresh gallery
+            // thumb); view's only job is to forward the trigger.
+            viewModel.handleRecentAssetsChanged()
         }
         .onChange(of: systemPickerSelection) { _, items in
             guard !items.isEmpty else { return }
-            Task {
-                await viewModel.processPicked(items)
-                // Reset so the next pick of the same item still fires
-                // .onChange. SwiftUI dedupes identical values, so without
-                // this reset, picking the same photo twice in a row would
-                // not trigger a second processing pass.
-                systemPickerSelection = []
-            }
+            // Reset BEFORE handing items off so the next pick of the same
+            // photo fires .onChange again (SwiftUI dedupes identical values).
+            // The reset triggers a second .onChange with [], guarded above.
+            systemPickerSelection = []
+            viewModel.processPicked(items)
         }
     }
 

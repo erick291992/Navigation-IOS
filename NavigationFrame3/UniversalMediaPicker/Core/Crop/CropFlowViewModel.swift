@@ -40,19 +40,27 @@ public class CropFlowViewModel {
         self.onCompletion = onCompletion
         self.onCancel = onCancel
         self.items = initialItems
-        
+
         if !initialItems.isEmpty {
             self.moveToNextUncropped()
         }
     }
-    
+
+    deinit {
+        tasks.forEach { $0.cancel() }
+    }
+
+    // MARK: - Fire-and-forget Task storage (see CODING_GUIDELINES.md §3)
+    @ObservationIgnored private var tasks: [Task<Void, Never>] = []
+
     // MARK: - Actions
     
     public func handleCapture(_ image: UIImage) {
         flowState = .processing
-        Task {
+        let task = Task { [weak self] in
+            guard let self else { return }
             do {
-                let mediaItem = try await manager.process(image)
+                let mediaItem = try await self.manager.process(image)
                 await MainActor.run {
                     self.items = [mediaItem]
                     self.moveToNextUncropped()
@@ -64,6 +72,7 @@ public class CropFlowViewModel {
                 }
             }
         }
+        tasks.append(task)
     }
     
     /// Stores the cropped image in `croppedResults` (UIImage only — JPEG
@@ -106,7 +115,11 @@ public class CropFlowViewModel {
                 return
             }
         }
-        Task { await finalize() }
+        let task = Task { [weak self] in
+            guard let self else { return }
+            await self.finalize()
+        }
+        tasks.append(task)
     }
 
     private func finalize() async {

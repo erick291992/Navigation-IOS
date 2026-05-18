@@ -15,6 +15,13 @@ class CustomPickerExampleViewModel {
         self.manager = manager
     }
 
+    deinit {
+        tasks.forEach { $0.cancel() }
+    }
+
+    // MARK: - Fire-and-forget Task storage (see CODING_GUIDELINES.md §3)
+    @ObservationIgnored private var tasks: [Task<Void, Never>] = []
+
     // MARK: - Published State
     var finishedItems: [MediaItem] = []       // Final results the dev consumes
     var flowState: FlowState = .idle
@@ -41,10 +48,11 @@ class CustomPickerExampleViewModel {
     func didSelectPhotos(_ items: [PhotosPickerItem]) {
         guard !items.isEmpty else { return }
         flowState = .processing
-        
-        Task {
+
+        let task = Task { [weak self] in
+            guard let self else { return }
             do {
-                let processed = try await manager.process(items)
+                let processed = try await self.manager.process(items)
                 await MainActor.run {
                     self.photosSelection = []     // Reset picker
                     self.itemsToCrop = processed
@@ -58,14 +66,16 @@ class CustomPickerExampleViewModel {
                 }
             }
         }
+        tasks.append(task)
     }
-    
+
     /// Called when CameraPicker returns a captured image.
     func didCapturePhoto(_ image: UIImage) {
         flowState = .processing
-        Task {
+        let task = Task { [weak self] in
+            guard let self else { return }
             do {
-                let item = try await manager.process(image)
+                let item = try await self.manager.process(image)
                 await MainActor.run {
                     self.itemsToCrop = [item]
                     self.croppedResults = [:]
@@ -75,12 +85,14 @@ class CustomPickerExampleViewModel {
                 await MainActor.run { self.flowState = .idle }
             }
         }
+        tasks.append(task)
     }
-    
+
     /// Called when CropView finishes cropping one image.
     func didFinishCrop(_ croppedImage: UIImage, at index: Int) {
-        Task {
-            let result = try? await manager.process(croppedImage)
+        let task = Task { [weak self] in
+            guard let self else { return }
+            let result = try? await self.manager.process(croppedImage)
             await MainActor.run {
                 if let result = result {
                     self.croppedResults[index] = result.thumbnail
@@ -89,6 +101,7 @@ class CustomPickerExampleViewModel {
                 self.advanceToNextUncropped()
             }
         }
+        tasks.append(task)
     }
     
     /// Jump to a specific image in the crop queue (for multi-image strip navigation).

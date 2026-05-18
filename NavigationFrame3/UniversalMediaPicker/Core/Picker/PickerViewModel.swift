@@ -96,6 +96,20 @@ public final class PickerViewModel {
         }
     }
 
+    deinit {
+        tasks.forEach { $0.cancel() }
+    }
+
+    // MARK: - Fire-and-forget Task storage
+    //
+    // Sync intent methods (`processPicked`, `refreshGalleryThumb`,
+    // `handleGridAssets`, etc.) spawn internal Tasks. We retain the handles
+    // here and cancel them on deinit so a mid-flight dismiss doesn't leak
+    // self-references or orphan in-flight work. See CODING_GUIDELINES.md §3
+    // "Fire-and-forget Task pattern."
+
+    @ObservationIgnored private var tasks: [Task<Void, Never>] = []
+
     // MARK: - Computed proxies (read by PickerView via the strict View → VM rule)
 
     public var authStatus: PHAuthorizationStatus { photoKitService.authStatus }
@@ -206,8 +220,8 @@ public final class PickerViewModel {
     /// Loads (or refreshes) the gallery-shortcut thumbnail from
     /// `recentAssets.first`. Sync peek first; falls through to an async
     /// fetch on miss. Clears the image when there's no recent asset.
-    /// PickerView triggers this from its `.task` and `.onChange(of:
-    /// recentAssets)` — same lifecycle hook the previewAsset bootstrap uses.
+    /// Called from `bootstrap()` where the await composes naturally; views
+    /// should use `refreshGalleryThumb()` instead so the spawn is tracked.
     public func loadGalleryThumbIfNeeded() async {
         guard let asset = recentAssets.first else {
             galleryThumbImage = nil
@@ -222,6 +236,28 @@ public final class PickerViewModel {
                 continuation.resume(returning: image)
             }
         }
+    }
+
+    /// Sync wrapper around `loadGalleryThumbIfNeeded` for view callbacks
+    /// (`.onChange`, tap handlers). Spawns a tracked Task so the view's
+    /// body stays a single call and a mid-flight dismiss cancels cleanly.
+    public func refreshGalleryThumb() {
+        let task = Task { [weak self] in
+            guard let self else { return }
+            await self.loadGalleryThumbIfNeeded()
+        }
+        tasks.append(task)
+    }
+
+    /// Called from `PickerView.onChange(of: recentAssets)`. Owns the
+    /// orchestration so the view body stays a single VM call: seed the
+    /// preview to the first recent if we don't already have one, then
+    /// refresh the gallery-shortcut thumbnail.
+    public func handleRecentAssetsChanged() {
+        if previewAsset == nil, let first = recentAssets.first {
+            setPreview(first)
+        }
+        refreshGalleryThumb()
     }
 
     // MARK: - Intent: shutter / NEXT / cancel
@@ -273,12 +309,14 @@ public final class PickerViewModel {
     private func capturePhoto() {
         cameraService.capture { [weak self] image in
             guard let self, let image else { return }
-            Task {
+            let task = Task { [weak self] in
+                guard let self else { return }
                 guard let item = try? await self.pickerManager.process(image) else { return }
                 await MainActor.run {
                     self.onCompletion([item])
                 }
             }
+            self.tasks.append(task)
         }
     }
 
@@ -304,20 +342,22 @@ public final class PickerViewModel {
     }
 
     /// Called from `PickerView`'s `.onChange(of: systemPickerSelection)`
-    /// when `PhotosPicker` writes a new selection. Routes the picked
-    /// items through `pickerManager.process(_:)` and hands the
-    /// resulting `MediaItem` array to the completion callback.
+    /// when `PhotosPicker` writes a new selection. Routes the picked items
+    /// through `pickerManager.process(_:)` and hands the resulting
+    /// `MediaItem` array to the completion callback.
     ///
-    /// This replaces the old delegate-callback path: `PhotosPicker` is a
-    /// SwiftUI-native binding, so we no longer need a shared mutable
-    /// delegate, a topVC traversal, or imperative `present()` — Apple's
-    /// own picker handles its lifecycle and just writes back via the
-    /// binding when the user picks.
-    public func processPicked(_ items: [PhotosPickerItem]) async {
+    /// Sync signature with internal tracked Task — view's `.onChange` body
+    /// stays a single line, processing survives the view's lifecycle until
+    /// either it completes or the VM deinits.
+    public func processPicked(_ items: [PhotosPickerItem]) {
         guard !items.isEmpty else { return }
-        if let mediaItems = try? await pickerManager.process(items) {
-            onCompletion(mediaItems)
+        let task = Task { [weak self] in
+            guard let self else { return }
+            if let mediaItems = try? await self.pickerManager.process(items) {
+                self.onCompletion(mediaItems)
+            }
         }
+        tasks.append(task)
     }
 
     // MARK: - Intent: lifecycle
@@ -327,21 +367,33 @@ public final class PickerViewModel {
     public func refreshAuthIfNeeded() {
         photoKitService.updateAuthStatus()
         if photoKitService.authStatus == .authorized || photoKitService.authStatus == .limited {
-            Task { await photoKitService.fetchRecentAssets() }
+            let task = Task { [weak self] in
+                guard let self else { return }
+                await self.photoKitService.fetchRecentAssets()
+            }
+            tasks.append(task)
         }
     }
 
     /// Triggered from the onboarding "GET STARTED" button. Requests auth +
     /// warms camera so the user lands in a populated picker on grant.
     public func requestPermissions() {
-        Task { await photoKitService.fetchRecentAssets() }
-        Task { await cameraService.startWarming() }
+        let fetchTask = Task { [weak self] in
+            guard let self else { return }
+            await self.photoKitService.fetchRecentAssets()
+        }
+        let warmTask = Task { [weak self] in
+            guard let self else { return }
+            await self.cameraService.startWarming()
+        }
+        tasks.append(contentsOf: [fetchTask, warmTask])
     }
 
     // MARK: - Processing pipeline
 
     public func handleGridAssets(_ assets: [GridAsset]) {
-        Task {
+        let task = Task { [weak self] in
+            guard let self else { return }
             var finalItems: [MediaItem] = []
 
             let phAssets = assets.compactMap { $0.phAsset }
@@ -360,5 +412,6 @@ public final class PickerViewModel {
                 }
             }
         }
+        tasks.append(task)
     }
 }

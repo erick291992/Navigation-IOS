@@ -66,7 +66,11 @@ public class EliteGeometricPickerViewModel {
         self.onCompletion = onCompletion
         self.onCancel = onCancel
     }
-    
+
+    deinit {
+        tasks.forEach { $0.cancel() }
+    }
+
     // MARK: - Computed State
     public var recentAssets: [PHAsset] { photoKitService.recentAssets }
     public var history: [MediaItem] { historyManager.history }
@@ -81,22 +85,29 @@ public class EliteGeometricPickerViewModel {
     // MARK: - Actions
     
     public func setup() {
-        Task {
-            await photoKitService.fetchRecentAssets()
-            // Preview-asset assignment moved INSIDE the Task so we read
-            // recentAssets AFTER the fetch completes (was a pre-existing
-            // race; fixed during the architectural rebuild).
-            if previewAsset == nil, let first = recentAssets.first {
-                previewAsset = first
+        let fetchTask = Task { [weak self] in
+            guard let self else { return }
+            await self.photoKitService.fetchRecentAssets()
+            // Read recentAssets AFTER the fetch completes (pre-existing race).
+            if self.previewAsset == nil, let first = self.recentAssets.first {
+                self.previewAsset = first
             }
         }
-        Task { await cameraService.startWarming() }
+        let warmTask = Task { [weak self] in
+            guard let self else { return }
+            await self.cameraService.startWarming()
+        }
+        tasks.append(contentsOf: [fetchTask, warmTask])
     }
 
     public func updateAuth() {
         photoKitService.updateAuthStatus()
         if photoKitService.authStatus == .authorized || photoKitService.authStatus == .limited {
-            Task { await photoKitService.fetchRecentAssets() }
+            let task = Task { [weak self] in
+                guard let self else { return }
+                await self.photoKitService.fetchRecentAssets()
+            }
+            tasks.append(task)
         }
     }
     

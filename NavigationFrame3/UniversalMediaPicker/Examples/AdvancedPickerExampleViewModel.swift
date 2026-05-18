@@ -38,28 +38,36 @@ class AdvancedPickerExampleViewModel {
         self.gridModel = AssetGridViewModel(selectionLimit: maxSelection)
         self.gridModel.trigger(.loadInitialData) // Fetch photos immediately
     }
-    
+
+    deinit {
+        tasks.forEach { $0.cancel() }
+    }
+
+    // MARK: - Fire-and-forget Task storage (see CODING_GUIDELINES.md §3)
+    @ObservationIgnored private var tasks: [Task<Void, Never>] = []
+
     // MARK: - Actions
-    
+
     func selectAsset(_ asset: GridAsset) {
         gridModel.trigger(.toggleAssetSelection(asset))
     }
-    
+
     // The developer calls this when the user taps their custom "Next" button
     func processSelectedAssets() {
         let assets = gridModel.assetGridState.selectedAssets
         guard !assets.isEmpty else { return }
-        
+
         flowState = .processing
-        
-        Task {
+
+        let task = Task { [weak self] in
+            guard let self else { return }
             do {
                 // Extract PHAssets from GridAsset wrappers
                 let phAssets = assets.compactMap { $0.phAsset }
-                
+
                 // Pass raw PHAssets straight to the Tier 3 Engine!
-                let processed = try await manager.process(phAssets)
-                
+                let processed = try await self.manager.process(phAssets)
+
                 await MainActor.run {
                     self.itemsToCrop = processed
                     self.croppedResults = [:]
@@ -71,11 +79,13 @@ class AdvancedPickerExampleViewModel {
                 }
             }
         }
+        tasks.append(task)
     }
-    
+
     func didFinishCrop(_ croppedImage: UIImage, at index: Int) {
-        Task {
-            let result = try? await manager.process(croppedImage)
+        let task = Task { [weak self] in
+            guard let self else { return }
+            let result = try? await self.manager.process(croppedImage)
             await MainActor.run {
                 if let result = result {
                     self.croppedResults[index] = result.thumbnail
@@ -84,6 +94,7 @@ class AdvancedPickerExampleViewModel {
                 self.advanceToNextUncropped()
             }
         }
+        tasks.append(task)
     }
     
     func cancelFlow() {
