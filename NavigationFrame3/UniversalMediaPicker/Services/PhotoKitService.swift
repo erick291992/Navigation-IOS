@@ -146,6 +146,47 @@ public final class PhotoKitService: NSObject {
     /// requests. Touched only on `MainActor`.
     @ObservationIgnored private var gridPrewarmTask: Task<Void, Never>?
 
+    /// Cancellable handle for the ENTIRE `prewarm()` pipeline — wraps
+    /// recents fetch, albums fetch, AND the visible-content sequence
+    /// (steps 1-4) in a single outer task. Set the moment `prewarm()` is
+    /// called so the modifier's `cancelGridPrewarm()` can abort the work
+    /// at ANY phase, including the early recents/albums fetches.
+    ///
+    /// Why the whole pipeline and not just visible-content: cold-race
+    /// testing showed the cancel landing DURING the recents fetch (long
+    /// before the visible-content task got spawned). Wrapping only
+    /// visible-content meant the cancel found a nil handle and was a
+    /// no-op; the rest of the pipeline ran to completion and raced
+    /// sheet-open's own PhotoKit requests. With this outer task, the
+    /// cancel always has something to bite, and `Task.isCancelled` checks
+    /// between phases abort the remaining work cooperatively.
+    @ObservationIgnored private var prewarmTask: Task<Void, Never>?
+
+    /// Monotonic counter bumped at the start of every `prewarm()` call.
+    /// Used so the cleanup-on-completion code knows whether to clear
+    /// `prewarmTask` — only the most-recent call's generation matches
+    /// the current value, so older completing calls don't clobber a
+    /// newer in-flight task's handle. `Task` itself isn't
+    /// identity-equatable in Swift, hence the counter.
+    @ObservationIgnored private var prewarmGeneration: UInt64 = 0
+
+    /// Set to `true` once `prewarmVisibleContent()` has completed a full
+    /// pass (NOT cancelled). Subsequent `prewarm()` calls early-return on
+    /// the visible-content phase, so it's safe for a consumer to call
+    /// `PhotoKitService.shared.prewarm()` from BOTH an early site (App.init,
+    /// scene root, etc.) AND have the modifier also invoke it — only the
+    /// first complete pass does real work, the rest are no-ops.
+    ///
+    /// Stays `false` when `prewarmVisibleContent` is cancelled mid-flight
+    /// (cold-race case) — the next `prewarm()` call will re-run the full
+    /// sequence, since the cache may be only partially populated.
+    ///
+    /// Reset to `false` by `photoLibraryDidChange` so a library mutation
+    /// (user took a photo, deleted one, edited Limited Access selection)
+    /// invalidates the cached prewarm state and the next `prewarm()` call
+    /// re-warms with fresh content. Touched only on `MainActor`.
+    @ObservationIgnored private var hasPrewarmedVisibleContent: Bool = false
+
     /// Nonisolated — init does only thread-safe PhotoKit calls
     /// (`authorizationStatus(for:)` and `register(_:)` are both documented
     /// thread-safe) plus one write to `authStatus` before the instance is
@@ -202,32 +243,143 @@ public final class PhotoKitService: NSObject {
     /// asset via `prewarmedFirstAlbumAssets`, not `recentAssets`. Callers
     /// that need more (e.g. `EliteGeometricPickerViewModel` uses recents as
     /// its grid source) pass a larger limit explicitly.
-    public func prewarm(limit: Int = 1, warmVisibleContent: Bool = true) async {
+    ///
+    /// **Idempotent.** Safe to call from multiple entry points (e.g.
+    /// `App.init`, a root view's `.task`, AND the modifier's `.task`) —
+    /// only the first complete pass does real work. Subsequent calls
+    /// early-return on the visible-content phase. A library mutation
+    /// (`photoLibraryDidChange`) resets the flag so the next call after
+    /// the mutation re-warms with fresh content.
+    /// `warmCellThumbnails: false` skips step 4 (the 20-cell decode loop
+    /// into `ThumbnailCache.shared`). Use this when prewarm is triggered
+    /// from a view modifier's `.task` and the user is likely to tap
+    /// before step 4 could finish anyway — cancelling step 4 mid-flight
+    /// still wastes ~40ms on the in-flight cell, and the grid does its
+    /// own per-cell prewarm in `loadAssets` regardless. Default `true`
+    /// (the App.init pattern) — step 4's cache writes pay off because
+    /// app launch gives prewarm time to complete; when the picker opens
+    /// later, the grid's prewarm calls find every cell already cached.
+    public func prewarm(
+        limit: Int = 1,
+        warmVisibleContent: Bool = true,
+        warmCellThumbnails: Bool = true
+    ) async {
+        // Wrap the whole pipeline in an unstructured Task stored as
+        // `prewarmTask` so the modifier's `cancelGridPrewarm()` can abort
+        // the work at ANY phase — including the early recents/albums
+        // fetches that happen BEFORE the visible-content steps even
+        // start. The Task handle exists from the very first PhotoKit call
+        // (unlike the old design where it was set after recents+albums).
+        let generation = await MainActor.run {
+            self.prewarmGeneration &+= 1
+            return self.prewarmGeneration
+        }
+        // `priority: .utility` tells the OS scheduler this is background
+        // work that should yield to UI events. Without this, prewarm runs
+        // at the default high priority and competes with sheet animation
+        // / button taps for main-thread frames — making the picker feel
+        // unresponsive at the moment the user actually wants it.
+        let task = Task(priority: .utility) { [weak self] in
+            guard let self else { return }
+            await self.performPrewarm(
+                limit: limit,
+                warmVisibleContent: warmVisibleContent,
+                warmCellThumbnails: warmCellThumbnails
+            )
+        }
+        await MainActor.run { self.prewarmTask = task }
+        await task.value
+        await MainActor.run {
+            // Clear only if a newer `prewarm()` call hasn't replaced our
+            // entry while we were awaiting (compared via the monotonic
+            // generation counter — `Task` itself isn't identity-equatable).
+            if self.prewarmGeneration == generation {
+                self.prewarmTask = nil
+            }
+        }
+    }
+
+    /// The actual body of `prewarm()`. Lives in its own method so the
+    /// outer `prewarm()` can wrap it in a cancellable Task. Every phase
+    /// boundary checks `Task.isCancelled` — when the modifier cancels
+    /// `prewarmTask` mid-pipeline, the next boundary aborts cooperatively.
+    private func performPrewarm(limit: Int, warmVisibleContent: Bool, warmCellThumbnails: Bool) async {
         PickerPerfLog.event("photoKit.prewarm → enter")
         let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         guard status == .authorized || status == .limited else {
             PickerPerfLog.event("photoKit.prewarm → skipped (no auth)")
             return
         }
+        // Note: `fetchRecentAssets` and `loadAlbumsIfNeeded` are already
+        // individually idempotent (coalescer + `needsLoad` guard). The
+        // visible-content phase has its own flag-based idempotency below.
+        //
+        // The `await` calls here will run to completion even after our
+        // outer task is cancelled — they're either coalesced shared tasks
+        // (`fetchRecentAssets`) or one-shot fetches feeding observable
+        // state the picker UI needs regardless. We check `Task.isCancelled`
+        // AFTER each await to decide whether to continue the pipeline.
         await fetchRecentAssets(limit: limit)
+        if Task.isCancelled {
+            PickerPerfLog.event("photoKit.prewarm → cancelled after recents")
+            return
+        }
         PickerPerfLog.event("photoKit.prewarm → recents loaded (\(recentAssets.count))")
+
         await loadAlbumsIfNeeded()
+        if Task.isCancelled {
+            PickerPerfLog.event("photoKit.prewarm → cancelled after albums")
+            return
+        }
         PickerPerfLog.event("photoKit.prewarm → albums loaded (\(albums.count))")
 
         guard warmVisibleContent else { return }
-        await prewarmVisibleContent()
+
+        // Idempotency check: skip the visible-content phase if a previous
+        // `prewarm()` call already completed it AND no library mutation has
+        // invalidated the cache since. Lets consumers safely call
+        // `prewarm()` from BOTH App.init / scene root AND the modifier's
+        // `.task` without doing the work twice.
+        let alreadyWarm = await MainActor.run { self.hasPrewarmedVisibleContent }
+        if alreadyWarm {
+            PickerPerfLog.event("photoKit.prewarm → visible content already warm, skipping")
+            return
+        }
+
+        await prewarmVisibleContent(warmCellThumbnails: warmCellThumbnails)
+
+        // Only flag as "warm" if the sequence wasn't cancelled mid-flight.
+        // A cancelled prewarm may have populated only a subset of the
+        // cache (e.g. step 2 but not step 4) — the next `prewarm()` call
+        // needs to re-run the remaining steps.
+        if Task.isCancelled {
+            PickerPerfLog.event("photoKit.prewarm → cancelled (skipping warm flag)")
+            return
+        }
+        await MainActor.run { self.hasPrewarmedVisibleContent = true }
     }
 
-    /// Pre-fetch the first album's grid page (60 PHAssets, top-K path) AND
-    /// pre-load the library previewer's 1000pt bitmap AND pre-load the
-    /// gallery shortcut's 140pt bitmap into `ThumbnailCache`. Called as the
-    /// third phase of `prewarm` by default.
+    /// Pre-fetch the first album's grid page (20 PHAssets, top-K path) AND
+    /// pre-decode the first ~20 grid cells into `ThumbnailCache`. Called
+    /// as the third phase of `prewarm` by default.
     ///
     /// Sequential is intentional — same lesson as the picker's own
     /// `bootstrap()`: running these in parallel via `async let` would
     /// pile multiple PhotoKit requests onto the serial queue at once and
     /// risk contending with other work. Sequential keeps the queue clean.
-    private func prewarmVisibleContent() async {
+    ///
+    /// **Previewer 1000pt warm AND gallery shortcut 140pt warm used to
+    /// run here too** (between the page fetch and step 4). Both removed
+    /// because under the cold-race scenario, in-flight decodes can't be
+    /// aborted by `Task.cancel()` and hog PhotoKit's serial queue while
+    /// the sheet is trying to open — making the tap feel dead. The
+    /// previewer + gallery shortcut now do their own async loads when
+    /// they mount (~100ms previewer, ~15ms shortcut, both cheap because
+    /// PhotoKit's pool is still warmed by `setCachedAssets`). Net trade:
+    /// previewer/shortcut go from "instant on warm-prewarm path" to
+    /// "always ~15-100ms," cells stop getting blocked, sheet opens
+    /// responsively. Deterministic over best-case-but-sometimes-bad.
+    private func prewarmVisibleContent(warmCellThumbnails: Bool) async {
         PickerPerfLog.event("photoKit.prewarm.visible → start")
 
         let firstAlbum: PhotoLibraryService.AlbumInfo? = await MainActor.run { self.albums.first }
@@ -248,49 +400,31 @@ public final class PhotoKitService: NSObject {
         }
         PickerPerfLog.event("photoKit.prewarm.visible → first album fetched + warmed (\(firstPage.count))")
 
-        guard let firstAlbumAsset = firstPage.first else {
-            // Album is empty — no first asset to prewarm previewer/shortcut against.
-            // Grid prewarm in step 4 would also be a no-op; skip the rest.
+        if Task.isCancelled {
+            PickerPerfLog.event("photoKit.prewarm.visible → cancelled before step 4")
+            return
+        }
+
+        guard firstPage.first != nil else {
+            // Album is empty — no cells to prewarm. Grid prewarm in step 4
+            // would also be a no-op; skip the rest.
             PickerPerfLog.event("photoKit.prewarm.visible → skipped further steps (album empty)")
             return
         }
 
-        // 2. Pre-load library previewer's 1000pt bitmap into ThumbnailCache.
-        //    Uses the album's first asset (same source as
-        //    `prewarmedFirstAlbumAssets.first` which `PickerViewModel.init`
-        //    reads for `previewAsset`). Cell 0 of the grid IS this asset,
-        //    so the largest-wins cache means cell 0 also benefits from the
-        //    1000pt entry (downscaled visually to grid size). This coupling
-        //    is intentional in the unified architecture — previewer + grid
-        //    cell 0 share one cache entry by design, not by accident.
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            loadThumbnail(for: firstAlbumAsset, size: Self.previewerTargetSize) { _ in
-                continuation.resume()
-            }
+        guard warmCellThumbnails else {
+            // Caller opted out (typical for modifier-triggered prewarm —
+            // the user is likely to tap before step 4 finishes, so the
+            // grid does its own per-cell warming in loadAssets anyway).
+            // App.init prewarm leaves this true so the cache is hot by
+            // the time the user opens the picker.
+            PickerPerfLog.event("photoKit.prewarm.visible → step 4 skipped (warmCellThumbnails=false)")
+            return
         }
-        PickerPerfLog.event("photoKit.prewarm.visible → previewer 1000pt warmed")
 
-        // 3. Pre-load gallery shortcut's 140pt bitmap. Uses the album's
-        //    first asset (matches PickerViewModel.galleryThumbImage's
-        //    eager-init source). Largest-wins cache means this usually
-        //    returns from the 1000pt cache hit above (downscaled visually
-        //    by SwiftUI) — but we still issue the request to populate any
-        //    size-specific PhotoKit caches.
-        let galleryThumbSize = CGSize(width: 140, height: 140)
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            loadThumbnail(for: firstAlbumAsset, size: galleryThumbSize) { _ in
-                continuation.resume()
-            }
-        }
-        PickerPerfLog.event("photoKit.prewarm.visible → gallery thumb 140pt warmed")
-
-        // 4. Pre-decode the first ~16 grid cells (one viewport's worth)
+        // 4. Pre-decode the first ~20 grid cells (one viewport's worth)
         //    into ThumbnailCache.shared so the grid paints its visible
-        //    viewport instantly when the sheet opens. Runs LAST so the
-        //    previewer + gallery shortcut (steps 2 + 3) get PhotoKit's
-        //    serial queue first — that was the lesson from an earlier
-        //    failed attempt that ran grid prewarm before the visible
-        //    content and starved the previewer.
+        //    viewport instantly when the sheet opens.
         //
         //    Stored as a cancellable Task so the modifier can abort it
         //    via cancelGridPrewarm() the moment the sheet is about to
@@ -324,14 +458,27 @@ public final class PhotoKitService: NSObject {
         await MainActor.run { self.gridPrewarmTask = nil }
     }
 
-    /// Cancels any in-flight grid-cell prewarm (step 4 of
-    /// `prewarmVisibleContent`). Called from `MediaPickerModifier`'s
+    /// Cancels any in-flight `prewarm()` pipeline — both the outer
+    /// `prewarmTask` (which wraps the whole recents → albums →
+    /// visible-content sequence) AND the inner `gridPrewarmTask` (step 4
+    /// per-cell work). Called from `MediaPickerModifier`'s
     /// `.onChange(of: isPresented)` when the sheet is about to open, so
     /// in-flight prewarm doesn't compete with sheet-open's own PhotoKit
     /// requests during the cold-race scenario (user taps before prewarm
     /// finishes). No-op if prewarm has already completed or never ran.
+    ///
+    /// **Why cancel both tasks**: timing-dependent. The cancel can land
+    /// during recents/albums fetch (prewarmTask aborts at the next
+    /// `Task.isCancelled` check), during visible-content steps 1-3
+    /// (prewarmTask aborts at the inter-step check), or during step 4
+    /// (gridPrewarmTask's per-iteration check stops queuing new
+    /// requests). Cancelling both covers all three windows. Cancelling
+    /// only `gridPrewarmTask` (the original design) missed cancels that
+    /// landed in the earlier phases.
     @MainActor
     public func cancelGridPrewarm() {
+        prewarmTask?.cancel()
+        prewarmTask = nil
         gridPrewarmTask?.cancel()
         gridPrewarmTask = nil
     }
@@ -639,6 +786,13 @@ extension PhotoKitService: PHPhotoLibraryChangeObserver {
     public func photoLibraryDidChange(_ changeInstance: PHChange) {
         Task { @MainActor in
             self.updateAuthStatus()
+
+            // Invalidate the prewarm-completion flag so the next `prewarm()`
+            // call re-warms with fresh content. The library mutated — our
+            // cached `prewarmedFirstAlbumAssets` + ThumbnailCache entries
+            // may be stale (user took a photo, deleted one, edited Limited
+            // Access selection).
+            self.hasPrewarmedVisibleContent = false
 
             // When using a fetchLimit, changeInstance.changeDetails(for:) is
             // unreliable and can miss newly inserted items or return nil.

@@ -98,7 +98,28 @@ public final class PickerViewModel {
         // queries (side by side)" for the rationale.
         if let firstAlbumAsset = photoKitService.prewarmedFirstAlbumAssets.first {
             self.previewAsset = firstAlbumAsset
-            self.galleryThumbImage = photoKitService.cachedThumbnail(for: firstAlbumAsset)
+            // Warm path: bitmap already in ThumbnailCache → use it.
+            // Cold path: cache empty (prewarm cancelled before its gallery
+            // thumb step ran, or that step was dropped entirely) → spawn
+            // an async load so the shortcut doesn't stay on the spinner.
+            // Without this fallback, the @onChange in PickerView never
+            // fires (init already set previewAsset to the same value the
+            // grid will publish), so `handleFirstAlbumAssetChanged`'s
+            // own fallback path never runs.
+            if let cached = photoKitService.cachedThumbnail(for: firstAlbumAsset) {
+                self.galleryThumbImage = cached
+            } else {
+                let task = Task { [weak self] in
+                    guard let self else { return }
+                    let image = await withCheckedContinuation { (cont: CheckedContinuation<UIImage?, Never>) in
+                        self.photoKitService.loadThumbnail(for: firstAlbumAsset, size: self.galleryThumbSize) { img in
+                            cont.resume(returning: img)
+                        }
+                    }
+                    self.galleryThumbImage = image
+                }
+                tasks.append(task)
+            }
         }
         if let firstAlbum = photoKitService.albums.first {
             self.currentAlbum = firstAlbum
