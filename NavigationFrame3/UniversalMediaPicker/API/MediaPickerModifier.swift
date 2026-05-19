@@ -53,16 +53,13 @@ public struct MediaPickerModifier: ViewModifier {
             // nice bonus.
             .task {
                 PickerPerfLog.event("modifier.task → prewarm awaited")
-                // `warmCellThumbnails: false` because the modifier's prewarm
-                // starts when the host view appears — the user typically
-                // taps before step 4 (the 20-cell decode loop) could
-                // finish. Skipping it avoids wasted work and queue
-                // contention. The grid does its own per-cell warming in
-                // `loadAssets` regardless. Set to `true` (the default)
-                // when calling from `App.init` instead — there's enough
-                // time before the user taps for step 4 to complete and
-                // make picker open instant.
-                await PhotoKitService.shared.prewarm(warmCellThumbnails: true)
+                // Awaiting (instead of calling the static `PhotoKitService.prewarm()`)
+                // lets `.task`'s auto-cancellation propagate through the prewarm
+                // pipeline if the host view disappears. App.init callers should
+                // use the static `PhotoKitService.prewarm()` instead — they don't
+                // have a view lifecycle to tie cancellation to. Both call the
+                // same idempotent body; safe to use both in the same app.
+                await PhotoKitService.shared.prewarm()
                 PickerPerfLog.event("modifier.task → prewarm completed")
             }
             .onChange(of: isPresented) { _, newValue in
