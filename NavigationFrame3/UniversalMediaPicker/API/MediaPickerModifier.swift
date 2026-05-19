@@ -53,6 +53,12 @@ public struct MediaPickerModifier: ViewModifier {
             // nice bonus.
             .task {
                 PickerPerfLog.event("modifier.task → prewarm awaited")
+                // Awaiting (instead of calling the static `PhotoKitService.prewarm()`)
+                // lets `.task`'s auto-cancellation propagate through the prewarm
+                // pipeline if the host view disappears. App.init callers should
+                // use the static `PhotoKitService.prewarm()` instead — they don't
+                // have a view lifecycle to tie cancellation to. Both call the
+                // same idempotent body; safe to use both in the same app.
                 await PhotoKitService.shared.prewarm()
                 PickerPerfLog.event("modifier.task → prewarm completed")
             }
