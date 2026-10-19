@@ -5,8 +5,10 @@ import Foundation
 ///
 /// **Purpose**: preserve the user's selection (`[GridAsset]`) across SwiftUI's
 /// upstream identity churn. See `ASSETGRID_FLICKER_POSTMORTEM.md`: the
-/// `SheetNavigationContainer` AnyView wrapping causes the sheet content to
-/// re-mount 4–5x per picker session. Each re-mount creates a fresh
+/// sheet content was observed re-mounting 4–5x per picker session in the host
+/// app. (The navigation library's old single-root-sheet presentation was one
+/// suspected cause; it was replaced in 2026-10 — re-measure before removing
+/// this cache, see `MODAL_STACKING_MIGRATION.md`.) Each re-mount creates a fresh
 /// `AssetGridViewModel` whose `state.selectedAssets` would otherwise default
 /// to `[]`. By restoring from this cache in the VM's `init`, the user's
 /// selection survives.
@@ -18,9 +20,8 @@ import Foundation
 /// re-fetches from PhotoKit on each fresh VM (fast, ~10-30ms warm), and the
 /// `AssetGridView` skeleton bridges the brief reload window.
 ///
-/// **Access**: cleared per-session via `AssetGridViewModel.prepareForNewSession()`
-/// (called from `MediaPickerModifier`'s `.sheet(onDismiss:)`) and indirectly
-/// via `AssetGridViewModel.clearSession(for:)`. Views never touch this type
+/// **Access**: cleared per-session via `AssetGridViewModel.clearSession(for:)`
+/// (called from `MediaPickerModifier`'s `.sheet(onDismiss:)`). Views never touch this type
 /// directly — only `AssetGridViewModel` (and its statics) read/write it.
 @MainActor
 enum AssetGridSelectionCache {

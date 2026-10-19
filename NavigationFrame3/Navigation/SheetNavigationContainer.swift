@@ -11,8 +11,6 @@ struct SheetNavigationContainer: View {
     @Bindable var navigationManager: NavigationManager
     let backgroundColor: Color?
 
-    @State private var currentID: UUID?
-
     init(
         context: ModalContext,
         navigationManager: NavigationManager,
@@ -39,16 +37,14 @@ struct SheetNavigationContainer: View {
         .ifLet(backgroundColor) { $0.background($1) }
         .ifLet(presentationOptions?.detents) { $0.presentationDetents($1) }
         .ifLet(presentationOptions?.dragIndicator) { $0.presentationDragIndicator($1) }
-            .id(currentID ?? context.id) // ← This guards against rebuild
-            .onAppear {
-                print("SheetNavigationContainer onAppear")
-                guard currentID != context.id else { return }
-                navigationManager.log("⚠️ Rebuilding SheetNavigationContainer due to ID change: \(String(describing: currentID)) → \(context.id)", level: .debug)
-                currentID = context.id
-            }
-            .onAppear {
-                navigationManager.log("📱 SheetNavigationContainer appeared for modal: \(context.id)", level: .info)
-            }
+        .modifier(ModalPresenter(
+            parentID: modalID,
+            navigationManager: navigationManager,
+            backgroundColor: backgroundColor
+        ))
+        .onAppear {
+            navigationManager.log("📱 SheetNavigationContainer appeared for modal: \(context.id)", level: .info)
+        }
     }
 
     private func pushPathBinding(for id: UUID) -> Binding<[PushContext]> {

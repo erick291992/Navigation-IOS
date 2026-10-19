@@ -27,6 +27,7 @@ struct NavigationCoordinator<Content: View>: View {
     let dismissToMode: NavigationManager.DismissToMode
     let navigationStackColor: Color?
     let sheetBackgroundColor: Color?
+    let modalPresentationMode: NavigationManager.ModalPresentationMode
     
     @Bindable var navigationManager: NavigationManager
     
@@ -45,7 +46,8 @@ struct NavigationCoordinator<Content: View>: View {
         dismissToMode: NavigationManager.DismissToMode = .recent,
         logLevel: NavigationManager.LogLevel = NavigationManager.LogLevel.default,
         navigationStackColor: Color? = nil,
-        sheetBackgroundColor: Color? = nil
+        sheetBackgroundColor: Color? = nil,
+        modalPresentationMode: NavigationManager.ModalPresentationMode = .swap
     ) {
         self.rootView = rootView
         self.customKey = customKey
@@ -55,6 +57,7 @@ struct NavigationCoordinator<Content: View>: View {
         self.logLevel = logLevel
         self.navigationStackColor = navigationStackColor
         self.sheetBackgroundColor = sheetBackgroundColor
+        self.modalPresentationMode = modalPresentationMode
         
         let targetKey = customKey ?? String(describing: Content.self)
         
@@ -72,11 +75,18 @@ struct NavigationCoordinator<Content: View>: View {
             newManager.log("🏗️ NavigationCoordinator creating new manager for key: \(targetKey)", level: .info)
         }
         
+        // Applied on every init (not just creation) so a registry-reused manager picks it up
+        if self.navigationManager.defaultModalPresentationMode != modalPresentationMode {
+            self.navigationManager.defaultModalPresentationMode = modalPresentationMode
+        }
+
         // Register this manager globally so it can be accessed from anywhere
         NavigationManagerRegistry.shared.register(self.navigationManager, withCustomKey: targetKey)
         
-        // Only register root if it's not already registered
-        let typeName = targetKey
+        // Only register root if it's not already registered.
+        // Root is named by view type (not customKey) so dismissTo(RootView.self) can land on it,
+        // and so it matches the stale-stack reset in onAppear.
+        let typeName = String(describing: Content.self)
         let existingRoot = self.navigationManager.fullNavigationHistory.first(where: { $0.location == .root })
         
         if existingRoot == nil {
@@ -117,30 +127,11 @@ struct NavigationCoordinator<Content: View>: View {
                 .containerBackground(navigationStackColor ?? .clear, for: .navigation)
         }
         .environment(\.navigationManager, navigationManager)
-        .sheet(item: topSheetContext) { context in
-            if context.style == .sheet {
-                SheetNavigationContainer(
-                    context: context,
-                    navigationManager: navigationManager,
-                    backgroundColor: sheetBackgroundColor ?? navigationStackColor
-                )
-                .onAppear {
-                    navigationManager.log("🎭 Sheet presenting: \(context.id)", level: .info)
-                }
-            }
-        }
-        .fullScreenCover(item: topFullScreenContext) { context in
-            if context.style == .fullScreen {
-                SheetNavigationContainer(
-                    context: context,
-                    navigationManager: navigationManager,
-                    backgroundColor: sheetBackgroundColor ?? navigationStackColor
-                )
-                .onAppear {
-                    navigationManager.log("🎭 FullScreen presenting: \(context.id)", level: .info)
-                }
-            }
-        }
+        .modifier(ModalPresenter(
+            parentID: nil,
+            navigationManager: navigationManager,
+            backgroundColor: sheetBackgroundColor ?? navigationStackColor
+        ))
         .onAppear {
             if lifecycleObserver == nil {
                 if !navigationManager.rootPushPath.isEmpty {
@@ -160,33 +151,5 @@ struct NavigationCoordinator<Content: View>: View {
                 lifecycleObserver = CoordinatorLifecycleObserver(key: key)
             }
         }
-    }
-    private var topSheetContext: Binding<ModalContext?> {
-        Binding(
-            get: {
-                let topSheet = navigationManager.modalStack.last(where: { $0.style == .sheet })
-                navigationManager.log("🔍 topSheetContext.get: \(topSheet?.id.uuidString ?? "NO SHEET")", level: .debug)
-                navigationManager.log("🔍 Modal stack count: \(navigationManager.modalStack.count)", level: .debug)
-                return topSheet
-            },
-            set: { newValue in
-                navigationManager.log("🔍 topSheetContext.set: \(newValue?.id ?? UUID())", level: .debug)
-                if newValue == nil {
-                    navigationManager.dismissSheet()
-                }
-            }
-        )
-    }
-    private var topFullScreenContext: Binding<ModalContext?> {
-        Binding(
-            get: {
-                navigationManager.modalStack.last(where: { $0.style == .fullScreen })
-            },
-            set: { newValue in
-                if newValue == nil {
-                    navigationManager.dismissSheet()
-                }
-            }
-        )
     }
 }

@@ -787,6 +787,8 @@ struct FlowContainer: View {
 
 ### Why one ZStack instead of nested sheets
 
+This is about steps *inside one flow* (picker `select` ↔ `crop`). For separate screens, the navigation library's `.stacked` presentation mode nests real sheets and keeps lower sheets' state alive (see `MODAL_STACKING_MIGRATION.md`).
+
 Nested SwiftUI sheets flicker (the "double sheet" bug). They also tear down state on dismiss. A single sheet hosting a ZStack with `.transition` gives you crisp animation and lets you keep the base layer's state alive across overlay open/close. The picker uses this for `select` ↔ `crop`.
 
 ### Why the base layer stays alive

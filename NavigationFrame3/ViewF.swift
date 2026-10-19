@@ -14,6 +14,12 @@ struct ViewF: View {
         VStack(spacing: 20) {
             Text("🟣 ViewF (Sheet)")
                 .font(.largeTitle)
+
+            OpenSheetsReadout()
+
+            Button("Dismiss sheet") {
+                navigationManager.dismissSheet()
+            }
             
             Button("Dismiss to ViewB") {
                 navigationManager.dismissTo(ViewB.self)

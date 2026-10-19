@@ -29,17 +29,20 @@ struct SheetPresentationOptions {
 struct ModalContext: Identifiable, Equatable {
     let id = UUID()
     let style: ModalPresentationStyle
+    let presentation: NavigationManager.ModalPresentationMode
     let rootView: AnyView
     let onDismiss: (() -> Void)?
     let sheetPresentationOptions: SheetPresentationOptions?
 
     init<Content: View>(
         style: ModalPresentationStyle,
+        presentation: NavigationManager.ModalPresentationMode = .swap,
         sheetPresentationOptions: SheetPresentationOptions? = nil,
         makeView: @escaping () -> Content,
         onDismiss: (() -> Void)? = nil
     ) {
         self.style = style
+        self.presentation = presentation
         self.rootView = AnyView(makeView())
         self.onDismiss = onDismiss
         self.sheetPresentationOptions = sheetPresentationOptions

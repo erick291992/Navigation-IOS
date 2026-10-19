@@ -25,6 +25,16 @@ struct ContentView: View {
                 NavigationCoordinator(rootView: MasterGalleryView(), customKey: "tab2")
                     .tabItem { Label("Tab 2", systemImage: "2.circle") }
                     .tag("tab2")
+
+                NavigationCoordinator(
+                    rootView: ModalStackHarnessRoot(),
+                    customKey: "harness",
+                    dismissalMode: .all,
+                    sheetDismissalMode: .all,
+                    modalPresentationMode: .stacked
+                )
+                .tabItem { Label("Stack", systemImage: "square.stack") }
+                .tag("harness")
             }
         }
     }

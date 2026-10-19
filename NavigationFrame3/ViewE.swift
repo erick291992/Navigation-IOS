@@ -14,6 +14,33 @@ struct ViewE: View {
         VStack(spacing: 20) {
             Text("🟣 ViewE (Sheet)")
                 .font(.largeTitle)
+
+            OpenSheetsReadout()
+
+            GroupBox("Present ViewF as…") {
+                VStack(spacing: 12) {
+                    Button("Sheet · stacked (E stays behind)") {
+                        navigationManager.presentSheet(presentation: .stacked) { ViewF() } onDismiss: {
+                            print("🔥 ViewF (stacked) was dismissed")
+                        }
+                    }
+                    Button("Replace last (E closed for good)") {
+                        navigationManager.presentSheet(style: .replaceLast, presentation: .stacked) { ViewF() } onDismiss: {
+                            print("🔥 ViewF (replaceLast) was dismissed")
+                        }
+                    }
+                    Button("Replace all (every sheet closed)") {
+                        navigationManager.presentSheet(style: .replaceAll, presentation: .stacked) { ViewF() } onDismiss: {
+                            print("🔥 ViewF (replaceAll) was dismissed")
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+
+            Button("Dismiss sheet") {
+                navigationManager.dismissSheet()
+            }
             
             Button("Dismiss to ViewB") {
                 navigationManager.dismissTo(ViewB.self)

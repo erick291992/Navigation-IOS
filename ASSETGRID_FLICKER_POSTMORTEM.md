@@ -175,6 +175,12 @@ root cause in the navigation layer is fixed. See §5.
 
 ## 5. The deeper issue — `SheetNavigationContainer` and `AnyView`
 
+> **Update (2026-10-18):** The navigation layer no longer presents modals from one root
+> `.sheet(item:)` / `.fullScreenCover(item:)`, and `.id(currentID ?? context.id)` is gone.
+> Each sheet now presents the next one from inside itself (`ModalPresenter`), and in
+> `.stacked` mode a lower sheet stays mounted while another is on top. The code quoted below
+> is historical. See `MODAL_STACKING_MIGRATION.md`.
+
 ### What the code does
 
 ```swift

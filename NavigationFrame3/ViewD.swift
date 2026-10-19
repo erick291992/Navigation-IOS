@@ -35,6 +35,8 @@ struct ViewD: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
 
+                OpenSheetsReadout()
+
                 Text("This view should show ViewB behind through transparent areas")
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -73,6 +75,14 @@ struct ViewD: View {
                     routeToViewE()
                 }
                 
+                Button("Present ViewE · stacked") {
+                    navigationManager.presentSheet(presentation: .stacked) {
+                        ViewE()
+                    } onDismiss: {
+                        print("🔥 ViewE (stacked) was dismissed")
+                    }
+                }
+
                 Button("Present ViewE") {
                     navigationManager.presentSheet {
                         ViewE()

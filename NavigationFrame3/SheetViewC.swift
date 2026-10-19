@@ -9,6 +9,7 @@ import SwiftUI
 struct ViewC: View {
     @Environment(\.navigationManager) var navigationManager: NavigationManager
     private var id = UUID()
+    @State private var tapCount = 0   // survives in .stacked, resets in .swap
 
     init() {
         id = UUID()
@@ -17,7 +18,7 @@ struct ViewC: View {
 
     var body: some View {
         logBodyRender()
-        return VStack(spacing: 20) {
+        return ScrollView { VStack(spacing: 20) {
             Text("🌊 ViewC (Presented from B)")
                 .font(.title2)
                 .padding(.top)
@@ -25,6 +26,41 @@ struct ViewC: View {
             Text("This is a sheet - no back button by default")
                 .font(.caption)
                 .foregroundColor(.secondary)
+
+            OpenSheetsReadout()
+
+            Button("Taps: \(tapCount)  (+1)") { tapCount += 1 }
+
+            GroupBox("Present ViewD as…") {
+                VStack(spacing: 12) {
+                    Button("Sheet · stacked (C stays behind)") {
+                        navigationManager.presentSheet(presentation: .stacked) { ViewD() } onDismiss: {
+                            print("🔥 ViewD (stacked) was dismissed")
+                        }
+                    }
+                    Button("Sheet · swap (C slides away)") {
+                        navigationManager.presentSheet(presentation: .swap) { ViewD() } onDismiss: {
+                            print("🔥 ViewD (swap) was dismissed")
+                        }
+                    }
+                    Button("Full screen · stacked") {
+                        navigationManager.presentFullScreen(presentation: .stacked) { ViewD() } onDismiss: {
+                            print("🔥 ViewD (full screen) was dismissed")
+                        }
+                    }
+                    Button("Replace last (C closed for good)") {
+                        navigationManager.presentSheet(style: .replaceLast) { ViewD() } onDismiss: {
+                            print("🔥 ViewD (replaceLast) was dismissed")
+                        }
+                    }
+                    Button("Replace all (every sheet closed)") {
+                        navigationManager.presentSheet(style: .replaceAll) { ViewD() } onDismiss: {
+                            print("🔥 ViewD (replaceAll) was dismissed")
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
 
             Button("Present ViewD") {
 //                navigationManager.presentSheet {
@@ -71,7 +107,7 @@ struct ViewC: View {
                 navigationManager.dismissTo(ViewB.self)
             }
         }
-        .padding()
+        .padding() }
         .onAppear {
             print("👀 ViewC appeared [ID: \(id)] → likely entering view hierarchy")
         }
@@ -86,5 +122,20 @@ struct ViewC: View {
 
     private func logBodyRender() {
         print("💡 ViewC body reevaluated [ID: \(id)] → preparing base")
+    }
+}
+
+/// Shows the sheets currently in this tab's modal stack, bottom → top.
+struct OpenSheetsReadout: View {
+    @Environment(\.navigationManager) var navigationManager: NavigationManager
+
+    var body: some View {
+        let names = navigationManager.modalStack.compactMap { modal in
+            navigationManager.fullNavigationHistory.first { $0.id == modal.id }?.viewTypeName
+        }
+        Text("Open sheets: \(names.isEmpty ? "none" : names.joined(separator: " → "))")
+            .font(.caption.monospaced())
+            .padding(6)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 6))
     }
 }
